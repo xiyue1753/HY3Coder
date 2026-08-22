@@ -1,0 +1,25 @@
+# Secrets & local config (never commit)
+.env
+.env.local
+*.secret
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Runtime outputs (regenerable)
+data/outputs/*
+!data/outputs/.gitkeep
+
+# HF 数据集缓存（中间数据，保留在项目内但不入库）
+data/cache/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
