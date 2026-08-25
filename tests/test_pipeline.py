@@ -54,6 +54,14 @@ def test_normalize_math_answer() -> None:
     assert normalize_math_answer(" 1 / 2 ") == "1/2"
     assert normalize_math_answer("x = 3（答案）") == "x=3(答案)"
     assert normalize_math_answer("√2") == "√2"
+    # LaTeX 归一化：\frac → /、\sqrt → √、\boxed/\text 去壳
+    assert normalize_math_answer(r"\frac{1}{2}") == normalize_math_answer("1/2")
+    assert normalize_math_answer(r"\dfrac{1}{2}") == normalize_math_answer("1/2")
+    assert normalize_math_answer(r"\sqrt{2}") == normalize_math_answer("√2")
+    assert normalize_math_answer(r"\boxed{3}") == normalize_math_answer("3")
+    assert normalize_math_answer(r"\text{x=1}") == normalize_math_answer("x=1")
+    # 嵌套分数
+    assert normalize_math_answer(r"\frac{\frac{1}{2}}{3}") == normalize_math_answer("(1/2)/(3)")
 
 
 def test_run_eval_dual_mode(tmp_path) -> None:

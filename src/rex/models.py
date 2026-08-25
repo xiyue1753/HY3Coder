@@ -64,13 +64,14 @@ class Verdict(str, Enum):
     PROCESS_INCORRECT = "PROCESS_INCORRECT" # 过程有问题（答案可能对也可能错）
     ANSWER_INCORRECT = "ANSWER_INCORRECT"   # 最终答案错误
     SILENT_FAILURE = "SILENT_FAILURE"       # 答案正确但过程不成立
+    FAILED = "FAILED"                       # 运行失败（网络/超时等，无有效判定）
 
 
 class VerificationResult(BaseModel):
     verdict: Verdict
     findings: list[ErrorFinding] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    arbiter: Literal["V1", "V2", "ARBITER", "HUMAN_REVIEW"] = "ARBITER"
+    arbiter: Literal["V1", "V2", "ARBITER", "HUMAN_REVIEW", "FAILED"] = "ARBITER"
     timestamp: float | None = None  # epoch 秒，供耗时分析
 
 

@@ -136,3 +136,49 @@ def test_refine_comparison() -> None:
     assert rc.after_correct == 1.0
     assert rc.converged == 1.0
     assert rc.improved == 0.5
+
+
+def test_compute_metrics_excludes_failed() -> None:
+    """运行失败（FAILED）样本不计入正确率分母，但仍保留在 verdict_dist。"""
+    def _failed(qid: str) -> EvalRecord:
+        return EvalRecord(
+            question_id=qid, scene="math", difficulty=Difficulty.BASIC,
+            answer=Answer(steps=[Step(id=1, kind="derive", content="c", conclusion="c", deps=[])],
+                          final_answer=""),
+            answer_correct=None, test_pass_rate=None,
+            verification=VerificationResult(verdict=Verdict.FAILED, findings=[],
+                                            confidence=0.0, arbiter="FAILED"),
+            error="network failed",
+        )
+
+    records = [
+        _rec("a", Verdict.CORRECT),
+        _rec("b", Verdict.PROCESS_INCORRECT),
+        _failed("c"),
+        _failed("d"),
+    ]
+    m = compute_metrics(records)
+    assert m.n == 4                       # 总样本含失败
+    assert m.verdict_dist["FAILED"] == 2  # 失败仍可见
+    assert m.process_correctness == 0.5   # 排除失败后：1 CORRECT / 2 有效 = 0.5（而非 1/4）
+    assert m.answer_accuracy == 1.0       # 排除失败后：2 有效均 answer_correct
+
+
+def test_refine_comparison_excludes_failed() -> None:
+    """运行失败（FAILED）的 refine 样本不计入前后对比。"""
+    def _vr(v: Verdict) -> VerificationResult:
+        return VerificationResult(verdict=v, findings=[], confidence=0.9, arbiter="V1")
+
+    recs = [
+        RefineRecord(question_id="ok", scene="math", difficulty=Difficulty.BASIC,
+                     initial=_vr(Verdict.PROCESS_INCORRECT), rounds=[],
+                     final=_vr(Verdict.CORRECT), converged=True),
+        RefineRecord(question_id="bad", scene="math", difficulty=Difficulty.BASIC,
+                     initial=_vr(Verdict.FAILED), rounds=[],
+                     final=_vr(Verdict.FAILED), converged=False),
+    ]
+    rc = refine_comparison(recs)
+    assert rc.n == 1                     # 失败样本被排除
+    assert rc.before_correct == 0.0
+    assert rc.after_correct == 1.0
+    assert rc.improved == 1.0

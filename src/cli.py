@@ -58,23 +58,25 @@ def run_eval(
     difficulty: str = typer.Option(None, help="basic|medium|hard 过滤"),
     seed: int = typer.Option(42),
     resume: bool = typer.Option(True),
+    retries: int = typer.Option(2, help="单题失败重试次数（0 禁用）"),
+    concurrency: int = typer.Option(4, help="并发 worker 数（1=串行，2-4 建议）"),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """一次性评测（评估模式）：solve → execute → verify，反馈不回流。"""
     _logging(verbose)
     cfg = _config()
     picked, pool = _load_questions(scene, sample, difficulty, seed)
-    typer.echo(f"题库 {len(pool)} 题，本次评估 {len(picked)} 题（sample={sample}）")
+    typer.echo(f"题库 {len(pool)} 题，本次评估 {len(picked)} 题"
+               f"（sample={sample}，单题重试 {retries}，并发 {concurrency}）")
     if not picked:
         typer.secho("抽样结果为空：题库不足或难度过滤过严", fg=typer.colors.RED)
         raise typer.Exit(2)
 
-    from rex.pipeline import Pipeline
-    pipe = Pipeline(cfg)
+    from rex.runner import EvalRunner
+    runner = EvalRunner(cfg, retries=retries, concurrency=concurrency)
     out = cfg.outputs_dir / f"eval_{scene}.jsonl"
-    records = pipe.run_eval(picked, out, resume=resume)
-    typer.echo(f"评估完成 {len(records)} 题 → {out}")
-    pipe.client.close()
+    records, costs = runner.run_eval(picked, out, resume=resume)
+    typer.echo(f"评估完成 {len(records)} 题 → {out}（模型调用 {costs['calls']} 次）")
 
 
 @app.command()

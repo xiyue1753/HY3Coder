@@ -64,6 +64,10 @@ def build() -> str:
     sf = m.verdict_dist.get("SILENT_FAILURE", 0)
     if sf:
         w(f"| 沉默失败检出 | {sf}（{pct(sf / m.n)}） |")
+    failed = m.verdict_dist.get("FAILED", 0)
+    if failed:
+        # 运行失败（网络/超时）样本无真实判定，已从正确率分母中排除，仅在此标注可见性。
+        w(f"| 运行失败（不计入指标） | {failed} |")
     w("")
 
     # ---- 2. 分层退化 ----
@@ -161,13 +165,30 @@ def build() -> str:
         w("| 样本 | 真实缺陷 | 判定 |")
         w("|---|---|---|")
         for r in golden_eval:
-            tag = "未检出(放行)" if r["verdict"] == "CORRECT" else ("检出" if r["verdict"] in ("SILENT_FAILURE", "PROCESS_INCORRECT") else "识别(答案/格式)")
-            w(f"| {r['question_id']} | {TYPE_CN.get(r['flaw_type'], r['flaw_type'])} | {r['verdict']} — {tag} |")
+            v = r["verdict"]
+            tag = ("未检出(放行)" if v == "CORRECT"
+                   else ("严格检出(答案对+过程错)" if v == "SILENT_FAILURE"
+                         else ("宽口径检出(判过程有错)" if v in ("PROCESS_INCORRECT",)
+                               else "识别(答案/格式)")))
+            w(f"| {r['question_id']} | {TYPE_CN.get(r['flaw_type'], r['flaw_type'])} | {v} — {tag} |")
         n = len(golden_eval)
+        strict = sum(1 for r in golden_eval if r["verdict"] == "SILENT_FAILURE")
+        broad = sum(1 for r in golden_eval
+                    if r["verdict"] in ("SILENT_FAILURE", "PROCESS_INCORRECT"))
         passed = sum(1 for r in golden_eval if r["verdict"] != "CORRECT")
-        w(f"\n**检出率：{passed}/{n}（{passed/n*100:.1f}%）**，判定 SILENT_FAILURE "
-          f"{sum(1 for r in golden_eval if r['verdict']=='SILENT_FAILURE')} 条，误放行 "
-          f"{n-passed} 条。\n")
+        missed = n - passed
+        # 口径说明：宽口径把 PROCESS_INCORRECT 也算"检出过程有错"；严格口径只认
+        # SILENT_FAILURE（答案正确 + 过程根本缺陷），是最能体现沉默失败识别能力的指标。
+        w(f"\n**检出统计（n={n}）**\n")
+        w(f"- 严格口径（判定 SILENT_FAILURE）：{strict} 条（{strict/n*100:.1f}%）")
+        w(f"- 宽口径（SILENT_FAILURE + PROCESS_INCORRECT，判过程有错）：{broad} 条（{broad/n*100:.1f}%）")
+        w(f"- 答案/格式识别：{passed - broad} 条（ANSWER_INCORRECT 等，识别到异常但未判过程）")
+        w(f"- 误放行（CORRECT 放过陷阱）：{missed} 条")
+        w("")
+        if strict < broad:
+            w(f"> 注：严格口径 {strict} 条 < 宽口径 {broad} 条，"
+              "说明部分陷阱被判为 PROCESS_INCORRECT 而非 SILENT_FAILURE——"
+              "评估器识别到了过程错误，但未单独标注【答案正确】这一性质。\n")
     w("")
 
     # ---- 8. 能力画像 ----

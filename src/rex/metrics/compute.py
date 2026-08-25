@@ -69,16 +69,19 @@ def compute_metrics(records: list[EvalRecord]) -> MetricsReport:
         return MetricsReport(n=0, answer_accuracy=0.0, process_correctness=0.0)
 
     n = len(records)
-    answer_correct = sum(_is_answer_correct(r) for r in records)
-    process_correct = sum(r.verification.verdict == Verdict.CORRECT for r in records)
+    # 运行失败（Verdict.FAILED）样本没有真实判定，不计入正确率分母，但仍保留计数。
+    valid = [r for r in records if r.verification.verdict != Verdict.FAILED]
+    n_valid = len(valid)
+    answer_correct = sum(_is_answer_correct(r) for r in valid)
+    process_correct = sum(r.verification.verdict == Verdict.CORRECT for r in valid)
     verdict_dist = dict(Counter(r.verification.verdict.value for r in records))
     error_types: Counter[str] = Counter()
-    for r in records:
+    for r in valid:
         for f in r.verification.findings:
             error_types[f.error_type.value] += 1
     per_tier: dict[str, TierMetrics] = {}
     for d in Difficulty:
-        tier = [r for r in records if r.difficulty == d]
+        tier = [r for r in valid if r.difficulty == d]
         if tier:
             per_tier[d.value] = TierMetrics(
                 n=len(tier),
@@ -87,8 +90,8 @@ def compute_metrics(records: list[EvalRecord]) -> MetricsReport:
             )
     return MetricsReport(
         n=n,
-        answer_accuracy=answer_correct / n,
-        process_correctness=process_correct / n,
+        answer_accuracy=(answer_correct / n_valid) if n_valid else 0.0,
+        process_correctness=(process_correct / n_valid) if n_valid else 0.0,
         verdict_dist=verdict_dist,
         error_type_dist=dict(error_types),
         per_tier=per_tier,
@@ -165,16 +168,21 @@ def refine_comparison(records: list) -> RefineComparison:
     """
     if not records:
         return RefineComparison(0, 0.0, 0.0, 0.0, 0.0)
-    before = [r.initial.verdict == Verdict.CORRECT for r in records]
-    after = [r.final.verdict == Verdict.CORRECT for r in records]
+    # 运行失败（initial/final 为 FAILED）样本无真实判定，不计入修正前后对比。
+    valid = [r for r in records
+             if r.initial.verdict != Verdict.FAILED and r.final.verdict != Verdict.FAILED]
+    if not valid:
+        return RefineComparison(0, 0.0, 0.0, 0.0, 0.0)
+    before = [r.initial.verdict == Verdict.CORRECT for r in valid]
+    after = [r.final.verdict == Verdict.CORRECT for r in valid]
     improved = [
-        r for r in records
+        r for r in valid
         if r.initial.verdict != Verdict.CORRECT and r.final.verdict == Verdict.CORRECT
     ]
     return RefineComparison(
-        n=len(records),
+        n=len(valid),
         before_correct=mean(before) if before else 0.0,
         after_correct=mean(after) if after else 0.0,
         converged=mean(after) if after else 0.0,
-        improved=len(improved) / len(records),
+        improved=len(improved) / len(valid),
     )
