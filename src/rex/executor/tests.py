@@ -24,11 +24,13 @@ def run_test_cases(
     code: str,
     test_cases: list[TestCase],
     timeout: float = 10.0,
+    language: str = "python",
 ) -> TestRunResult:
     """Execute each test case in isolation; compare stdout to expected output.
 
     Normalization: strip trailing whitespace from both sides, and ignore a
     single trailing blank line difference (many judges accept it).
+    ``language`` is passed to the sandbox (python/cpp).
     """
     if not code:
         return TestRunResult(0, 0, 0.0, error="no code to run")
@@ -39,7 +41,7 @@ def run_test_cases(
     compile_err: str | None = None
 
     for i, tc in enumerate(test_cases):
-        res = run_code(code, stdin=tc.input, timeout=timeout)
+        res = run_code(code, stdin=tc.input, timeout=timeout, language=language)
         if res.error:
             # 运行级错误：首个非超时错误记为 error（如语法错误），其余继续
             if not res.timed_out:
