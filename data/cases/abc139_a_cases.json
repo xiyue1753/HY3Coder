@@ -1,0 +1,8 @@
+[
+  {"input": "CSS\nCSR", "output": "2", "hidden": false},
+  {"input": "SSR\nSSR", "output": "3", "hidden": false},
+  {"input": "RRR\nSSS", "output": "0", "hidden": false},
+  {"input": "SSS\nRRR", "output": "0", "hidden": true},
+  {"input": "SCC\nSCR", "output": "1", "hidden": true},
+  {"input": "CCR\nCCR", "output": "3", "hidden": true}
+]
