@@ -80,7 +80,7 @@ async function loadQuestions(){
       <select onchange="QUIERY_STATE.verdict=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['CORRECT','PROCESS_INCORRECT','SILENT_FAILURE','ANSWER_INCORRECT','FAILED'].map(v=>`<option value="${v}" ${QUIERY_STATE.verdict===v?'selected':''}>${VERDICT_CN[v]||v}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.source=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['run-eval','interactive'].map(s=>`<option value="${s}" ${QUIERY_STATE.source===s?'selected':''}>${s}</option>`).join(''))}</select>
     </div>
-    <div class="fbtn-row" style="max-height:420px;overflow-y:auto">
+    <div style="max-height:260px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px">
       ${list.map(x=>`<div class="ditem" onclick="openDetail('${x.question_id}')">
         <span class="mono" style="font-size:12px">${x.question_id}</span>
         <span class="tag v-${x.verdict}">${VERDICT_CN[x.verdict]||x.verdict}</span>

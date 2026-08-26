@@ -70,22 +70,25 @@
     </div>
   </section>
 
-  <!-- ===== 屏 2：单题回放（内嵌可检索题目列表 + 详情 + 过程回放） ===== -->
+  <!-- ===== 屏 2：单题回放（题目列表 + 详情 + 过程回放，上下结构更宽） ===== -->
   <section id="view-detail" class="fade" style="display:none">
-    <div class="grid" style="grid-template-columns:0.9fr 1.3fr 1.6fr;gap:16px">
-      <!-- 左：题目列表（可筛选/搜索/分页） -->
-      <div class="panel">
-        <h3 class="text-base font-medium mb-2">题目列表</h3>
-        <input class="search" id="detailSearch" style="width:100%" placeholder="搜索题号/关键词…" onkeydown="if(event.key==='Enter')detailSearchGo()">
-        <div id="dList" class="muted text-sm">加载中…</div>
+    <!-- 上：题目列表（横跨全宽，可筛选/搜索/分页） -->
+    <div class="panel mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-base font-medium">题目列表</h3>
+        <div class="flex items-center gap-2">
+          <input class="search" id="detailSearch" placeholder="搜索题号/关键词…" onkeydown="if(event.key==='Enter')detailSearchGo()">
+        </div>
       </div>
-      <!-- 中：题目详情 -->
+      <div id="dList" class="muted text-sm">加载中…</div>
+    </div>
+    <!-- 下：题目详情 + 过程回放（两栏更宽） -->
+    <div class="grid" style="grid-template-columns:1fr 1.4fr;gap:16px;align-items:start">
       <div class="panel">
         <h3 class="text-base font-medium mb-3">题目</h3>
-        <div id="dQuestion" class="muted">从左侧列表选择一题</div>
+        <div id="dQuestion" class="muted">从上方列表选择一题</div>
         <div class="mt-4" id="dMeta"></div>
       </div>
-      <!-- 右：过程回放 -->
       <div class="panel">
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-base font-medium">过程回放</h3>
