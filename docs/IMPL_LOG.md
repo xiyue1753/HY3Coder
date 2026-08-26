@@ -147,4 +147,45 @@
 
 ---
 
+## 任务 interact-optimize：交互式解题页输入区与渲染优化（计划外，用户临时插入）
+
+**状态**：✅ 已完成
+
+### 背景
+用户要求优化交互式解题页：数学/算法输入框分开设计；算法题支持输入输出样例；展示模型代码 + 沙盒结果；支持 Markdown/LaTeX 渲染。
+
+### 目标
+1. 数学：题目支持 Markdown + LaTeX（`$$..$$`）实时预览，配标准答案输入
+2. 算法：题目描述 + 输入输出样例（多行输入）+ 参考解；样例既拼入 prompt 又作为沙盒测试用例验证代码
+3. 结果：Markdown/LaTeX 渲染步骤；算法场景展示模型生成代码 + 测试通过率 + 运行错误
+
+### 实现逻辑
+
+**后端 `src/web/api.py`**
+- 新增 `InteractSample`（input/output）模型；`InteractRequest` 增加 `samples` 字段
+- `interact`：算法场景把样例既拼入 prompt（`【输入输出样例】`块），又构造成 `TestCase` 填入 `QuestionItem.test_cases`，使沙盒能跑模型代码验证样例
+
+**前端 `src/web/static/index.html`**
+- head 引入 KaTeX（css+js）+ marked（CDN）
+- 输入区改为数学/算法分开：
+  - 数学：题目 textarea + 实时预览（Markdown/LaTeX）+ 标准答案
+  - 算法：题目描述 + 样例输入（多组"输入:\n…\n输出:\n…"）+ 样例解析预览 + 参考解
+- 新增函数：`renderMath`（marked+KaTeX 渲染）、`parseSamples`（解析样例）、`switchInteractScene`（场景切换）、`previewPrompt`/`previewSamples`（实时预览）
+- `interact()` 重写：按场景收集入参（算法解析 samples），结果用 renderMath 渲染步骤，算法场景展示模型代码（`rec.answer.code`）+ 沙盒结果
+
+### 输入 / 输出
+- 输入：`POST /api/interact`（scene/prompt/answer/samples/refine）
+- 输出：`{mode, eval|refine, elapsed, cost_calls, exec:{test_pass_rate, error}}`（eval 记录含 `answer.code`）
+
+### 调用文件
+- 后端：`src/web/api.py`（`InteractSample`/`InteractRequest`/`interact`）
+- 前端：`src/web/static/index.html`（交互页 HTML + JS）
+
+### 验证
+- `InteractRequest` 正确解析 samples（pydantic 验证通过）
+- 仪表盘重启后 HTTP 200，HTML 含 KaTeX/marked CDN、parseSamples、场景切换、样例输入框
+- 实际交互需 Hy3 key 调模型（演示时验证）
+
+---
+
 <!-- 后续任务按此格式追加 -->

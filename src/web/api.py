@@ -151,11 +151,18 @@ def audit() -> list[dict]:
     return [a.model_dump() for a in load_jsonl(path, AuditRecord)]
 
 
+class InteractSample(BaseModel):
+    """算法题输入输出样例（作为沙盒测试用例 + 拼入题目描述）。"""
+    input: str
+    output: str
+
+
 class InteractRequest(BaseModel):
     scene: str = "math"
     prompt: str
-    answer: str = ""           # 算法场景可选标准答案
-    refine: bool = False       # 是否演示修正闭环
+    answer: str = ""                     # 数学场景标准答案（可选）
+    samples: list[InteractSample] = []   # 算法场景输入输出样例（可选）
+    refine: bool = False                 # 是否演示修正闭环
     max_rounds: int = 2
 
 
@@ -166,13 +173,23 @@ def interact(req: InteractRequest) -> dict:
     返回含：elapsed（总耗时秒）、cost_calls（模型调用次数）、以及 eval/refine 记录。
     前端据此展示沙盒执行结果、错误定位 findings、耗时与调用成本。
     """
-    from rex.models import Difficulty, QuestionItem
+    from rex.models import Difficulty, QuestionItem, TestCase
     from rex.pipeline import Pipeline
 
+    # 构造题目：算法场景把输入输出样例既拼入 prompt，又作为沙盒测试用例
+    prompt = req.prompt
+    test_cases: list[TestCase] = []
+    if req.scene == "algorithm" and req.samples:
+        test_cases = [TestCase(input=s.input, output=s.output) for s in req.samples]
+        sample_block = "\n".join(
+            f"样例{i}：\n输入：\n{s.input}\n输出：\n{s.output}" for i, s in enumerate(req.samples, 1)
+        )
+        prompt = f"{req.prompt}\n\n【输入输出样例】\n{sample_block}"
+
     q = QuestionItem(
-        id="interact", scene=req.scene, title=req.prompt[:50], prompt=req.prompt,
+        id="interact", scene=req.scene, title=req.prompt[:50], prompt=prompt,
         difficulty=Difficulty.BASIC, source="interactive",
-        standard_answer=req.answer,
+        standard_answer=req.answer, test_cases=test_cases,
     )
     pipe = Pipeline(CFG)
     t0 = time.time()
