@@ -304,3 +304,4 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
 // ---------- init ----------
 loadOverview();
+loadQuestions();   // 初始即加载题目列表，无需切换页面

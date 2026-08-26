@@ -274,4 +274,48 @@
 
 ---
 
+## 任务 dashboard-fix2：胶囊圆角回退修复 + 题目列表初始加载提速（计划外）
+
+**状态**：✅ 已完成
+
+### 背景
+1. 前端组件化（拆 styles.css/main.js）后，之前做的"克制圆角"调整丢失（因从 git 恢复旧版 index.html），胶囊体风格复现。
+2. 题目列表此前不初始加载，需切换页面才显示；用户要求直接显示且要快。
+
+### 目标
+1. 恢复克制圆角（无胶囊 99px、无过大 12-16px）
+2. 题目列表页面加载即显示，且加载快
+
+### 实现逻辑
+
+**1. 胶囊圆角修复（styles.css）**
+因拆分脚本从 git 恢复 index.html 导致之前的圆角调整丢失，重新把以下元素改回克制风格：
+- `.tag`/`.round-tab`/`.search`：99px 胶囊 → 6-8px
+- `.panel`/`.kpi`：16/14px → 10px
+- `.nav-item`/`.finding`：10px → 6px
+- `.step-card`：12px → 8px
+- `input/textarea`/`.btn`：10px → 8px
+
+**2. 题目列表初始加载 + 提速**
+- `main.js` init：`loadOverview()` + `loadQuestions()` 并行，页面加载即显示题目列表（不再依赖切页）
+- `RecordStore` 加**内存缓存**（`_eval_cache` + mtime 失效）：`load_evals` 首次读文件后缓存，重复请求走缓存
+- `api.py` 用**模块级 STORE 单例**：所有请求（summary/questions/interact）共享缓存，interact append 后失效缓存
+- `_load_evals` 改用 `STORE.load_evals()`（走缓存）
+
+### 性能验证
+- `load_evals` 首次 21ms，缓存命中 0ms
+- `query_evals` 构建 items 1ms，`json.dumps` 100 条 1ms（24KB）
+- 实测 `/api/questions` 690ms 为环境 HTTP 固定开销，后端逻辑层极快
+
+### 调用文件
+- `src/web/static/styles.css`（圆角）、`src/web/static/main.js`（初始加载）
+- `src/rex/store.py`（缓存）、`src/web/api.py`（STORE 单例）
+
+### 验证
+- 39 项测试全绿
+- 页面加载即显示题目列表
+- 胶囊圆角已清除
+
+---
+
 <!-- 后续任务按此格式追加 -->

@@ -49,6 +49,8 @@ class RecordStore:
 
     def __init__(self, outputs_dir: str | Path) -> None:
         self.outputs_dir = Path(outputs_dir)
+        self._eval_cache: list[EvalRecord] | None = None
+        self._eval_mtime: float = 0.0
 
     # -- file paths ---------------------------------------------------------
     def eval_path(self, scene: str) -> Path:
@@ -59,6 +61,17 @@ class RecordStore:
 
     # -- read ---------------------------------------------------------------
     def load_evals(self, scene: str | None = None) -> list[EvalRecord]:
+        # 缓存（带 mtime 失效）：避免重复请求时全量重读文件，显著提速
+        if self._eval_cache is not None:
+            newest_mtime = max(
+                (self.eval_path(s).stat().st_mtime for s in ("math", "algorithm")
+                 if self.eval_path(s).exists()), default=0.0
+            )
+            if newest_mtime <= self._eval_mtime:
+                if scene is None:
+                    return self._eval_cache
+                return [r for r in self._eval_cache if r.scene == scene]
+
         scenes = [scene] if scene else ("math", "algorithm")
         out: list[EvalRecord] = []
         for s in scenes:
@@ -67,6 +80,12 @@ class RecordStore:
                 for line in p.open(encoding="utf-8"):
                     if line.strip():
                         out.append(EvalRecord.model_validate_json(line))
+        if scene is None:
+            self._eval_cache = out
+            self._eval_mtime = max(
+                (self.eval_path(s).stat().st_mtime for s in ("math", "algorithm")
+                 if self.eval_path(s).exists()), default=0.0
+            )
         return out
 
     def load_refines(self, scene: str | None = None) -> list[RefineRecord]:
@@ -88,6 +107,7 @@ class RecordStore:
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
             f.write(rec.model_dump_json() + "\n")
+        self._eval_cache = None  # 失效缓存
 
     def append_refine(self, rec: RefineRecord) -> None:
         if rec.created_at is None:

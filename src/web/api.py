@@ -29,6 +29,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CFG = Config.from_env(ROOT)
 STATIC = ROOT / "src" / "web" / "static"
 
+# 共享的 RecordStore 实例（带缓存）：所有请求复用，避免每次全量读文件
+from rex.store import RecordStore
+STORE = RecordStore(CFG.outputs_dir)
+
 app = FastAPI(title="ReAgents v2 评估仪表盘", version="2.0.0")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
@@ -43,10 +47,7 @@ def _load_questions() -> list[QuestionItem]:
 
 
 def _load_evals() -> list[EvalRecord]:
-    out = []
-    for scene in ("math", "algorithm"):
-        out += load_jsonl(CFG.outputs_dir / f"eval_{scene}.jsonl", EvalRecord)
-    return out
+    return STORE.load_evals()
 
 
 def _load_refines() -> list[RefineRecord]:
@@ -99,8 +100,7 @@ def questions(scene: str | None = None, verdict: str | None = None,
               sort: str = "created_at", order: str = "desc",
               limit: int = 100, offset: int = 0) -> dict:
     """评估记录列表：支持筛选（场景/难度/判定/来源/题号/关键词/时间）+ 分页 + 排序。"""
-    from rex.store import RecordStore
-    store = RecordStore(CFG.outputs_dir)
+    store = STORE
     records, total = store.query_evals(
         scene=scene, difficulty=tier, verdict=verdict, source=source,
         qid=qid, keyword=keyword, since=since, until=until,
@@ -199,7 +199,7 @@ def interact(req: InteractRequest) -> dict:
         difficulty=Difficulty.BASIC, source="interactive",
         standard_answer=req.answer, test_cases=test_cases,
     )
-    store = RecordStore(CFG.outputs_dir)
+    store = STORE
     pipe = Pipeline(CFG)
     t0 = time.time()
     try:

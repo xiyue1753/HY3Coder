@@ -51,20 +51,20 @@
     border-right:1px solid var(--line);backdrop-filter:blur(10px);z-index:20}
   .logo{font-weight:700;font-size:18px;letter-spacing:.5px}
   .logo b{background:linear-gradient(120deg,var(--pri),var(--pri2));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;margin:2px 10px;border-radius:10px;color:var(--sub);cursor:pointer;transition:.18s}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;margin:2px 10px;border-radius:6px;color:var(--sub);cursor:pointer;transition:.18s}
   .nav-item:hover{background:var(--pri-weak);color:var(--txt)}
   .nav-item.active{background:linear-gradient(120deg,var(--pri-weak2),var(--pri-weak3));color:var(--txt);box-shadow:inset 0 0 0 1px var(--pri-ring)}
   .nav-item .dot{width:8px;height:8px;border-radius:50%;background:var(--line)}
   .nav-item.active .dot{background:var(--pri2);box-shadow:0 0 8px var(--pri2)}
   main{margin-left:224px;padding:20px 26px 60px;min-height:100vh}
   .panel{background:linear-gradient(180deg,var(--panel-tint),rgba(255,255,255,0)),var(--panel);
-    border:1px solid var(--line);border-radius:16px;padding:18px 20px}
-  .kpi{border-radius:14px;padding:16px 18px;background:linear-gradient(180deg,var(--pri-weak3),rgba(255,255,255,0)),var(--panel);border:1px solid var(--line);position:relative;overflow:hidden}
+    border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+  .kpi{border-radius:10px;padding:16px 18px;background:linear-gradient(180deg,var(--pri-weak3),rgba(255,255,255,0)),var(--panel);border:1px solid var(--line);position:relative;overflow:hidden}
   .kpi::after{content:'';position:absolute;inset:0;background:radial-gradient(240px 120px at 85% -20%,var(--pri-glow),transparent 70%);pointer-events:none}
   .kpi .v{font-size:28px;font-weight:700;font-family:var(--mono)}
   .kpi .l{color:var(--sub);font-size:12px;margin-top:2px}
   .kpi.good .v{color:var(--ok)} .kpi.bad .v{color:var(--bad)} .kpi.warn .v{color:var(--warn)}
-  .tag{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:99px;font-size:12px;border:1px solid var(--line)}
+  .tag{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:6px;font-size:12px;border:1px solid var(--line)}
   .v-CORRECT{color:var(--ok);border-color:var(--ok-line);background:var(--ok-bg)}
   .v-PROCESS_INCORRECT{color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg)}
   .v-SILENT_FAILURE{color:var(--warn);border-color:var(--warn-line);background:var(--warn-bg)}
@@ -74,22 +74,22 @@
   table.dt td{padding:9px 10px;border-bottom:1px solid var(--td-line);font-size:13px}
   table.dt tr{transition:.15s;cursor:pointer}
   table.dt tbody tr:hover{background:var(--table-hover)}
-  .step-card{border-left:3px solid var(--line);background:var(--panel2);border-radius:0 12px 12px 0;padding:10px 14px;margin:10px 0;position:relative;transition:.2s}
+  .step-card{border-left:3px solid var(--line);background:var(--panel2);border-radius:0 8px 8px 0;padding:10px 14px;margin:10px 0;position:relative;transition:.2s}
   .step-card:hover{transform:translateX(4px)}
   .step-card.err{border-left-color:var(--bad);box-shadow:0 0 0 1px var(--bad-line),0 4px 18px rgba(0,0,0,.08)}
   .step-card.ok{border-left-color:var(--ok)}
   .step-card .k{font-family:var(--mono);font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px}
   .round-tabs{display:flex;gap:8px;flex-wrap:wrap}
-  .round-tab{padding:6px 14px;border-radius:99px;border:1px solid var(--line);color:var(--sub);cursor:pointer;font-size:13px;transition:.18s}
+  .round-tab{padding:6px 14px;border-radius:6px;border:1px solid var(--line);color:var(--sub);cursor:pointer;font-size:13px;transition:.18s}
   .round-tab.active{background:var(--pri);border-color:var(--pri);color:#fff;box-shadow:0 2px 14px var(--pri-ring)}
-  input[type=text],textarea,select{background:var(--input-bg);border:1px solid var(--input-border);border-radius:10px;color:var(--txt);padding:9px 12px;font-size:13px;outline:none;transition:.18s}
+  input[type=text],textarea,select{background:var(--input-bg);border:1px solid var(--input-border);border-radius:8px;color:var(--txt);padding:9px 12px;font-size:13px;outline:none;transition:.18s}
   input[type=text]:focus,textarea:focus{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-ring)}
-  .btn{background:linear-gradient(120deg,var(--pri),var(--pri2));color:#fff;border:none;border-radius:10px;padding:9px 18px;font-size:13px;cursor:pointer;transition:.2s;font-weight:500}
+  .btn{background:linear-gradient(120deg,var(--pri),var(--pri2));color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer;transition:.2s;font-weight:500}
   .btn:hover{filter:brightness(1.12);box-shadow:0 4px 20px var(--pri-ring)}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--sub)}
   .btn.ghost:hover{color:var(--txt);border-color:var(--pri)}
-  .search{background:var(--input-bg);border:1px solid var(--line);border-radius:99px;padding:7px 16px;color:var(--txt);font-size:13px;outline:none;width:230px}
+  .search{background:var(--input-bg);border:1px solid var(--line);border-radius:8px;padding:7px 16px;color:var(--txt);font-size:13px;outline:none;width:230px}
   .search:focus{border-color:var(--pri)}
   .fade{animation:fadeIn .45s ease}
   @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -97,7 +97,7 @@
   .bar-row .lab{width:110px;color:var(--sub);font-size:12px;text-align:right}
   .bar{height:12px;border-radius:6px;background:var(--bg2);flex:1;overflow:hidden}
   .bar>i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--pri),var(--pri2));transition:width .6s ease}
-  .finding{background:var(--finding-bg);border:1px solid var(--finding-line);border-radius:10px;padding:8px 12px;margin:6px 0;font-size:12.5px}
+  .finding{background:var(--finding-bg);border:1px solid var(--finding-line);border-radius:6px;padding:8px 12px;margin:6px 0;font-size:12.5px}
   .finding b{color:var(--bad)}
   ::-webkit-scrollbar{width:8px;height:8px}
   ::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:8px}
