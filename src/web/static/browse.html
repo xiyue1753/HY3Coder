@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>评测题集浏览器（临时）</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.2/marked.min.js"></script>
+<style>
+  :root{--bg:#f5f7fa;--panel:#fff;--line:#e4e8ee;--ink:#1f2328;--sub:#6b7280;--pri:#0d9488}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px}
+  .top{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;z-index:10}
+  .top h1{font-size:17px;margin:0}
+  select,input,button{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+  button{cursor:pointer;color:var(--pri)}
+  .wrap{padding:20px;max-width:1100px;margin:0 auto}
+  .q{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+  .q .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .tag{display:inline-block;padding:1px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;color:var(--sub)}
+  .tag.src{color:var(--pri);border-color:var(--pri)}
+  .sec{margin-top:10px}
+  .sec .lb{font-weight:600;font-size:12px;color:var(--sub);margin-bottom:4px}
+  .body{background:#fafbfc;border:1px solid var(--line);border-radius:8px;padding:10px 12px;white-space:pre-wrap}
+  pre.code{background:#0d1117;color:#e6edf3;border-radius:8px;padding:12px;overflow:auto;font-size:12.5px;white-space:pre-wrap}
+  .meta{font-size:12px;color:var(--sub);margin-top:8px;word-break:break-word}
+  .tc{border:1px solid var(--line);border-radius:6px;margin:4px 0;padding:6px 10px;font-size:12px}
+  .nav{display:flex;align-items:center;gap:12px;margin:12px 0}
+  .muted{color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>评测题集浏览器（临时）</h1>
+  <select id="scene">
+    <option value="">全部场景</option>
+    <option value="algorithm">算法</option>
+    <option value="math">数学</option>
+  </select>
+  <select id="source">
+    <option value="">全部来源</option>
+    <option value="TACO">TACO</option>
+    <option value="CodeForces">CodeForces</option>
+    <option value="MATH">MATH</option>
+    <option value="自编">自编</option>
+  </select>
+  <button onclick="load(0)">加载</button>
+  <span class="muted" id="totalInfo"></span>
+</div>
+<div class="wrap" id="list">加载中…</div>
+<div class="wrap nav">
+  <button id="prev" onclick="load(cur-100)">上一页</button>
+  <span class="muted" id="pageInfo"></span>
+  <button id="next" onclick="load(cur+100)">下一页</button>
+</div>
+<script>
+let cur=0, total=0;
+const $=s=>document.querySelector(s);
+function renderMath(text){
+  if(!text)return'';
+  let html;
+  try{html=window.marked?marked.parse(text):text.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}catch(e){html=text;}
+  if(window.katex){
+    html=html.replace(/\$\$([\s\S]+?)\$\$/g,(m,e)=>{try{return katex.renderToString(e,{displayMode:true,throwOnError:false});}catch(x){return m;}});
+    html=html.replace(/\$([^$\n]+?)\$/g,(m,e)=>{try{return katex.renderToString(e,{displayMode:false,throwOnError:false});}catch(x){return m;}});
+  }
+  return html;
+}
+async function load(offset){
+  cur=Math.max(0,offset);
+  const scene=$('#scene').value, source=$('#source').value;
+  const q=new URLSearchParams({limit:'100',offset:String(cur)});
+  if(scene)q.set('scene',scene);
+  if(source)q.set('source',source);
+  const d=await (await fetch('/api/browse?'+q)).json();
+  total=d.total;
+  $('#totalInfo').textContent='共 '+total+' 题';
+  $('#pageInfo').textContent='第 '+Math.floor(cur/100+1)+' 页 / 显示 '+(cur+1)+'-'+Math.min(cur+100,total);
+  $('#prev').disabled=cur<=0;
+  $('#next').disabled=cur+100>=total;
+  $('#list').innerHTML=d.items.map(q=>{
+    const hasRef=!!q.reference_solution;
+    const tcs=q.test_cases||[];
+    return `<div class="q">
+      <div class="hd">
+        <b>${q.id}</b>
+        <span class="tag src">${q.source}</span>
+        <span class="tag">${q.scene}</span>
+        <span class="tag">${q.difficulty}</span>
+        <span class="tag">${q.metadata&&q.metadata.type?'类型:'+q.metadata.type:''}</span>
+        ${q.metadata&&q.metadata.level?'<span class="tag">level '+q.metadata.level+'</span>':''}
+      </div>
+      <div class="sec"><div class="lb">题目</div><div class="body">${renderMath(q.prompt)}</div></div>
+      <div class="sec"><div class="lb">标准答案</div><div class="body">${renderMath(q.standard_answer||'—')}</div></div>
+      <div class="sec"><div class="lb">参考解 ${hasRef?'':'（缺失）'}</div>${hasRef?`<pre class="code">${q.reference_solution}</pre>`:'<div class="muted">无参考解</div>'}</div>
+      <div class="sec"><div class="lb">测试用例（${tcs.length}）</div>
+        ${tcs.map((tc,i)=>`<div class="tc"><b>#${i+1}</b>${tc.hidden?' [hidden]':''}<br>输入：<pre class="body">${tc.input}</pre>输出：<pre class="body">${tc.output}</pre></div>`).join('')||'<div class="muted">无测试用例</div>'}
+      </div>
+      <div class="meta"><b>分层依据：</b>${q.layer_basis||'—'}<br><b>source_id：</b>${q.source_id||'—'}<br><b>metadata：</b>${JSON.stringify(q.metadata||{})}</div>
+    </div>`;
+  }).join('')||'<div class="muted">无匹配题</div>';
+}
+load(0);
+</script>
+</body>
+</html>

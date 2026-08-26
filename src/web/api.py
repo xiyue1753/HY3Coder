@@ -125,6 +125,24 @@ def questions(scene: str | None = None, verdict: str | None = None,
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
+@app.get("/api/browse")
+def browse(scene: str | None = None, limit: int = 100, offset: int = 0,
+           source: str | None = None) -> dict:
+    """临时题集浏览器：返回题集完整原始记录（含所有字段），供可视化浏览。
+
+    仅用于人工检视题集结构/内容，不属于正式评估 API。
+    """
+    qs = _load_questions()
+    if scene:
+        qs = [q for q in qs if q.scene == scene]
+    if source:
+        qs = [q for q in qs if source in q.source]
+    total = len(qs)
+    page = qs[offset:offset + limit]
+    items = [q.model_dump() for q in page]
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
 @app.get("/api/questions/{qid}")
 def question_detail(qid: str) -> dict:
     evals = _load_evals()
@@ -232,6 +250,12 @@ def interact(req: InteractRequest) -> dict:
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/browse")
+def browse_page() -> FileResponse:
+    """临时题集浏览器页面（独立于主仪表盘）。"""
+    return FileResponse(STATIC / "browse.html")
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
