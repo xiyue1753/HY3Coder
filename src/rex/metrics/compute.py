@@ -103,18 +103,34 @@ def compute_metrics(records: list[EvalRecord]) -> MetricsReport:
 # ---------------------------------------------------------------------------
 @dataclass
 class AuditMetrics:
-    """人工抽检口径：定位命中率 / 误报率。"""
+    """人工抽检口径（对齐任务书）：按"答案正确性"划分两套独立分母。
+
+    - localization_n / error_localization_hit_rate（定位准确率）：
+      分母 = 答案错误样本（answer_correct is False）；
+      分子 = 其中系统判定过程有错（PROCESS_INCORRECT/SILENT_FAILURE）
+            且 findings 覆盖人工标注的 error_step_id 的样本。
+    - fp_n / false_positive_rate（误报率）：
+      分母 = 答案正确样本（answer_correct is True）中被系统判定过程有错的样本；
+      分子 = 其中人工确认为误报（is_false_positive=True）的样本。
+    - n：有抽检标注的样本总数（含答案正确性未知/无法比对者，用于统计可见性）。
+    """
     n: int
     error_localization_hit_rate: float
     false_positive_rate: float
+    localization_n: int = 0       # 定位准确率分母：答案错误样本数
+    fp_n: int = 0                 # 误报率分母：答案正确且被判过程有错的样本数
+
+
+def _flagged_steps(r: EvalRecord) -> set[int]:
+    return {f.step_id for f in r.verification.findings}
 
 
 def audit_metrics(records: list[EvalRecord], audits: list) -> AuditMetrics | None:
     """audits: list of objects with fields question_id / error_step_id / is_false_positive.
 
-    - 定位命中率：系统判定过程有错（PROCESS_INCORRECT/SILENT_FAILURE）的样本中，
-      findings 覆盖了人工标注的真实错误步骤的比例。
-    - 误报率：系统判定有错但人工判定为正确的比例。
+    对齐任务书 P4 口径：利用标准答案（answer_correct）划分样本——
+    - 定位准确率：在"答案错误"的样本上，评估器能否判定过程有问题并定位到出错步骤。
+    - 误报率：在"答案正确"的样本上，被判过程有问题的样本经人工抽检确认真实/误报比例。
     """
     by_id = {r.question_id: r for r in records}
     pairs: list[tuple[EvalRecord, object]] = [
@@ -122,29 +138,40 @@ def audit_metrics(records: list[EvalRecord], audits: list) -> AuditMetrics | Non
     ]
     if not pairs:
         return None
-    judged_incorrect = [
-        (r, a) for r, a in pairs
-        if r.verification.verdict in (Verdict.PROCESS_INCORRECT, Verdict.SILENT_FAILURE)
-    ]
-    if not judged_incorrect:
-        return AuditMetrics(n=len(pairs), error_localization_hit_rate=0.0, false_positive_rate=0.0)
-    hits = 0
-    fp = 0
-    for r, a in judged_incorrect:
-        # 人工确认此样本确实有错
-        if getattr(a, "is_false_positive", None) is True:
-            fp += 1
+
+    # ---- 定位准确率：分母 = 答案错误的样本 ----
+    wrong_answer = [r for r, _ in pairs if r.answer_correct is False]
+    loc_hits = 0
+    for r, a in pairs:
+        if r.answer_correct is not False:
+            continue
+        # 系统必须判定过程有错，且人工标注的真实出错步骤被 findings 覆盖
+        if r.verification.verdict not in (Verdict.PROCESS_INCORRECT, Verdict.SILENT_FAILURE):
             continue
         true_step = getattr(a, "error_step_id", None)
         if true_step is None:
-            continue  # 人工标注无具体步骤，不计入定位命中
-        flagged = {f.step_id for f in r.verification.findings}
-        if true_step in flagged:
-            hits += 1
+            continue  # 人工未标注具体步骤，不计入命中
+        if true_step in _flagged_steps(r):
+            loc_hits += 1
+    localization_n = len(wrong_answer)
+    localization_hit_rate = loc_hits / localization_n if localization_n else 0.0
+
+    # ---- 误报率：分母 = 答案正确且被系统判过程有错的样本 ----
+    correct_judged_incorrect = [
+        (r, a) for r, a in pairs
+        if r.answer_correct is True
+        and r.verification.verdict in (Verdict.PROCESS_INCORRECT, Verdict.SILENT_FAILURE)
+    ]
+    fp = sum(1 for _, a in correct_judged_incorrect if getattr(a, "is_false_positive", None) is True)
+    fp_n = len(correct_judged_incorrect)
+    false_positive_rate = fp / fp_n if fp_n else 0.0
+
     return AuditMetrics(
         n=len(pairs),
-        error_localization_hit_rate=hits / len(judged_incorrect) if judged_incorrect else 0.0,
-        false_positive_rate=fp / len(judged_incorrect) if judged_incorrect else 0.0,
+        error_localization_hit_rate=localization_hit_rate,
+        false_positive_rate=false_positive_rate,
+        localization_n=localization_n,
+        fp_n=fp_n,
     )
 
 

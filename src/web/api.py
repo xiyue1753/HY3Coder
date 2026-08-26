@@ -11,6 +11,7 @@ Endpoints (all data under Hy3_APP2/data/):
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -160,7 +161,11 @@ class InteractRequest(BaseModel):
 
 @app.post("/api/interact")
 def interact(req: InteractRequest) -> dict:
-    """交互式解题：自定义题目 → 求解 → 执行/比对 → 验证 →（可选）修正。"""
+    """交互式解题：自定义题目 → 求解 → 执行/比对 → 验证 →（可选）修正。
+
+    返回含：elapsed（总耗时秒）、cost_calls（模型调用次数）、以及 eval/refine 记录。
+    前端据此展示沙盒执行结果、错误定位 findings、耗时与调用成本。
+    """
     from rex.models import Difficulty, QuestionItem
     from rex.pipeline import Pipeline
 
@@ -170,12 +175,26 @@ def interact(req: InteractRequest) -> dict:
         standard_answer=req.answer,
     )
     pipe = Pipeline(CFG)
+    t0 = time.time()
     try:
         if not req.refine:
             rec = pipe._eval_one(q)
-            return {"mode": "eval", "eval": rec.model_dump()}
+            # 单独重跑一次沙盒执行，拿到 exec 细节（错误信息）供前端展示
+            _, pass_rate, exec_error = pipe._execute(q, rec.answer)
+            payload = {
+                "mode": "eval", "eval": rec.model_dump(),
+                "elapsed": round(time.time() - t0, 2),
+                "cost_calls": pipe.client.call_count,
+                "exec": {"test_pass_rate": pass_rate, "error": exec_error},
+            }
+            return payload
         rrec = pipe.refiner.refine(q)
-        return {"mode": "refine", "refine": rrec.model_dump()}
+        payload = {
+            "mode": "refine", "refine": rrec.model_dump(),
+            "elapsed": round(time.time() - t0, 2),
+            "cost_calls": pipe.client.call_count,
+        }
+        return payload
     finally:
         pipe.client.close()
 

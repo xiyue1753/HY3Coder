@@ -138,9 +138,12 @@ def build() -> str:
         w("|---|---|")
         w(f"| 已标注样本 | {sum(1 for a in audits if a.verdict_human)} / {len(audits)} |")
         if am:
-            w(f"| 错误定位命中率 | {pct(am.error_localization_hit_rate)} |")
-            w(f"| 误报率 | {pct(am.false_positive_rate)} |")
+            # 对齐任务书 P4 口径：定位准确率用答案错误样本，误报率用答案正确样本
+            w(f"| 定位准确率（答案错误样本 {am.localization_n}） | {pct(am.error_localization_hit_rate)} |")
+            w(f"| 误报率（答案正确且判过程有错 {am.fp_n}） | {pct(am.false_positive_rate)} |")
         w("")
+        w("> 口径说明：定位准确率分母为「答案错误」样本（用标准答案判定），"
+          "误报率分母为「答案正确」样本中被评估器判过程有错者（经人工抽检确认）。\n")
     else:
         w("\n_暂无抽检标注，运行 `python -m src.cli audit --results data/outputs/eval_math.jsonl` 生成模板。_\n")
 

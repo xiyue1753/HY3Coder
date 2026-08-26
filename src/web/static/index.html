@@ -334,12 +334,29 @@ async function interact(){
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'failed');
     const rec=d.eval||d.refine;const v=rec.verification;
-    let html=`<div class="flex items-center gap-2 mb-3"><span class="tag v-${v.verdict.value}">${VERDICT_CN[v.verdict.value]}</span>
-      <span class="muted">模式：${d.mode==='refine'?'修正闭环':'一次性评估'}</span></div>`;
+    const findings=v.findings||[];
+    const errIds=new Set(findings.map(f=>f.step_id).filter(x=>x!=null));
+    // 头部：判定 + 模式 + 耗时/调用次数
+    let html=`<div class="flex items-center gap-2 mb-2"><span class="tag v-${v.verdict.value}">${VERDICT_CN[v.verdict.value]}</span>
+      <span class="muted">${d.mode==='refine'?'修正闭环':'一次性评估'}</span>
+      <span class="text-sm muted">耗时 ${d.elapsed??'—'}s · 调用 ${d.cost_calls??'—'} 次</span></div>`;
     if(d.mode==='refine'){html+=`<div class="text-sm muted mb-2">初始判定：${VERDICT_CN[d.refine.initial.verdict.value]} → 最终：${VERDICT_CN[v.verdict.value]}（${d.refine.rounds.length} 轮修正）</div>`;}
-    html+=(rec.answer.steps||[]).map(s=>`<div class="step-card"><div class="k">${s.kind} · STEP ${s.id}</div><div>${s.content}</div><div class="text-sm" style="color:var(--pri2)">→ ${s.conclusion}</div></div>`).join('');
+    // 沙盒执行结果（算法场景测试通过率 / 错误）
+    if(d.exec){const ex=d.exec;
+      html+=`<div class="mt-2 mb-2 text-sm">沙盒执行：
+        <span style="color:${ex.test_pass_rate>=1?'var(--ok)':'var(--warn)'}">${ex.test_pass_rate==null?'—':Math.round(ex.test_pass_rate*100)+'% 通过'}</span>
+        ${ex.error?`<span class="finding" style="margin-left:6px">${ex.error}</span>`:''}</div>`;}
+    // 步骤卡片：按 findings 高亮错误步骤
+    html+=(rec.answer.steps||[]).map(s=>`<div class="step-card ${errIds.has(s.id)?'err':v.verdict.value==='CORRECT'?'ok':''}" title="依赖：${(s.deps||[]).join(',')||'无'}">
+      <div class="k">${s.kind} · STEP ${s.id}${errIds.has(s.id)?' · 检出错误':''}</div>
+      <div>${s.content}</div><div class="text-sm" style="color:var(--pri2)">→ ${s.conclusion}</div></div>`).join('');
     html+=`<div class="mt-2 text-sm muted">最终答案：<span class="mono">${rec.answer.final_answer}</span></div>`;
+    // 错误定位 findings
+    html+=`<div id="iFindings"></div>`;
     $('#iResult').innerHTML=html;
+    $('#iFindings').innerHTML=findings.length
+      ? findings.map(f=>`<div class="finding"><b>${TYPE_CN[f.error_type.value]||f.error_type.value}</b> · 第${f.step_id??'—'}步：${f.detail}</div>`).join('')
+      : `<div class="text-sm muted mt-2">未检出过程错误 · 置信度 ${(v.confidence??0).toFixed(2)}</div>`;
   }catch(e){$('#iResult').innerHTML=`<div class="finding"><b>出错：</b>${e.message}</div>`}
   finally{btn.disabled=false;btn.textContent='开始求解'}
 }

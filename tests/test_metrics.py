@@ -71,32 +71,59 @@ def test_compute_metrics_per_tier() -> None:
     assert m.per_tier["hard"].n == 1
 
 
-def test_audit_metrics_hit_and_fp() -> None:
-    records = [
-        _rec("a", Verdict.PROCESS_INCORRECT,
-             findings=[ErrorFinding(step_id=1, error_type=ErrorType.CALCULATION,
-                                    detail="d", evidence="e")]),
-        _rec("b", Verdict.SILENT_FAILURE,
-             findings=[ErrorFinding(step_id=1, error_type=ErrorType.LOGIC,
-                                    detail="d", evidence="e")]),
-    ]
+def test_audit_metrics_localization_and_fp() -> None:
+    """对齐任务书口径：定位准确率用答案错误样本，误报率用答案正确样本。"""
+    # 答案错误的样本（answer_correct=False），用于测定位准确率
+    rec_wrong1 = _rec("a", Verdict.PROCESS_INCORRECT,
+                      answer_correct=False,
+                      findings=[ErrorFinding(step_id=1, error_type=ErrorType.CALCULATION,
+                                             detail="d", evidence="e")])
+    rec_wrong2 = _rec("b", Verdict.PROCESS_INCORRECT,
+                      answer_correct=False,
+                      findings=[ErrorFinding(step_id=2, error_type=ErrorType.LOGIC,
+                                             detail="d", evidence="e")])
+    # 答案正确但被判过程有错（answer_correct=True），用于测误报率
+    rec_right = _rec("c", Verdict.SILENT_FAILURE,
+                     answer_correct=True,
+                     findings=[ErrorFinding(step_id=1, error_type=ErrorType.LOGIC,
+                                            detail="d", evidence="e")])
 
     class Audit:
         def __init__(self, qid, step=None, fp=False):
             self.question_id, self.error_step_id, self.is_false_positive = qid, step, fp
 
-    audits = [
-        Audit("a", step=1),   # 命中
-        Audit("b", step=99),  # 未命中
-    ]
-    am = audit_metrics(records, audits)
+    # 定位：a 命中（step1 被覆盖），b 未命中（step99 未被覆盖）
+    audits = [Audit("a", step=1), Audit("b", step=99), Audit("c", step=1)]
+    am = audit_metrics([rec_wrong1, rec_wrong2, rec_right], audits)
     assert am is not None
-    assert am.error_localization_hit_rate == 0.5
-    assert am.false_positive_rate == 0.0
+    assert am.localization_n == 2          # 答案错误样本数（分母）
+    assert am.error_localization_hit_rate == 0.5   # 1 命中 / 2 答案错误样本
+    assert am.fp_n == 1                    # 答案正确且被判过程有错（误报率分母）
+    assert am.false_positive_rate == 0.0   # 人工未标 c 为误报
 
-    audits2 = [Audit("a", fp=True)]
-    am2 = audit_metrics(records, audits2)
+    # 误报：c 被人工标为误报 → 误报率 1.0
+    am2 = audit_metrics([rec_wrong1, rec_wrong2, rec_right],
+                        [Audit("a", step=1), Audit("b", step=99), Audit("c", fp=True)])
     assert am2 is not None and am2.false_positive_rate == 1.0
+
+
+def test_audit_metrics_answer_unknown_excluded() -> None:
+    """答案正确性未知（answer_correct=None）的样本不进两个分母，但计入 n。"""
+    rec_unknown = _rec("u", Verdict.PROCESS_INCORRECT, answer_correct=None,
+                       findings=[ErrorFinding(step_id=1, error_type=ErrorType.LOGIC,
+                                              detail="d", evidence="e")])
+
+    class Audit:
+        def __init__(self, qid, step=None, fp=False):
+            self.question_id, self.error_step_id, self.is_false_positive = qid, step, fp
+
+    am = audit_metrics([rec_unknown], [Audit("u", step=1)])
+    assert am is not None
+    assert am.n == 1                       # 计入总样本
+    assert am.localization_n == 0          # 答案正确性未知 → 不进定位分母
+    assert am.fp_n == 0                    # 不进误报分母
+    assert am.error_localization_hit_rate == 0.0
+    assert am.false_positive_rate == 0.0
 
 
 def test_stability_check() -> None:

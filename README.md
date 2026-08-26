@@ -16,34 +16,58 @@
 | 量化评估 | 答案准确率/过程正确率/定位命中率/误报率 + Wilson 置信区间 + 抽样稳定性验证 |
 | 可视化仪表盘 | FastAPI + 单文件 SPA：评估总览、单题过程回放（错误步骤红框+修正轮次切换）、golden 库、人工抽检、交互式解题 |
 
+## 环境要求
+
+> 系统 `python` 是 WindowsApps 占位程序（调用会报 exit 9009），**不可用**。
+> 请使用 conda 虚拟环境 **`tensor_env`**（Python 3.9，含本项目全部依赖）。
+
+```powershell
+# 1. 创建并激活 conda 环境（若尚未创建）
+conda create -n tensor_env python=3.9 -y
+conda activate tensor_env
+pip install -r requirements.txt
+```
+
+> 说明：代码使用了 `X | None` 等 3.10+ 类型注解语法，在 Python 3.9 下依赖
+> `eval_type_backport`（已写入 requirements.txt）求值。
+
+**推荐用仓库自带的 `run.ps1` 统一调用**（自动使用 tensor_env 的 python，避免用错环境）：
+
+```powershell
+.\run.ps1 test              # 运行全部 pytest
+.\run.ps1 run-eval math 5   # 评估数学 5 题
+.\run.ps1 report            # 生成报告
+.\run.ps1 serve             # 启动仪表盘
+```
+
 ## 快速开始
 
 ```bash
-# 1. 依赖（Python 3.13）
+# 1. 依赖（推荐 conda 环境 tensor_env，Python 3.9）
 pip install -r requirements.txt
 
 # 2. 配置 Hy3 接入（复制并填写密钥，.env 已被 .gitignore 排除）
 copy .env.example .env
 #    HY3_API_KEY=...   HY3_BASE_URL=https://tokenhub.tencentmaas.com/v1   HY3_MODEL=hy3
 
-# 3. 端到端 demo（数学 3 题 / 算法 5 题）
-python -m src.cli run-eval --scene math --sample 5
-python -m src.cli run-eval --scene algorithm --sample 5
+# 3. 端到端 demo（数学 3 题 / 算法 5 题）——用 run.ps1 或 tensor_env 的 python
+.\run.ps1 run-eval math 5
+.\run.ps1 run-eval algorithm 5
 
-# 4. 放大评估（主 3 档 × 100）
-python -m src.cli run-eval --scene math --sample 100 --resume
-python -m src.cli run-eval --scene algorithm --sample 100 --resume
+# 4. 放大评估（主 3 档 × 100，断点续跑 + 并发）
+.\run.ps1 exec -m src.cli run-eval --scene math --sample 100 --resume --concurrency 4
+.\run.ps1 exec -m src.cli run-eval --scene algorithm --sample 100 --resume --concurrency 4
 
 # 5. 修正模式（ReAct 闭环演示）
-python -m src.cli run-refine --scene math --sample 5
+.\run.ps1 run-refine math 5
 
 # 6. 答案校验 / 人工抽检 / 仪表盘
-python -m src.cli check-answers --results data/outputs/eval_math.jsonl
-python -m src.cli audit --results data/outputs/eval_math.jsonl --sample 30
-python -m src.cli serve        # 打开 http://127.0.0.1:8000
+.\run.ps1 exec -m src.cli check-answers --results data/outputs/eval_math.jsonl
+.\run.ps1 exec -m src.cli audit --results data/outputs/eval_math.jsonl --sample 30
+.\run.ps1 serve        # 打开 http://127.0.0.1:8000
 
 # 7. 测试
-python -m pytest tests/
+.\run.ps1 test
 ```
 
 `--sample` 支持 `5 / 10 / 50 / 100 / full`，抽样种子固定（默认 42）保证可复现；`--resume` 断点续跑。
