@@ -318,4 +318,41 @@
 
 ---
 
+## 前端界面现状总结（供后续二次修改参考）
+
+**状态**：✅ 阶段性完成（界面先保持现状，后续可改）
+
+### 文件结构（组件化后）
+```
+src/web/static/
+├── index.html    # HTML 骨架：5 个 section（评估总览/单题回放/Golden/人工抽检/交互式解题）
+├── styles.css    # 全部样式：CSS 变量主题（亮/暗）+ 组件样式
+└── main.js       # 全部逻辑：导航/数据加载/交互（无构建工具，原生 JS）
+```
+- 静态文件由后端 `api.py` 挂载于 `/static/`，index.html 用绝对路径引用 `/static/styles.css`、`/static/main.js`
+
+### 关键特性
+| 特性 | 位置 | 说明 |
+|---|---|---|
+| 亮/暗主题切换 | main.js `applyTheme`/`toggleTheme` | `data-theme` + localStorage("rex_theme")，侧边栏太阳/月亮 SVG 按钮 |
+| 圆角风格 | styles.css | 克制 6-10px，无胶囊（99px）；主元素 8px、次级 6px、面板 10px |
+| Markdown/LaTeX 渲染 | main.js `renderMath` | marked + KaTeX，`$$...$$` 公式 |
+| Markdown 限界 | styles.css `.md-bound` | 所有 Markdown 容器 max-height + 滚动 |
+| 题目列表 | main.js `loadQuestions`/`QUIERY_STATE` | 单题回放页内嵌，筛选/搜索/分页 |
+| 交互式解题 | main.js `interact` | 数学(LaTeX)/算法(样例)分输入，展示代码+沙盒结果 |
+
+### 单题回放页布局（当前）
+- 上：题目列表（横跨全宽，多列 `auto-fill minmax(200px,1fr)`，筛选/搜索/分页）
+- 中：题目详情（全宽，`renderMath` 渲染）
+- 下：过程回放（全宽，roundTabs 轮次 + 步骤 `renderMath` + findings）
+- 完全纵向堆叠，不挤
+
+### 后续二次修改关注点
+1. **拆分丢失样式风险**：组件化从 git 恢复时，未提交的编辑会丢。改前先 commit，改后验证 `.fbtn`/`.md-bound`/`renderMath` 调用是否完整。
+2. **数据层**：`RecordStore`（src/rex/store.py）集中管理记录，带内存缓存 + 丰富检索 + 手动 cleanup。
+3. **交互记录**：`source="interactive"` 落盘，列表可筛选来源。
+4. 导航加载：`loadOverview`/`loadQuestions`/`loadGolden`/`loadAudit`/`interact` 各负责一屏。
+
+---
+
 <!-- 后续任务按此格式追加 -->
