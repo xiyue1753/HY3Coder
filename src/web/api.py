@@ -43,10 +43,11 @@ def _load_questions() -> list[QuestionItem]:
     qs: list[QuestionItem] = []
     for scene in ("math", "algorithm"):
         qs += load_jsonl(CFG.data_dir / "questions" / f"{scene}.jsonl", QuestionItem)
-    # 自建算法评测集（AtCoder ABC，独立文件便于扩充）
-    abc = CFG.data_dir / "questions" / "abc_selfbuilt.jsonl"
-    if abc.exists():
-        qs += load_jsonl(abc, QuestionItem)
+    # 自建算法评测集（AtCoder ABC + Codeforces，独立文件便于扩充）
+    for f in ("abc_selfbuilt.jsonl", "cf_selfbuilt.jsonl"):
+        p = CFG.data_dir / "questions" / f
+        if p.exists():
+            qs += load_jsonl(p, QuestionItem)
     return qs
 
 

@@ -2,6 +2,11 @@
 .env
 .env.local
 *.secret
+# 登录脚本与 cookie 数据（含凭证处理，不入 git）
+scripts/cf_login.py
+scripts/cf_cookie_test.py
+data/cases/cf_cookies*.json
+data/cases/ref_originals.json
 
 # Python
 __pycache__/
