@@ -43,7 +43,6 @@
       <div class="text-sm muted">RE-AGENTS PROCESS EVALUATION CENTER</div>
       <h1 class="text-xl font-semibold mt-1" id="pageTitle">评估总览</h1>
     </div>
-    <input class="search" id="globalSearch" placeholder="搜索题号…" onkeydown="if(event.key==='Enter')goSearch()">
   </div>
 
   <!-- ===== 屏 1：评估总览 ===== -->
@@ -71,14 +70,22 @@
     </div>
   </section>
 
-  <!-- ===== 屏 2：单题回放 ===== -->
+  <!-- ===== 屏 2：单题回放（内嵌可检索题目列表 + 详情 + 过程回放） ===== -->
   <section id="view-detail" class="fade" style="display:none">
-    <div class="grid" style="grid-template-columns:1fr 1.6fr;gap:16px">
+    <div class="grid" style="grid-template-columns:0.9fr 1.3fr 1.6fr;gap:16px">
+      <!-- 左：题目列表（可筛选/搜索/分页） -->
+      <div class="panel">
+        <h3 class="text-base font-medium mb-2">题目列表</h3>
+        <input class="search" id="detailSearch" style="width:100%" placeholder="搜索题号/关键词…" onkeydown="if(event.key==='Enter')detailSearchGo()">
+        <div id="dList" class="muted text-sm">加载中…</div>
+      </div>
+      <!-- 中：题目详情 -->
       <div class="panel">
         <h3 class="text-base font-medium mb-3">题目</h3>
-        <div id="dQuestion" class="muted">左侧列表选择一题</div>
+        <div id="dQuestion" class="muted">从左侧列表选择一题</div>
         <div class="mt-4" id="dMeta"></div>
       </div>
+      <!-- 右：过程回放 -->
       <div class="panel">
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-base font-medium">过程回放</h3>

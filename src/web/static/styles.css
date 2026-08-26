@@ -104,3 +104,13 @@
   .muted{color:var(--sub)}
   .mono{font-family:var(--mono)}
   .grid-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+  /* 轻量按钮（公式快捷栏 / 筛选 / 分页） */
+  .fbtn{background:none;border:1px solid var(--line);border-radius:6px;color:var(--sub);cursor:pointer;font-size:11px;padding:2px 7px;transition:.15s}
+  .fbtn:hover{color:var(--txt);border-color:var(--pri);background:var(--pri-weak)}
+  /* Markdown/LaTeX 展示容器统一限界：纵向+横向滚动 */
+  .md-bound{max-height:200px;overflow:auto;word-break:break-word}
+  .md-bound code, .md-bound pre{white-space:pre-wrap;word-break:break-word}
+  .md-bound .katex-display{margin:.4em 0;overflow-x:auto;overflow-y:hidden}
+  /* 单题回放：列表项 */
+  .ditem{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;cursor:pointer;transition:.15s}
+  .ditem:hover{background:var(--pri-weak)}

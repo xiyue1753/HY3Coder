@@ -19,7 +19,6 @@ document.querySelectorAll('.nav-item').forEach(el=>el.onclick=()=>{
   if(v==='golden')loadGolden();
   if(v==='audit')loadAudit();
 });
-function goSearch(){const q=$('#globalSearch').value.trim();if(!q)return;$('#pageTitle').textContent='单题过程回放';loadDetail(q)}
 
 // ---------- 总览 ----------
 async function loadOverview(){
@@ -69,35 +68,40 @@ async function loadQuestions(){
   const d=await j('/api/questions?'+buildQueryParams());
   const list=d.items||[];STATE.questions=list;
   const total=d.total||0;
-  // 总览下题目表格（含筛选 + 分页）
-  let sec=$('#questionTable');
-  if(sec)sec.remove();
-  const wrap=document.createElement('div');wrap.id='questionTable';wrap.className='panel mt-5 fade';
+  // 渲染到单题回放页左侧列表（紧凑列表：题号+判定+场景）
+  const el=$('#dList');
+  if(!el)return;
   const opts=o=>`<option value="">全部</option>`+o;
-  wrap.innerHTML=`
-    <div class="flex items-center gap-2 mb-2"><h3 class="text-base font-medium">题目列表</h3>
-      <span class="muted text-sm">共 ${total} 条</span></div>
-    <div class="flex flex-wrap items-center gap-2 mb-3 text-sm">
+  el.innerHTML=`
+    <div class="flex flex-wrap items-center gap-2 mb-2 text-sm">
+      <span class="muted">共 ${total} 条</span>
       <select onchange="QUIERY_STATE.scene=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['math','algorithm'].map(s=>`<option value="${s}" ${QUIERY_STATE.scene===s?'selected':''}>${s}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.tier=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['basic','medium','hard'].map(t=>`<option value="${t}" ${QUIERY_STATE.tier===t?'selected':''}>${t}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.verdict=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['CORRECT','PROCESS_INCORRECT','SILENT_FAILURE','ANSWER_INCORRECT','FAILED'].map(v=>`<option value="${v}" ${QUIERY_STATE.verdict===v?'selected':''}>${VERDICT_CN[v]||v}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.source=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['run-eval','interactive'].map(s=>`<option value="${s}" ${QUIERY_STATE.source===s?'selected':''}>${s}</option>`).join(''))}</select>
-      <input class="search" style="width:160px" placeholder="搜索题号/关键词" value="${QUIERY_STATE.keyword}" onkeydown="if(event.key==='Enter'){QUIERY_STATE.keyword=this.value;QUIERY_STATE.offset=0;loadQuestions()}">
-      <button class="fbtn" onclick="QUIERY_STATE.offset=0;loadQuestions()">搜索</button>
     </div>
-    <table class="dt"><thead><tr><th>题号</th><th>场景</th><th>难度</th><th>判定</th><th>来源</th><th>答案</th><th>置信度</th><th>错误类型</th></tr></thead>
-    <tbody>${list.map(x=>`<tr onclick="openDetail('${x.question_id}')"><td class="mono">${x.question_id}</td><td>${x.scene}</td><td>${x.difficulty}</td>
-      <td><span class="tag v-${x.verdict}">${VERDICT_CN[x.verdict]||x.verdict}</span></td>
-      <td class="muted">${x.source||'—'}</td>
-      <td>${x.answer_correct==null?'—':(x.answer_correct?'✓':'✗')}</td><td class="mono">${(x.confidence||0).toFixed(2)}</td>
-      <td class="muted">${(x.error_types||[]).map(t=>TYPE_CN[t]||t).join(', ')||'—'}</td></tr>`).join('')||'<tr><td colspan="8" class="muted">无匹配记录</td></tr>'}</tbody></table>
-    <div class="flex items-center gap-2 mt-3 text-sm">
+    <div class="fbtn-row" style="max-height:420px;overflow-y:auto">
+      ${list.map(x=>`<div class="ditem" onclick="openDetail('${x.question_id}')">
+        <span class="mono" style="font-size:12px">${x.question_id}</span>
+        <span class="tag v-${x.verdict}">${VERDICT_CN[x.verdict]||x.verdict}</span>
+        <span class="muted" style="font-size:11px">${x.scene}/${x.difficulty}</span>
+      </div>`).join('')||'<div class="muted">无匹配记录</div>'}
+    </div>
+    <div class="flex items-center gap-2 mt-2 text-sm">
       <button class="fbtn" onclick="QUIERY_STATE.offset=Math.max(0,QUIERY_STATE.offset-QUIERY_STATE.limit);loadQuestions()" ${QUIERY_STATE.offset<=0?'disabled':''}>上一页</button>
       <span class="muted">第 ${Math.floor(QUIERY_STATE.offset/QUIERY_STATE.limit)+1} 页</span>
       <button class="fbtn" onclick="QUIERY_STATE.offset+=QUIERY_STATE.limit;loadQuestions()" ${QUIERY_STATE.offset+QUIERY_STATE.limit>=total?'disabled':''}>下一页</button>
-      <span class="muted">每页 ${QUIERY_STATE.limit} 条</span>
     </div>`;
-  $('#view-overview').appendChild(wrap);
+}
+// 单题回放页搜索：题号/关键词 → 定位并显示详情
+async function detailSearchGo(){
+  const q=$('#detailSearch').value.trim();
+  if(!q)return;
+  QUIERY_STATE.keyword=q;QUIERY_STATE.offset=0;
+  await loadQuestions();
+  // 若精确命中某题，直接打开详情
+  const hit=STATE.questions.find(x=>x.question_id.toLowerCase()===q.toLowerCase());
+  if(hit)openDetail(hit.question_id);
 }
 function openDetail(qid){document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('main section').forEach(s=>s.style.display='none');
