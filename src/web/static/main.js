@@ -55,20 +55,48 @@ async function loadOverview(){
 }
 
 // ---------- 单题回放 ----------
+let QUIERY_STATE={offset:0, limit:100, scene:'', verdict:'', tier:'', source:'', keyword:''};
+function buildQueryParams(){
+  const p=new URLSearchParams({limit:String(QUIERY_STATE.limit), offset:String(QUIERY_STATE.offset)});
+  if(QUIERY_STATE.scene)p.set('scene',QUIERY_STATE.scene);
+  if(QUIERY_STATE.verdict)p.set('verdict',QUIERY_STATE.verdict);
+  if(QUIERY_STATE.tier)p.set('tier',QUIERY_STATE.tier);
+  if(QUIERY_STATE.source)p.set('source',QUIERY_STATE.source);
+  if(QUIERY_STATE.keyword)p.set('keyword',QUIERY_STATE.keyword);
+  return p.toString();
+}
 async function loadQuestions(){
-  const list=await j('/api/questions');
-  STATE.questions=list;
-  const vd={};list.forEach(x=>vd[x.verdict]=(vd[x.verdict]||0)+1);
-  // 在总览下追加题目表格
+  const d=await j('/api/questions?'+buildQueryParams());
+  const list=d.items||[];STATE.questions=list;
+  const total=d.total||0;
+  // 总览下题目表格（含筛选 + 分页）
   let sec=$('#questionTable');
   if(sec)sec.remove();
   const wrap=document.createElement('div');wrap.id='questionTable';wrap.className='panel mt-5 fade';
-  wrap.innerHTML=`<div class="flex items-center gap-2 mb-2"><h3 class="text-base font-medium">题目列表</h3>${Object.entries(vd).map(([k,v])=>`<span class="tag v-${k}">${VERDICT_CN[k]||k} ${v}</span>`).join('')}</div>
-    <table class="dt"><thead><tr><th>题号</th><th>场景</th><th>难度</th><th>判定</th><th>答案</th><th>置信度</th><th>错误类型</th></tr></thead>
-    <tbody>${list.slice(0,200).map(x=>`<tr onclick="openDetail('${x.question_id}')"><td class="mono">${x.question_id}</td><td>${x.scene}</td><td>${x.difficulty}</td>
+  const opts=o=>`<option value="">全部</option>`+o;
+  wrap.innerHTML=`
+    <div class="flex items-center gap-2 mb-2"><h3 class="text-base font-medium">题目列表</h3>
+      <span class="muted text-sm">共 ${total} 条</span></div>
+    <div class="flex flex-wrap items-center gap-2 mb-3 text-sm">
+      <select onchange="QUIERY_STATE.scene=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['math','algorithm'].map(s=>`<option value="${s}" ${QUIERY_STATE.scene===s?'selected':''}>${s}</option>`).join(''))}</select>
+      <select onchange="QUIERY_STATE.tier=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['basic','medium','hard'].map(t=>`<option value="${t}" ${QUIERY_STATE.tier===t?'selected':''}>${t}</option>`).join(''))}</select>
+      <select onchange="QUIERY_STATE.verdict=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['CORRECT','PROCESS_INCORRECT','SILENT_FAILURE','ANSWER_INCORRECT','FAILED'].map(v=>`<option value="${v}" ${QUIERY_STATE.verdict===v?'selected':''}>${VERDICT_CN[v]||v}</option>`).join(''))}</select>
+      <select onchange="QUIERY_STATE.source=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['run-eval','interactive'].map(s=>`<option value="${s}" ${QUIERY_STATE.source===s?'selected':''}>${s}</option>`).join(''))}</select>
+      <input class="search" style="width:160px" placeholder="搜索题号/关键词" value="${QUIERY_STATE.keyword}" onkeydown="if(event.key==='Enter'){QUIERY_STATE.keyword=this.value;QUIERY_STATE.offset=0;loadQuestions()}">
+      <button class="fbtn" onclick="QUIERY_STATE.offset=0;loadQuestions()">搜索</button>
+    </div>
+    <table class="dt"><thead><tr><th>题号</th><th>场景</th><th>难度</th><th>判定</th><th>来源</th><th>答案</th><th>置信度</th><th>错误类型</th></tr></thead>
+    <tbody>${list.map(x=>`<tr onclick="openDetail('${x.question_id}')"><td class="mono">${x.question_id}</td><td>${x.scene}</td><td>${x.difficulty}</td>
       <td><span class="tag v-${x.verdict}">${VERDICT_CN[x.verdict]||x.verdict}</span></td>
+      <td class="muted">${x.source||'—'}</td>
       <td>${x.answer_correct==null?'—':(x.answer_correct?'✓':'✗')}</td><td class="mono">${(x.confidence||0).toFixed(2)}</td>
-      <td class="muted">${(x.error_types||[]).map(t=>TYPE_CN[t]||t).join(', ')||'—'}</td></tr>`).join('')}</tbody></table>`;
+      <td class="muted">${(x.error_types||[]).map(t=>TYPE_CN[t]||t).join(', ')||'—'}</td></tr>`).join('')||'<tr><td colspan="8" class="muted">无匹配记录</td></tr>'}</tbody></table>
+    <div class="flex items-center gap-2 mt-3 text-sm">
+      <button class="fbtn" onclick="QUIERY_STATE.offset=Math.max(0,QUIERY_STATE.offset-QUIERY_STATE.limit);loadQuestions()" ${QUIERY_STATE.offset<=0?'disabled':''}>上一页</button>
+      <span class="muted">第 ${Math.floor(QUIERY_STATE.offset/QUIERY_STATE.limit)+1} 页</span>
+      <button class="fbtn" onclick="QUIERY_STATE.offset+=QUIERY_STATE.limit;loadQuestions()" ${QUIERY_STATE.offset+QUIERY_STATE.limit>=total?'disabled':''}>下一页</button>
+      <span class="muted">每页 ${QUIERY_STATE.limit} 条</span>
+    </div>`;
   $('#view-overview').appendChild(wrap);
 }
 function openDetail(qid){document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));

@@ -146,6 +146,7 @@ class EvalRecord(BaseModel):
     is_false_positive: bool | None = None  # 误报标记
     cost_calls: int = 0
     created_at: str | None = None         # ISO 时间戳（结果文件追加式，先建字段成本最低）
+    source: str = "run-eval"              # 记录来源：run-eval（批量）/ interactive（交互式解题）
     error: str | None = None              # 运行失败原因
 
 
@@ -161,6 +162,7 @@ class RefineRecord(BaseModel):
     converged: bool                       # 是否在限轮内达成 CORRECT
     cost_calls: int = 0
     created_at: str | None = None         # ISO 时间戳
+    source: str = "run-eval"              # 记录来源：run-eval（批量）/ interactive（交互式解题）
     error: str | None = None
 
 

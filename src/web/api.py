@@ -93,17 +93,22 @@ def summary() -> dict:
 
 @app.get("/api/questions")
 def questions(scene: str | None = None, verdict: str | None = None,
-              tier: str | None = None) -> list[dict]:
-    evals = _load_evals()
+              tier: str | None = None, source: str | None = None,
+              qid: str | None = None, keyword: str | None = None,
+              since: str | None = None, until: str | None = None,
+              sort: str = "created_at", order: str = "desc",
+              limit: int = 100, offset: int = 0) -> dict:
+    """评估记录列表：支持筛选（场景/难度/判定/来源/题号/关键词/时间）+ 分页 + 排序。"""
+    from rex.store import RecordStore
+    store = RecordStore(CFG.outputs_dir)
+    records, total = store.query_evals(
+        scene=scene, difficulty=tier, verdict=verdict, source=source,
+        qid=qid, keyword=keyword, since=since, until=until,
+        sort=sort, order=order, limit=limit, offset=offset,
+    )
     qmap = {q.id: q for q in _load_questions()}
     items = []
-    for r in evals:
-        if scene and r.scene != scene:
-            continue
-        if verdict and r.verification.verdict.value != verdict:
-            continue
-        if tier and r.difficulty.value != tier:
-            continue
+    for r in records:
         items.append({
             "question_id": r.question_id,
             "scene": r.scene,
@@ -114,10 +119,10 @@ def questions(scene: str | None = None, verdict: str | None = None,
             "confidence": r.verification.confidence,
             "error_types": [f.error_type.value for f in r.verification.findings],
             "prompt": (qmap.get(r.question_id).prompt if r.question_id in qmap else "")[:80],
+            "source": r.source,
             "created_at": r.created_at,
         })
-    items.sort(key=lambda x: x["created_at"] or "")
-    return items
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @app.get("/api/questions/{qid}")
@@ -175,6 +180,7 @@ def interact(req: InteractRequest) -> dict:
     """
     from rex.models import Difficulty, QuestionItem, TestCase
     from rex.pipeline import Pipeline
+    from rex.store import RecordStore
 
     # 构造题目：算法场景把输入输出样例既拼入 prompt，又作为沙盒测试用例
     prompt = req.prompt
@@ -186,16 +192,21 @@ def interact(req: InteractRequest) -> dict:
         )
         prompt = f"{req.prompt}\n\n【输入输出样例】\n{sample_block}"
 
+    # 唯一记录 id：I + 时间戳，便于检索与区分多次交互
+    qid = "I" + time.strftime("%Y%m%d_%H%M%S")
     q = QuestionItem(
-        id="interact", scene=req.scene, title=req.prompt[:50], prompt=prompt,
+        id=qid, scene=req.scene, title=req.prompt[:50], prompt=prompt,
         difficulty=Difficulty.BASIC, source="interactive",
         standard_answer=req.answer, test_cases=test_cases,
     )
+    store = RecordStore(CFG.outputs_dir)
     pipe = Pipeline(CFG)
     t0 = time.time()
     try:
         if not req.refine:
             rec = pipe._eval_one(q)
+            rec.source = "interactive"
+            store.append_eval(rec)   # 落盘，进入集中记录库
             # 单独重跑一次沙盒执行，拿到 exec 细节（错误信息）供前端展示
             _, pass_rate, exec_error = pipe._execute(q, rec.answer)
             payload = {
@@ -206,6 +217,8 @@ def interact(req: InteractRequest) -> dict:
             }
             return payload
         rrec = pipe.refiner.refine(q)
+        rrec.source = "interactive"
+        store.append_refine(rrec)   # 落盘
         payload = {
             "mode": "refine", "refine": rrec.model_dump(),
             "elapsed": round(time.time() - t0, 2),

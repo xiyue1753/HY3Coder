@@ -170,5 +170,31 @@ def serve(port: int = 8000, host: str = "127.0.0.1") -> None:
     uvicorn.run("web.api:app", host=host, port=port, reload=False)
 
 
+@app.command()
+def cleanup(days: int = 30, dry_run: bool = True) -> None:
+    """手动清理超期评估记录（默认 30 天，默认只预览不删除）。
+
+    记录默认不自动删除；此命令用于查看/清理超过保留期的记录。
+    清理规则：删除超过保留期的所有记录（手动操作，不自动执行）。
+    - --dry-run False 才会真正删除。
+    """
+    cfg = _config()
+    sys.path.insert(0, str(ROOT / "src"))
+    from rex.store import RecordStore
+    store = RecordStore(cfg.outputs_dir)
+    would, removed = store.cleanup(days=days, dry_run=dry_run)
+    expired = store.expired(days=days)
+    if dry_run:
+        typer.echo(f"[预览] 超期({days}天)记录 {len(expired)} 条，"
+                   f"其中将移除 {would} 条（仅保留每题最新）。未实际删除。")
+        for r in expired[:20]:
+            typer.echo(f"  - {r.question_id} ({r.scene}/{r.source}) "
+                       f"created_at={r.created_at}")
+        if len(expired) > 20:
+            typer.echo(f"  … 其余 {len(expired)-20} 条省略")
+    else:
+        typer.echo(f"[清理] 已移除 {removed} 条超期记录。")
+
+
 if __name__ == "__main__":
     app()

@@ -225,4 +225,53 @@
 
 ---
 
+## 任务 record-store：数据孤岛修复 + 集中存储 + 可检索性（计划外，用户主导）
+
+**状态**：✅ 已完成
+
+### 背景
+交互式解题的记录此前不落盘（数据孤岛，无法在列表/总览找到）；题目列表无分页/筛选/检索。用户要求：集中处理所有测试结果、默认一个月保存（手动清理）、增加可检索性。
+
+### 目标
+1. 集中存储：eval/refine/interact 记录统一管理，带 `created_at` 时间戳 + `source` 来源标注
+2. 保留策略：默认一个月，手动清理命令（不自动删）
+3. 丰富检索：筛选（场景/难度/判定/来源/关键词/时间）+ 排序 + 分页
+
+### 实现逻辑
+
+**1. 新增 `src/rex/store.py`（RecordStore 记录仓库）**
+- `append_eval/append_refine`：统一追加写入（自动补 created_at），按 scene 分文件
+- `load_evals/load_refines`：集中读取
+- `query_evals`：丰富检索——scene/difficulty/verdict/source/qid/keyword/since/until 筛选 + sort/order 排序 + limit/offset 分页，返回 `(records, total)`
+- `expired(days)`：列出超期记录
+- `cleanup(days, dry_run)`：手动清理超期记录（默认 dry_run 预览，不自动删）
+
+**2. models.py**：EvalRecord/RefineRecord 加 `source` 字段（默认 "run-eval"）
+
+**3. api.py**
+- `interact`：记录落盘到 RecordStore（`source="interactive"`），唯一 id `I{时间戳}`，交互记录进入集中库
+- `/api/questions`：改用 `query_evals`，支持筛选/分页/排序，返回 `{items, total, limit, offset}`；每条含 `source`
+
+**4. cli.py**：新增 `cleanup` 命令（`--days 30 --dry-run True` 默认预览，`--dry-run False` 才删）
+
+**5. 前端 main.js**：`loadQuestions` 重构——适配 `{items,total}`，加筛选下拉（场景/难度/判定/来源）+ 关键词搜索 + 分页（上一页/下一页/页码）
+
+### 输入 / 输出
+- 输入：`/api/questions?scene=&verdict=&tier=&source=&keyword=&since=&until=&sort=&order=&limit=&offset=`
+- 输出：`{items:[...], total, limit, offset}`（每条含 source/created_at）
+- 命令：`python -m src.cli cleanup --days 30 [--dry-run False]`
+
+### 调用文件
+- 新增：`src/rex/store.py`、`tests/test_store.py`
+- 修改：`src/rex/models.py`、`src/web/api.py`、`src/cli.py`、`src/web/static/main.js`
+
+### 验证
+- `pytest` 39 项全绿（新增 store 测试：append/query/expired/cleanup）
+- `/api/questions?limit=5` 返回分页结构（items=5, total=296）
+- 检索正常：verdict=SILENT_FAILURE→3、keyword=A001→6、source=interactive→0、tier=hard→104
+- `cleanup --days 30` 预览运行成功（当前无超期记录）
+- main.js 语法校验通过
+
+---
+
 <!-- 后续任务按此格式追加 -->
