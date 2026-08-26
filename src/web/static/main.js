@@ -109,7 +109,7 @@ function openDetail(qid){document.querySelectorAll('.nav-item').forEach(x=>x.cla
 async function loadDetail(qid){
   const d=await j('/api/questions/'+qid);STATE.detail=d;
   const q=d.question, e=d.eval;
-  $('#dQuestion').innerHTML=`<div class="text-sm">${q?q.prompt:d.question_id}</div>
+  $('#dQuestion').innerHTML=`<div class="text-sm md-bound">${q?renderMath(q.prompt):d.question_id}</div>
     <div class="flex items-center gap-2 mt-3"><span class="tag v-${e.verification.verdict}">${VERDICT_CN[e.verification.verdict]}</span>
     <span class="tag">${e.scene} · ${e.difficulty}</span>${e.answer_correct?'<span class="tag" style="color:var(--ok)">答案正确</span>':'<span class="tag" style="color:var(--bad)">答案存疑</span>'}</div>`;
   $('#dMeta').innerHTML=`<div class="muted text-sm">标准答案：<span class="mono">${q?q.standard_answer:'—'}</span></div>
@@ -133,9 +133,10 @@ function showRound(i){STATE.round=i;document.querySelectorAll('.round-tab').forE
 function renderSteps(){
   const x=STATE.rounds[STATE.round];const ans=x.answer||STATE.detail.eval.answer;
   const errIds=new Set((x.v.findings||[]).map(f=>f.step_id).filter(v=>v!=null));
-  $('#dSteps').innerHTML=(ans.steps||[]).map(s=>`<div class="step-card ${errIds.has(s.id)?'err':x.v.verdict==='CORRECT'?'ok':''}" title="依赖：${s.deps.join(',')||'无'}">
-    <div class="k">${s.kind} · STEP ${s.id}</div><div class="mt-1">${s.content}</div>
-    <div class="mt-1 text-sm" style="color:var(--pri2)">→ ${s.conclusion}</div></div>`).join('')||'<div class="muted">无步骤</div>';
+  $('#dSteps').innerHTML=`<div class="md-bound" style="max-height:460px">${(ans.steps||[]).map(s=>`<div class="step-card ${errIds.has(s.id)?'err':x.v.verdict==='CORRECT'?'ok':''}" title="依赖：${s.deps.join(',')||'无'}">
+    <div class="k">${s.kind} · STEP ${s.id}</div><div class="mt-1">${renderMath(s.content)}</div>
+    <div class="mt-1 text-sm" style="color:var(--pri2)">→ ${renderMath(s.conclusion)}</div></div>`).join('')||'<div class="muted">无步骤</div>'}
+    </div>`;
   const v=x.v;const errs=v.findings||[];
   const note=errs.length?`<div class="mt-2 finding"><b>验证器检出 ${errs.length} 处错误（${VERDICT_CN[v.verdict]}）</b></div>`:`<div class="mt-2 text-sm" style="color:var(--ok)">验证判定：${VERDICT_CN[v.verdict]} · 置信度 ${v.confidence.toFixed(2)}</div>`;
   const ex=$('#verdictNote');if(ex)ex.remove();

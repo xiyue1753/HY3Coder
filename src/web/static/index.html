@@ -82,21 +82,20 @@
       </div>
       <div id="dList" class="muted text-sm">加载中…</div>
     </div>
-    <!-- 下：题目详情 + 过程回放（两栏更宽） -->
-    <div class="grid" style="grid-template-columns:1fr 1.4fr;gap:16px;align-items:start">
-      <div class="panel">
-        <h3 class="text-base font-medium mb-3">题目</h3>
-        <div id="dQuestion" class="muted">从上方列表选择一题</div>
-        <div class="mt-4" id="dMeta"></div>
+    <!-- 下：题目详情（全宽） -->
+    <div class="panel mb-4">
+      <h3 class="text-base font-medium mb-3">题目</h3>
+      <div id="dQuestion" class="muted">从上方列表选择一题</div>
+      <div class="mt-4" id="dMeta"></div>
+    </div>
+    <!-- 下：过程回放（全宽） -->
+    <div class="panel">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-base font-medium">过程回放</h3>
+        <div class="round-tabs" id="roundTabs"></div>
       </div>
-      <div class="panel">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-base font-medium">过程回放</h3>
-          <div class="round-tabs" id="roundTabs"></div>
-        </div>
-        <div id="dSteps"></div>
-        <div id="dFindings"></div>
-      </div>
+      <div id="dSteps"></div>
+      <div id="dFindings"></div>
     </div>
   </section>
 
