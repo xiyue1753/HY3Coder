@@ -1,0 +1,117 @@
+{
+ "A1001": {
+  "ref": "#include <cstdio>\r\n#include <cstring>\r\n#include <iostream>\r\n#include <string>\r\n#include <cmath>\r\n#include <bitset>\r\n#include <vector>\r\n#include <map>\r\n#include <set>\r\n#include <queue>\r\n#include <deque>\r\n#include <algorithm>\r\n#include <complex>\r\n#include <unordered_map>\r\n#include <unordered_set>\r\n#include <random>\r\n#include <cassert>\r\n#include <fstream>\r\n#include <utility>\r\n#include <functional>\r\n#include <time.h>\r\n#include <stack>\r\n#include <array>\r\n#define popcount __builtin_popcount\r\nusing namespace std;\r\ntypedef long long int ll;\r\ntypedef pair<int, int> P;\r\nvector<ll> v;\r\nvoid dfs(int k, ll x){\r\n\tv.push_back(x);\r\n\tif(k>=9) return;\r\n\tint a=x%10;\r\n\tif(a){\r\n\t\tdfs(k+1, x*10+a-1);\r\n\t}\r\n\tdfs(k+1, x*10+a);\r\n\tif(a<9){\r\n\t\tdfs(k+1, x*10+a+1);\r\n\t}\r\n}\r\nint main()\r\n{\r\n\tfor(int i=1; i<=9; i++) dfs(0, i);\r\n\tsort(v.begin(), v.end());\r\n\tv.erase(unique(v.begin(), v.end()), v.end());\r\n\tint k; cin>>k;\r\n\tcout<<v[k-1]<<endl;\r\n\treturn 0;\r\n}\r\n",
+  "cases": [
+   {
+    "input": "15",
+    "output": "23",
+    "hidden": false
+   },
+   {
+    "input": "1",
+    "output": "1",
+    "hidden": false
+   },
+   {
+    "input": "13",
+    "output": "21",
+    "hidden": false
+   },
+   {
+    "input": "100000",
+    "output": "3234566667",
+    "hidden": false
+   },
+   {
+    "input": "9",
+    "output": "9",
+    "hidden": false
+   },
+   {
+    "input": "10",
+    "output": "10",
+    "hidden": false
+   },
+   {
+    "input": "19",
+    "output": "43",
+    "hidden": false
+   },
+   {
+    "input": "100",
+    "output": "878",
+    "hidden": false
+   }
+  ]
+ },
+ "A1002": {
+  "ref": "#include <bits/stdc++.h>\r\nusing namespace std;\r\n#define F first\r\n#define S second\r\n#define R cin>>\r\n#define ln cout<<'\\n'\r\n#define ll long long\r\n#define in(a) insert(a)\r\n#define pb(a) push_back(a)\r\n#define pd(a) printf(\"%.12f\\n\",a)\r\n#define mem(a) memset(a,0,sizeof(a))\r\n#define all(c) (c).begin(),(c).end()\r\n#define iter(c) __typeof((c).begin())\r\n#define rrep(i,n) for(ll i=(ll)(n)-1;i>=0;i--)\r\n#define REP(i,m,n) for(ll i=(ll)(m);i<(ll)(n);i++)\r\n#define rep(i,n) REP(i,0,n)\r\n#define tr(it,c) for(iter(c) it=(c).begin();it!=(c).end();it++)\r\nll check(ll n,ll m,ll x,ll y){return x>=0&&x<n&&y>=0&&y<m;}void pr(){ln;}\r\ntemplate<class A,class...B>void pr(const A &a,const B&...b){cout<<a<<(sizeof...(b)?\" \":\"\");pr(b...);}\r\ntemplate<class A>void PR(A a,ll n){rep(i,n)cout<<(i?\" \":\"\")<<a[i];ln;}\r\nconst ll MAX=1e9+7,MAXL=1LL<<61,dx[8]={-1,0,1,0,-1,-1,1,1},dy[8]={0,1,0,-1,-1,1,1,-1};\r\ntypedef pair<ll,ll> P;\r\n\r\nvoid Main() {\r\n  ll n;\r\n  R n;\r\n  ll a[n];\r\n  rep(i,n) R a[i];\r\n  ll ans=0;\r\n  REP(i,1,n+1) {\r\n    REP(j,1,a[i-1]+1) {\r\n      ll x=i,y=j;\r\n      set<ll> s;\r\n      while(x) {\r\n        s.in(x%10);\r\n        x/=10;\r\n      }\r\n      while(y) {\r\n        s.in(y%10);\r\n        y/=10;\r\n      }\r\n      if(s.size()==1) ans++;\r\n    }\r\n  }\r\n  pr(ans);\r\n}\r\n\r\nint main(){ios::sync_with_stdio(0);cin.tie(0);Main();return 0;}\r\n",
+  "cases": [
+   {
+    "input": "12\n31 29 31 30 31 30 31 31 30 31 30 31",
+    "output": "13",
+    "hidden": false
+   },
+   {
+    "input": "10\n10 1 2 3 4 5 6 7 8 100",
+    "output": "1",
+    "hidden": false
+   },
+   {
+    "input": "30\n73 8 55 26 97 48 37 47 35 55 5 17 62 2 60 23 99 73 34 75 7 46 82 84 29 41 32 31 52 32",
+    "output": "15",
+    "hidden": false
+   },
+   {
+    "input": "1\n1",
+    "output": "1",
+    "hidden": true
+   },
+   {
+    "input": "1\n100",
+    "output": "2",
+    "hidden": true
+   },
+   {
+    "input": "10\n11 11 11 11 11 11 11 11 11 11",
+    "output": "10",
+    "hidden": true
+   }
+  ]
+ },
+ "A1003": {
+  "ref": "//include\r\n#include<bits/stdc++.h>\r\n//rep\r\n#define rep(i,n)for(int i =0;i<(int)(n);i++)\r\n#define rep2(i,m,n)for(int i =(m);i<(int)(n);i++)\r\n//others\r\n#define _GLIBCXX_DEBUG\r\n#define all(a) a.begin(),a.end()\r\n#define SORT(a) sort(all(a));\r\n#define REV(a) reverse(all(a));\r\n#define MIN(a) *min_element(all(a))\r\n#define MAX(a) *max_element(all(a))\r\n#define SUM(a) accumulate(all(a),0LL)\r\n#define SZ(a) int(a.size())\r\n#define CEIL(x,y) int(((x)+(y)-1)/(y))\r\n#define pf push_front\r\n#define pb push_back\r\n#define ppf pop_front\r\n#define ppb pop_back\r\n//namespace\r\nusing namespace std;\r\n//0\r\nusing ll=long long;\r\nusing ld=long double;\r\n//1\r\nusing vs=vector<string>;\r\nusing vi=vector<int>;\r\nusing vc=vector<char>;\r\nusing vl=vector<ll>;\r\nusing vb=vector<bool>;\r\nusing vd=vector<double>;\r\n//2\r\nusing vvi=vector<vi>;\r\nusing vvc=vector<vc>;\r\nusing vvl=vector<vl>;\r\nusing vvb=vector<vb>;\r\nusing vvd=vector<vd>;\r\n//3\r\nusing vvvi=vector<vvi>;\r\nusing vvvc=vector<vvc>;\r\nusing vvvl=vector<vvl>;\r\n//function\r\nint ncr(int x,int y){\r\n    int z=1;\r\n    rep(i,y){z*=(x-y+i+1);}\r\n    rep(i,y){z/=(i+1);}\r\n    return z;}\r\n//const\r\nconst ld PI=3.1415926535897932;\r\n/*memo\r\n最小公倍数 lcm\r\n最大公約数 gcd\r\n*/\r\n//main code\r\nint main(){\r\n    string S,T;cin>>S>>T;\r\n    int count=0;\r\n    rep(i,3){\r\n        if(S[i]==T[i])count++;\r\n    }\r\n    cout<<count<<endl;\r\n}",
+  "cases": [
+   {
+    "input": "CSS\nCSR",
+    "output": "2",
+    "hidden": false
+   },
+   {
+    "input": "SSR\nSSR",
+    "output": "3",
+    "hidden": false
+   },
+   {
+    "input": "RRR\nSSS",
+    "output": "0",
+    "hidden": false
+   },
+   {
+    "input": "SSS\nRRR",
+    "output": "0",
+    "hidden": true
+   },
+   {
+    "input": "SCC\nSCR",
+    "output": "2",
+    "hidden": true
+   },
+   {
+    "input": "CCR\nCCR",
+    "output": "3",
+    "hidden": true
+   }
+  ]
+ }
+}
