@@ -188,4 +188,41 @@
 
 ---
 
+## 任务 frontend-split：前端组件化（index.html 拆分为 styles.css + main.js）
+
+**状态**：✅ 已完成
+
+### 背景
+用户希望把单页 index.html 拆成组件/多文件，便于后续所有页面改造（总览/单题回放/golden/抽检等将增强探索性）。项目无构建工具（uvicorn 直接 serve 静态文件），故采用无构建步骤的文件级拆分。
+
+### 目标
+将 `src/web/static/index.html` 拆为三个文件：
+- `index.html`：HTML 骨架（各 section）+ CDN 引入
+- `styles.css`：全部样式（含 Tailwind @import、KaTeX、主题变量）
+- `main.js`：全部前端逻辑
+
+### 实现逻辑
+1. 用正则精确匹配 `<style>...</style>` 和最后一个内嵌 `<script>...</script>`，提取到 `styles.css` / `main.js`（避免误判 JS 字符串中的 `<script>`）。
+2. 重建 `index.html`：`<style>` 块 → `<link rel="stylesheet" href="/static/styles.css">`；内嵌 `<script>` → `<script src="/static/main.js"></script>`。
+3. 静态文件实际挂在 `/static` 前缀（api.py 的 `app.mount("/static", StaticFiles(...))`），故使用**绝对路径** `/static/styles.css`、`/static/main.js`。
+
+### 关键踩坑（已在过程中修复）
+- **首次拆分脚本用 `rfind("<script>")` 定位错误**，导致 JS 内容混入 HTML，index.html 被破坏。已从 git 恢复并用**正则精确匹配**重拆。
+- 静态文件挂在 `/static` 而非根路径，相对路径 `styles.css` 会 404，须用绝对路径。
+
+### 输入 / 输出
+- 输入：`src/web/static/index.html`（git 干净版）
+- 输出：`styles.css`（8204 字符）、`main.js`（17438 字符）、精简 `index.html`（7541 字符）
+
+### 调用文件
+- `src/web/static/index.html`、`styles.css`、`main.js`（三者并列）
+- 后端 `src/web/api.py` 挂载 `/static` 提供访问
+
+### 验证
+- `/`、`/static/styles.css`、`/static/main.js` 均 HTTP 200
+- main.js 含全部关键函数（loadOverview/loadDetail/loadGolden/loadAudit/interact/renderMath/applyTheme 等）+ `loadOverview()` 初始化
+- 预览页面功能正常
+
+---
+
 <!-- 后续任务按此格式追加 -->
