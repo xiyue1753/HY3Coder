@@ -109,4 +109,42 @@
 
 ---
 
+## 任务 dashboard-fix：界面 bug 修复 + 亮暗主题切换（计划外，用户临时插入）
+
+**状态**：✅ 已完成
+
+### 背景
+用户在确认仪表盘时发现三类问题：① 枚举标签显示 `undefined`；② 配色与 Hy_APP 不一致；③ 需支持亮/暗主题切换（Hy_APP 有）。
+
+### 目标
+修复前端枚举 `.value` 误用导致的 `undefined` 标签；参照 Hy_APP 引入亮/暗两套配色与主题切换。
+
+### 实现逻辑
+
+**1. 修复 `undefined` 标签（枚举 `.value` 误用）**
+- 根因：API 返回 `model_dump()` 后，枚举（verdict/flaw_type/error_type）已是纯字符串，但前端多处仍写 `xxx.value` 访问，得到 `undefined`。
+- 修复位置（`src/web/static/index.html`）：`goldenBox`(243)、单题回放 `renderSteps`/`detail`(270/277/293/297)、golden 页(307)、interact(340/343/350/358) 共 9 处，去掉 `.value`。
+- 保留表单取值的 `.value`（`#iScene`.value 等，非枚举，正确）。
+
+**2. 亮/暗主题切换（仿 Hy_APP 的 teal 青色系）**
+- 参照 Hy_APP 机制：`<html data-theme="light|dark">` + 两套 `:root[data-theme=...]` CSS 变量 + `themeBtn` 按钮 + `localStorage` 持久化。
+- 主色从蓝色 `#4F6DF5` 改为 Hy_APP 的 **teal 青色**（暗色 `#2dd4bf`，亮色 `#0d9488`）。
+- 新增亮色主题整套变量（bg/panel/txt/sub/line/pri/ok/bad/warn 等）。
+- 将整页硬编码的深色/蓝色 rgba 全部改为 CSS 变量驱动（`--pri-weak`、`--grad-a/b`、`--sidebar-bg`、`--ok-bg`、`--bad-line`、`--input-bg`、`--td-line`、`--scroll-thumb` 等），保证亮暗切换协调。
+- 侧边栏 logo 区新增 `themeBtn`（🌓）切换按钮。
+- 新增 `applyTheme`/`toggleTheme` JS，默认 `dark`，持久化到 `localStorage["rex_theme"]`。
+
+### 输入 / 输出
+- 输入：无（纯前端 HTML/CSS/JS 改动）
+- 输出：`src/web/static/index.html` 主题化改造 + undefined 修复
+
+### 调用文件
+- `src/web/static/index.html`（唯一改动文件）
+
+### 验证
+- 仪表盘 HTTP 200，HTML 含 `themeBtn`、亮色主题定义，`.value` 误用已清除
+- 静态文件实时读取，无需重启后端
+
+---
+
 <!-- 后续任务按此格式追加 -->
