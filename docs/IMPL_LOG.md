@@ -355,4 +355,34 @@ src/web/static/
 
 ---
 
+## 任务 sandbox-cpp：沙盒扩展支持多语言（C++ 编译运行）
+
+**状态**：✅ 已完成
+
+### 背景
+评测集构建方向（AtCoder + CodeForces 自建）需要运行官方/用户 AC 解作为参考解，而官方解多为 C++。当前沙盒 `run_code` 只支持 Python。
+
+### 目标
+扩展沙盒支持 C++（编译 + 运行），为运行 AC 参考解打基础。设计成可配置语言后端，便于后续扩展其它语言。
+
+### 实现逻辑（`src/rex/executor/sandbox.py`）
+1. `run_code` 加 `language` 参数（`python`/`cpp`）+ `compile_timeout`
+2. **python 路径**：现有逻辑（写 .py，用当前 python 运行）
+3. **cpp 路径**（新增 `_run_cpp`）：
+   - 写 `_rex_prog.cpp`
+   - `g++ -std=c++17 -O2 prog.cpp -o prog.exe`（编译器路径 `REX_GPP` 可覆盖，默认 MSYS2 ucrt64）
+   - 编译失败 → 返回编译错误（含 stderr 片段）
+   - 编译成功 → 运行 exe（复用 `_run_proc` 子进程方式，stdin/stdout 编码正常）
+4. `_run_proc` 抽出公共子进程运行逻辑（python/cpp 共用）
+
+### 验证
+- 新增 `tests/test_sandbox.py`（6 项）：python 运行/stdin/超时/语法错误 + cpp 运行(5)/编译错误检测
+- g++ 15.2.0 编译的 exe 经 python 子进程运行，stdin/stdout 正常（验证可行）
+- 全量 45 项测试通过
+
+### 关键结论
+- MSYS2 g++ 编译的 exe 在 PowerShell 直接运行时 stdin 会乱码，但**经 python subprocess 运行正常**——沙盒正是用 subprocess，故可行。
+
+---
+
 <!-- 后续任务按此格式追加 -->
