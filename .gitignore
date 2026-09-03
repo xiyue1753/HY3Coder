@@ -25,6 +25,10 @@ data/outputs/*
 # HF 数据集缓存（中间数据，保留在项目内但不入库）
 data/cache/
 
+# 大体积公开镜像题集（TACO algorithm.jsonl ~82MB，可由 scripts/build_questions.py
+# 从 HF 数据源重建，不入公开仓库；完整数据保存在本地 dataset-full 分支）
+data/questions/algorithm.jsonl
+
 # OS / IDE
 .DS_Store
 Thumbs.db
