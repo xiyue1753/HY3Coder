@@ -15,14 +15,14 @@ from rex.models import (
 from rex.runner import EvalRunner
 
 Q = [
-    QuestionItem(id="M000", scene="math", title="t1", prompt="p1",
+    QuestionItem(id="M000", scene="algorithm", title="t1", prompt="p1",
                  difficulty="basic", source="self", standard_answer="1/2"),
-    QuestionItem(id="M001", scene="math", title="t2", prompt="p2",
+    QuestionItem(id="M001", scene="algorithm", title="t2", prompt="p2",
                  difficulty="medium", source="self", standard_answer="2"),
 ]
 
 SOLVE = json.dumps({
-    "steps": [{"id": 1, "kind": "derive", "content": "c", "conclusion": "c", "deps": []}],
+    "steps": [{"id": 1, "kind": "understand", "content": "c", "conclusion": "c", "deps": []}],
     "final_answer": "1/2",
 })
 
@@ -94,7 +94,7 @@ def test_runner_eval_basic(tmp_path) -> None:
         [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")],
     ])
     runner = EvalRunner(_cfg(tmp_path), retries=0, concurrency=1, pipeline_factory=factory)
-    out = tmp_path / "eval_math.jsonl"
+    out = tmp_path / "eval_algorithm.jsonl"
     records, costs = runner.run_eval(Q, out, resume=False)
     assert len(records) == 2
     by_id = {r.question_id: r for r in records}
@@ -117,7 +117,7 @@ def test_runner_resume_skips_done(tmp_path) -> None:
         [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")],
     ])
     runner = EvalRunner(_cfg(tmp_path), retries=0, concurrency=1, pipeline_factory=factory)
-    out = tmp_path / "eval_math.jsonl"
+    out = tmp_path / "eval_algorithm.jsonl"
     runner.run_eval(Q, out, resume=False)      # 全部完成
     # 第二次 resume：全部已完成，不再建 client / 不再调用模型
     factory2, state2 = _make_factory([])
@@ -156,7 +156,7 @@ def test_runner_retry_transient_failure(tmp_path) -> None:
         return Pipeline(cfg, client=client)
 
     runner = EvalRunner(_cfg(tmp_path), retries=2, backoff_base=0.0, concurrency=1, pipeline_factory=factory)
-    out = tmp_path / "eval_math.jsonl"
+    out = tmp_path / "eval_algorithm.jsonl"
     records, _ = runner.run_eval(Q, out, resume=False)
     assert len(records) == 2
     by_id = {r.question_id: r for r in records}
@@ -174,7 +174,7 @@ def test_runner_retry_exhausted_placeholder(tmp_path) -> None:
         [],
     ])
     runner = EvalRunner(_cfg(tmp_path), retries=1, backoff_base=0.0, concurrency=1, pipeline_factory=factory)
-    out = tmp_path / "eval_math.jsonl"
+    out = tmp_path / "eval_algorithm.jsonl"
     records, _ = runner.run_eval(Q, out, resume=False)
     assert len(records) == 2
     for r in records:
@@ -190,7 +190,7 @@ def test_runner_parallel_thread_safe(tmp_path) -> None:
 
     n_questions = 8
     questions = [
-        QuestionItem(id=f"M{i:03d}", scene="math", title=f"t{i}", prompt=f"p{i}",
+        QuestionItem(id=f"M{i:03d}", scene="algorithm", title=f"t{i}", prompt=f"p{i}",
                      difficulty="basic", source="self", standard_answer="1/2")
         for i in range(n_questions)
     ]
@@ -214,7 +214,7 @@ def test_runner_parallel_thread_safe(tmp_path) -> None:
         return Pipeline(cfg, client=client)
 
     runner = EvalRunner(_cfg(tmp_path), retries=0, concurrency=4, pipeline_factory=factory)
-    out = tmp_path / "eval_math.jsonl"
+    out = tmp_path / "eval_algorithm.jsonl"
     records, costs = runner.run_eval(questions, out, resume=False)
     # 8 题全部完成，无丢失、无重复
     assert len(records) == n_questions

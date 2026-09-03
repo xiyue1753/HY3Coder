@@ -27,10 +27,10 @@ class FakeHy3(Hy3Client):
 
 
 Q = QuestionItem(
-    id="M000",
-    scene="math",
+    id="A000",
+    scene="algorithm",
     title="x^2=4",
-    prompt="求 x^2=4 的正整数解。",
+    prompt="求满足 x^2=4 的整数 x 并按格式输出。",
     difficulty="basic",
     source="self",
     standard_answer="2",
@@ -40,21 +40,21 @@ Q = QuestionItem(
 def _valid_json() -> str:
     return json.dumps({
         "steps": [
-            {"id": 1, "kind": "derive", "content": "因式分解", "conclusion": "x=±2", "deps": []},
+            {"id": 1, "kind": "understand", "content": "读题", "conclusion": "x=±2", "deps": []},
         ],
         "final_answer": "2",
     })
 
 
 def test_parse_plain_json() -> None:
-    ans = SolverAgent._parse_answer(_valid_json(), "math")
+    ans = SolverAgent._parse_answer(_valid_json(), "algorithm")
     assert ans.final_answer == "2"
-    assert ans.steps[0].kind == "derive"
+    assert ans.steps[0].kind == "understand"
 
 
 def test_parse_markdown_fenced() -> None:
     raw = "好的，以下是解答：\n```json\n" + _valid_json() + "\n```\n完毕。"
-    ans = SolverAgent._parse_answer(raw, "math")
+    ans = SolverAgent._parse_answer(raw, "algorithm")
     assert ans.final_answer == "2"
 
 
@@ -79,6 +79,7 @@ def test_wrong_scene_kind_rejected() -> None:
         id="A000", scene="algorithm", title="t", prompt="p",
         difficulty="basic", source="self", standard_answer="",
     )
+    # "derive" 已不属于算法场景合法 kind（数学/MATH 已放弃），应被拒绝
     bad = json.dumps({
         "steps": [{"id": 1, "kind": "derive", "content": "c", "conclusion": "c", "deps": []}],
         "final_answer": "2",
@@ -112,7 +113,7 @@ def test_solve_fails_after_exhausting_retries() -> None:
 
 def test_revise_embeds_feedback() -> None:
     prev = Answer(
-        steps=[Step(id=1, kind="derive", content="c", conclusion="c", deps=[])],
+        steps=[Step(id=1, kind="understand", content="c", conclusion="c", deps=[])],
         final_answer="3",
     )
     fb = RefineFeedback(

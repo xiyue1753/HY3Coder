@@ -1,7 +1,7 @@
 """对 eval 中判定为过程错误的题目运行 refine，验证修正闭环（错误→修正）。
 
 用法:
-    python scripts/refine_failed.py --scene math --limit 3
+    python scripts/refine_failed.py --scene algorithm --limit 3
 
 从 eval_{scene}.jsonl 挑 verdict != CORRECT 的题，加载原题后跑 ReAct 修正，
 结果追加到 refine_{scene}.jsonl（与 CLI run-refine 同一文件，断点续跑兼容）。
@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--scene", default="math", choices=["math", "algorithm"])
+    ap.add_argument("--scene", default="algorithm", choices=["algorithm"])
     ap.add_argument("--limit", type=int, default=3)
     args = ap.parse_args()
 

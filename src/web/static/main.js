@@ -1,7 +1,7 @@
 const $=s=>document.querySelector(s);
 let CHARTS={}, STATE={questions:[],detail:null,round:0,rounds:[]};
 const VERDICT_CN={CORRECT:'正确',PROCESS_INCORRECT:'过程错误',ANSWER_INCORRECT:'答案错误',SILENT_FAILURE:'沉默失败'};
-const KIND_CN={understand:'题意',approach:'思路',complexity:'复杂度',implement:'实现',selftest:'自测',derive:'推导',calc:'计算',check:'检查'};
+const KIND_CN={understand:'题意',approach:'思路',complexity:'复杂度',implement:'实现',selftest:'自测'};
 const TYPE_CN={concept:'概念',calculation:'计算',condition:'条件',jump:'跳步',format:'格式',logic:'逻辑',boundary:'边界',complexity:'复杂度',misread:'题意误读'};
 
 async function j(url){const r=await fetch(url);if(!r.ok)throw new Error(await r.text());return r.json()}
@@ -75,7 +75,7 @@ async function loadQuestions(){
   el.innerHTML=`
     <div class="flex flex-wrap items-center gap-2 mb-2 text-sm">
       <span class="muted">共 ${total} 条</span>
-      <select onchange="QUIERY_STATE.scene=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['math','algorithm'].map(s=>`<option value="${s}" ${QUIERY_STATE.scene===s?'selected':''}>${s}</option>`).join(''))}</select>
+      <select onchange="QUIERY_STATE.scene=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['algorithm'].map(s=>`<option value="${s}" ${QUIERY_STATE.scene===s?'selected':''}>${s}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.tier=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['basic','medium','hard'].map(t=>`<option value="${t}" ${QUIERY_STATE.tier===t?'selected':''}>${t}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.verdict=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['CORRECT','PROCESS_INCORRECT','SILENT_FAILURE','ANSWER_INCORRECT','FAILED'].map(v=>`<option value="${v}" ${QUIERY_STATE.verdict===v?'selected':''}>${VERDICT_CN[v]||v}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.source=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['run-eval','interactive'].map(s=>`<option value="${s}" ${QUIERY_STATE.source===s?'selected':''}>${s}</option>`).join(''))}</select>
@@ -164,7 +164,7 @@ async function loadAudit(){
   $('#auditTable').innerHTML=a.length?`<table class="dt"><thead><tr><th>题号</th><th>人工判定</th><th>错误步骤</th><th>误报</th><th>备注</th></tr></thead>
     <tbody>${a.map(x=>`<tr><td class="mono">${x.question_id}</td><td>${x.verdict_human||'待标注'}</td>
     <td class="mono">${x.error_step_id??'—'}</td><td>${x.is_false_positive?'是':'否'}</td><td class="muted">${x.note||''}</td></tr>`).join('')}</tbody></table>`
-    :'<div class="muted">暂无抽检记录，运行 <span class="mono">python -m src.cli audit --results data/outputs/eval_math.jsonl</span> 生成标注模板</div>';
+    :'<div class="muted">暂无抽检记录，运行 <span class="mono">python -m src.cli audit --results data/outputs/eval_algorithm.jsonl</span> 生成标注模板</div>';
 }
 
 // ---------- 交互式解题 ----------
@@ -209,19 +209,6 @@ function parseSamples(text){
   return out;
 }
 
-// 场景切换：数学 / 算法不同输入区；实时预览题目渲染
-function switchInteractScene(){
-  const isAlgo = $('#iScene').value === 'algorithm';
-  $('#iMathInput').style.display = isAlgo ? 'none' : 'block';
-  $('#iAlgoInput').style.display = isAlgo ? 'block' : 'none';
-}
-// 数学题目实时预览（Markdown + LaTeX）
-function previewPrompt(){
-  const txt = $('#iPrompt').value;
-  const el = $('#iPromptPreview');
-  if(txt.trim()){ el.style.display='block'; el.innerHTML = renderMath(txt); }
-  else { el.style.display='none'; el.innerHTML=''; }
-}
 // 样例实时预览
 function previewSamples(){
   const txt = $('#iSamples').value;
@@ -232,7 +219,6 @@ function previewSamples(){
   else { el.style.display='none'; el.innerHTML=''; }
 }
 document.addEventListener('input', e=>{
-  if(e.target && e.target.id==='iPrompt') previewPrompt();
   if(e.target && e.target.id==='iSamples') previewSamples();
 });
 
@@ -240,17 +226,13 @@ async function interact(){
   const btn=$('#iGo');btn.disabled=true;btn.textContent='求解中…';
   $('#iResult').innerHTML='<div class="muted">正在调用 Hy3…</div>';
   try{
-    const scene=$('#iScene').value;
-    // 收集入参：数学用 iPrompt/iAnswer；算法用 iPrompt2 + 解析样例 + 参考解
-    const prompt = scene==='algorithm' ? $('#iPrompt2').value : $('#iPrompt').value;
+    const scene='algorithm';
+    // 算法场景入参：题目 + 解析样例 + 期望输出（无样例时文本比对兜底）
+    const prompt = $('#iPrompt2').value;
     const body = { scene, prompt, refine:$('#iRefine').checked };
-    if(scene==='algorithm'){
-      const samples=parseSamples($('#iSamples').value);
-      body.samples = samples;
-      if($('#iRefSol').value) body.answer = $('#iRefSol').value;
-    } else {
-      if($('#iAnswer').value) body.answer = $('#iAnswer').value;
-    }
+    const samples=parseSamples($('#iSamples').value);
+    body.samples = samples;
+    if($('#iAnswer').value) body.answer = $('#iAnswer').value;
     const r=await fetch('/api/interact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'failed');

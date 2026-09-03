@@ -1,7 +1,7 @@
-"""答案校验脚本（数学精确比对 + 算法沙盒测试用例）。
+"""答案校验脚本（算法沙盒测试用例 + 标准答案文本比对兜底）。
 
 用法:
-    python scripts/check_answers.py --results data/outputs/eval_math.jsonl
+    python scripts/check_answers.py --results data/outputs/eval_algorithm.jsonl
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from cli import check_answers  # noqa: E402
 
 
 def main() -> None:
-    results = sys.argv[1] if len(sys.argv) > 1 else "data/outputs/eval_math.jsonl"
+    results = sys.argv[1] if len(sys.argv) > 1 else "data/outputs/eval_algorithm.jsonl"
     check_answers(results=Path(results), verbose=False)
 
 

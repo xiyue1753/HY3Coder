@@ -7,11 +7,11 @@ from rex.models import (
 from rex.store import RecordStore
 
 
-def _rec(qid, scene="math", verdict=Verdict.CORRECT, difficulty=Difficulty.BASIC,
+def _rec(qid, scene="algorithm", verdict=Verdict.CORRECT, difficulty=Difficulty.BASIC,
          source="run-eval", created_at="2026-08-01T10:00:00"):
     return EvalRecord(
         question_id=qid, scene=scene, difficulty=difficulty,
-        answer=Answer(steps=[Step(id=1, kind="derive", content="c", conclusion="c", deps=[])],
+        answer=Answer(steps=[Step(id=1, kind="understand", content="c", conclusion="c", deps=[])],
                       final_answer="ok"),
         answer_correct=True, test_pass_rate=None,
         verification=VerificationResult(verdict=verdict, findings=[], confidence=0.9),

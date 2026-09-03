@@ -1,7 +1,7 @@
 """过程评估脚本（等价于 `python -m src.cli run-eval/run-refine`）。
 
 用法:
-    python scripts/evaluate.py --mode eval --scene math --sample 5
+    python scripts/evaluate.py --mode eval --scene algorithm --sample 5
     python scripts/evaluate.py --mode refine --scene algorithm --sample 10
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ app = typer.Typer()
 @app.command()
 def run(
     mode: str = typer.Option("eval", help="eval | refine"),
-    scene: str = typer.Option("math", help="algorithm | math"),
+    scene: str = typer.Option("algorithm", help="algorithm（数学/MATH 已放弃）"),
     sample: str = typer.Option("5", help="5/10/50/100/full"),
     difficulty: str = typer.Option(None),
     max_rounds: int = typer.Option(3),

@@ -1,13 +1,14 @@
-# ReAgents v2 设计文档（正式版）
+# HY3Coder 设计文档（正式版）
 
-面向可验证场景（算法编程、数学解题）的**过程评估与错误定位 + 自我修正**系统。
+面向可验证场景（算法竞赛）的**过程评估与错误定位 + 自我修正**系统。
 本文件为正式设计文档，取代早期草案，包含分层规则表、错误分类体系、核心 schema 契约与双模式数据流说明。
+（数学/MATH 评测路线已放弃，2026-09-03，本文档与代码同步移除 math 场景。）
 
 ---
 
 ## 1. 系统目标
 
-给定一道题，系统产出**结构化分步解题过程**并自动评估：
+给定一道算法竞赛题（含输入输出格式、数据范围与约束），系统产出**结构化分步求解过程**并自动评估：
 
 1. **过程评估**：判定推理链是否成立（逐步自含性 + 全局回溯两轮审查）。
 2. **错误定位**：定位错误起始步骤，并归纳错误类型。
@@ -17,16 +18,15 @@
 ## 2. 架构总览
 
 ```
-data/questions（题集：公开集 + 自建，三档分层）
+data/questions（题集：公开算法对照 + 自建，三档分层）
         │  QuestionItem（题目/标准答案/测试用例/难度/来源/分层依据/判题模式）
-        │  公开集: algorithm.jsonl（TACO 350 活跃，CF 350 已 deprecated 弃用）
-        │          math.jsonl（MATH 326）
-        │  自建:   abc_selfbuilt.jsonl（AtCoder ABC 175 题，独立产线见 §3）
+        │  公开对照: algorithm.jsonl（TACO 350 活跃，CF 350 已 deprecated 弃用）
+        │  自建:     abc_selfbuilt.jsonl（AtCoder ABC 175 题，独立产线见 §3）
         ▼
 solver/  分步求解 Agent ──► Answer(steps[]+final_answer+code)
         │                     │
         │                     ├─► executor/  沙盒执行+公开/隐藏用例+静态检查+SPJ
-        │                     │        （算法：测试通过率；数学：标准答案比对）
+        │                     │        （测试用例通过率；无用例时文本比对 standard_answer）
         ▼                     ▼
 verifier/  验证 Agent×2（自含性检查+全局回溯）──► VerificationResult
         交叉复核不一致 → 仲裁 → 仍分歧标记 HUMAN_REVIEW
@@ -45,24 +45,23 @@ web/ 仪表盘（总览/单题回放/golden/抽检/交互式解题）  ·  cli.p
 
 | 场景 | 来源 | 许可 | 入库 | 分层映射 | 分层依据 |
 |---|---|---|---|---|---|
-| 算法·公开集 | TACO（agentica-org/DeepCoder-Preview-Dataset） | Apache-2.0 | 350 活跃 | difficulty∈{easy→basic, medium→medium, hard→hard} | 官方难度标签 |
+| 算法·公开对照 | TACO（agentica-org/DeepCoder-Preview-Dataset） | Apache-2.0 | 350 活跃 | difficulty∈{easy→basic, medium→medium, hard→hard} | 官方难度标签 |
 | 算法·公开集(弃用) | CodeForces 镜像（同上源） | Apache-2.0 | 350 deprecated | — | 已标 metadata.deprecated，抽样/评测自动排除 |
 | 算法·自建 | AtCoder ABC（scripts/ingest_abc.py 抓取） | 竞赛题（抓题面+公开 AC 解） | 175 | 官方分值 100→basic, 200-400→medium, 500+→hard | 官方分值 + layer_basis |
-| 数学 | HuggingFaceH4/MATH | MIT | 326 | level∈{1,2→basic, 3,4→medium, 5→hard} | 官方难度等级 |
 
-- 自建题产线（响应任务书"46 开"：公开集为主 + 自建补充）：
+- 自建题产线（响应任务书"公开集为主 + 自建补充"）：
   `ingest_abc.py`（抓题面+AC 解）→ 官方样例 + 人工边界用例（gen_hidden_cases.py，期望由参考解跑出）→ `abc_selfbuilt.jsonl`；
   多解构造题以 `judge=special` 入库（SPJ checker，见 §5.5）。独立文件便于扩充，web/browse 合并展示；
   进入 run-eval 前需并入评估池（见 §10 数据流说明）。
 - 分层抽样（`datasets/sampling.py`，自动过滤 deprecated）：
 
-| --sample | 算法（basic/medium/hard） | 数学（basic/medium/hard） |
-|---|---|---|
-| 5 | 3/1/1 | 1/1/1 |
-| 10 | 5/3/2 | 3/4/3 |
-| 50 | 30/15/5 | 20/20/10 |
-| 100 | 100/100/100 | 100/100/74（池兜底） |
-| full | 全部活跃（TACO 357 或并入自建后的池） | 全部 326 |
+| --sample | 算法（basic/medium/hard） |
+|---|---|
+| 5 | 2/2/1 |
+| 10 | 4/4/2 |
+| 50 | 20/20/10 |
+| 100 | 100/100/100 |
+| full | 全部活跃（TACO 350 或并入自建后的池） |
 
 - 抽样种子固定（默认 42），保证分档统计可复现。
 - 每档实际抽样数 = min(档位需求, 池内数量)，池不足时按池兜底。
@@ -72,7 +71,9 @@ web/ 仪表盘（总览/单题回放/golden/抽检/交互式解题）  ·  cli.p
 ```python
 class Step(BaseModel):
     id: int
-    kind: str          # 算法: understand/approach/complexity/implement/selftest；数学: derive/calc/check
+    kind: Literal[                # 算法竞赛步骤类型
+        "understand", "approach", "complexity", "implement", "selftest",
+    ]
     content: str       # 步骤内容
     conclusion: str    # 步骤结论
     deps: list[int]    # 前置依赖步骤
@@ -80,7 +81,7 @@ class Step(BaseModel):
 class Answer(BaseModel):
     steps: list[Step]        # 非空
     final_answer: str
-    code: str | None = None  # 算法场景由实现步骤提取
+    code: str | None = None  # implement 步骤提取的完整代码
 
 class ErrorFinding(BaseModel):
     step_id: int | None
@@ -125,7 +126,7 @@ class RefineRecord(BaseModel):
 | | calculation 计算错误 | 数值/符号运算错误 | 代入、化简、运算结果不符 |
 | | condition 条件遗漏 | 漏掉边界/分类/前提条件 | 未讨论 n=0、绝对值分情况等 |
 | | jump 跳步推导 | 步骤结论无法由前文推出 | 依赖未出现的关键定理/步骤 |
-| | format 格式不符 | 输出/表述不符合要求 | 要求 π 形式给出小数、多行输出单行 |
+| | format 格式不符 | 输出/表述不符合要求 | 要求多行输出单行等 |
 | 场景扩展 | logic 逻辑缺陷 | 算法/推理逻辑结构错误 | 死循环、条件分支错误、循环论证 |
 | | boundary 边界条件 | 输入边界处理缺失 | 除零、空输入、0 值特例 |
 | | complexity 复杂度不达标 | 复杂度声明与实际不符 | 声明 O(n) 实际 O(n²)/O(2^n) |
@@ -160,7 +161,6 @@ class RefineRecord(BaseModel):
 存量扫描：algorithm.jsonl（公开集，已弃用标记）内 ~50 题命中 SPJ 特征词，
 不在本次处理范围；abc_selfbuilt 内 A1098 abc228_d 的 "one such" 为误报（指查询存在）。
 
-
 ## 6. 验证流程（src/rex/verifier/）
 
 1. **V1**：逐步自含性检查——每步 content 推导 conclusion 是否成立、deps 是否覆盖前置。
@@ -187,17 +187,16 @@ class RefineRecord(BaseModel):
 
 ## 8. Golden 沉默失败样本（data/golden/）
 
-人工构造 15（算法）+ 8（数学）条"陷阱样本"：**答案正确但过程存在根本缺陷**，
+人工构造 15 条（算法）"陷阱样本"：**答案正确但过程存在根本缺陷**，
 用于验证评估器能否检出 `SILENT_FAILURE`，而非被正确答案误导。
 
-| 构造手法 | 示例（算法/数学） |
+| 构造手法 | 示例（算法） |
 |---|---|
-| 数值巧合 | 等差 q=1 时指数写错（a5=a1·q⁵ 应为 q⁴）却得相同值 |
 | 用例恰好覆盖不到 | 质数判定把 1 当质数但用例 n≥2；GCD 缺 b=0 终止但用例 b>0 |
 | 数据范围内不触发 | 声明 O(n) 实为 O(n²)/O(2^n)，用例 n 恰好小 |
 | 概念误用却得对 | set 无序却宣称保序；无序组合数碰巧等于有序计数 |
-| 推理错误结果碰巧对 | 1/√2=√2/√4 推理错但化简对；勾股定理证明三角恒等式（循环论证） |
-| 格式与要求不符 | 要求保留 π 给出小数；要求多行输出单行（单元素用例碰巧同） |
+| 推理错误结果碰巧对 | 快排宣称稳定但输入无相等元素 |
+| 格式与要求不符 | 要求多行输出单行（单元素用例碰巧同） |
 
 每条含 `flaw_type`（真实缺陷类型）与 `construction_note`（构造说明），
 供人工核验评估器检出率与定位精度。
@@ -206,10 +205,10 @@ class RefineRecord(BaseModel):
 
 | 指标 | 定义 | 支撑 |
 |---|---|---|
-| 答案准确率 | 答案正确题目 / 总题 | 数学精确比对 + 算法沙盒 |
+| 答案准确率 | 答案正确题目 / 总题 | 算法沙盒全过（无用例时文本比对） |
 | 过程正确率 | verdict=CORRECT 题目 / 总题 | 验证 Agent×2+仲裁 |
-| 错误定位命中率 | 系统定位 step 与人工标注 ≤1 步 / 抽检样本 | audit_records.jsonl |
-| 误报率 | 人工判定无错但系统报错 / 抽检样本 | audit_records.jsonl |
+| 错误定位命中率 | 系统定位 step 与人工标注 ≤1 步 / 答案错误抽检样本 | audit_records.jsonl |
+| 误报率 | 答案正确但被判有错样本中人工确认为误报比例 | audit_records.jsonl |
 | 沉默失败检出率 | golden 样本中判定 SILENT_FAILURE 比例 | golden 库 |
 | 修正提升 | refine 前后过程正确率差 | refine_{scene}.jsonl |
 | 置信区间 | Wilson interval（95%） | stats.py |
@@ -225,20 +224,18 @@ class RefineRecord(BaseModel):
 # .env 提供 HY3_API_KEY / HY3_BASE_URL / HY3_MODEL
 
 # 评估模式（数据纯净）
-python -m src.cli run-eval --scene math --sample 5        # demo
-python -m src.cli run-eval --scene algorithm --sample 100 # 放大
-python -m src.cli run-eval --scene math --sample 100
+python -m src.cli run-eval --scene algorithm --sample 5        # demo
+python -m src.cli run-eval --scene algorithm --sample 100      # 放大
 
-# 自建题（AtCoder 175 题）跑评估：先并入评估池再跑，或由脚本按文件加载
-#   例：python scripts/build_questions.py --include-selfbuilt   # 合并 abc_selfbuilt 进 algorithm.jsonl
-#   （自建题独立文件便于扩充；跑 run-eval 前需合并，web/browse 始终合并展示）
+# 自建题（AtCoder 175 题）跑评估：直接指定题集文件
+python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --resume
 
 # 修正模式（ReAct 闭环）
-python -m src.cli run-refine --scene math --sample 5 --max-rounds 3
+python -m src.cli run-refine --scene algorithm --sample 5 --max-rounds 3
 
 # 答案校验 / 人工抽检 / 仪表盘
-python -m src.cli check-answers --results data/outputs/eval_math.jsonl
-python -m src.cli audit --results data/outputs/eval_math.jsonl --sample 30
+python -m src.cli check-answers --results data/outputs/eval_algorithm.jsonl
+python -m src.cli audit --results data/outputs/eval_algorithm.jsonl --sample 30
 python -m src.cli serve    # http://127.0.0.1:8000
 
 # 测试
@@ -247,12 +244,12 @@ python -m pytest tests/
 
 ## 11. 交付物清单
 
-- 源码（src/rex/ 模块化，tests/ 63 项单测）
+- 源码（src/rex/ 模块化，tests/ pytest）
 - 题集 data/questions/：
-  - 公开集：algorithm.jsonl（TACO 350 活跃 + CF 350 deprecated + 自编 7）、math.jsonl（MATH 326）
+  - 公开对照：algorithm.jsonl（TACO 350 活跃 + CF 350 deprecated + 自编）
   - 自建：abc_selfbuilt.jsonl（AtCoder ABC 175 题，含参考解/用例/SPJ，按难度分层）
   - 均含标准答案/参考解、分层依据（layer_basis）
-- Golden 样本库 data/golden/（15+8，含构造说明）
+- Golden 样本库 data/golden/（golden_algorithm 15 条，含构造说明）
 - 评估结果 data/outputs/（eval/refine 严格分离，可断点续跑）
 - 分析报告 reports/（分层退化、错误分布、case 归因、修正前后对比、能力画像）
 - 人工抽检记录 data/outputs/audit_records.jsonl

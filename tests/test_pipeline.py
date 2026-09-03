@@ -1,4 +1,4 @@
-"""Pipeline tests: eval/refine dual mode, resume, math answer normalization."""
+"""Pipeline tests: eval/refine dual mode, resume, answer text normalization."""
 from __future__ import annotations
 
 import json
@@ -14,17 +14,17 @@ from rex.models import (
     Step,
     TestCase,
 )
-from rex.pipeline import Pipeline, normalize_math_answer
+from rex.pipeline import Pipeline, normalize_answer_text
 
 Q = [
-    QuestionItem(id="M000", scene="math", title="t1", prompt="p1",
+    QuestionItem(id="A000", scene="algorithm", title="t1", prompt="p1",
                  difficulty="basic", source="self", standard_answer="1/2"),
-    QuestionItem(id="M001", scene="math", title="t2", prompt="p2",
+    QuestionItem(id="A001", scene="algorithm", title="t2", prompt="p2",
                  difficulty="medium", source="self", standard_answer="2"),
 ]
 
 SOLVE = json.dumps({
-    "steps": [{"id": 1, "kind": "derive", "content": "c", "conclusion": "c", "deps": []}],
+    "steps": [{"id": 1, "kind": "understand", "content": "c", "conclusion": "c", "deps": []}],
     "final_answer": "1/2",
 })
 
@@ -51,36 +51,36 @@ def _cfg(tmp_path) -> Config:
     return Config(data_dir=tmp_path / "data", outputs_dir=tmp_path / "data" / "outputs")
 
 
-def test_normalize_math_answer() -> None:
-    assert normalize_math_answer(" 1 / 2 ") == "1/2"
-    assert normalize_math_answer("x = 3（答案）") == "x=3(答案)"
-    assert normalize_math_answer("√2") == "√2"
+def test_normalize_answer_text() -> None:
+    assert normalize_answer_text(" 1 / 2 ") == "1/2"
+    assert normalize_answer_text("x = 3（答案）") == "x=3(答案)"
+    assert normalize_answer_text("√2") == "√2"
     # LaTeX 归一化：\frac → /、\sqrt → √、\boxed/\text 去壳
-    assert normalize_math_answer(r"\frac{1}{2}") == normalize_math_answer("1/2")
-    assert normalize_math_answer(r"\dfrac{1}{2}") == normalize_math_answer("1/2")
-    assert normalize_math_answer(r"\sqrt{2}") == normalize_math_answer("√2")
-    assert normalize_math_answer(r"\boxed{3}") == normalize_math_answer("3")
-    assert normalize_math_answer(r"\text{x=1}") == normalize_math_answer("x=1")
+    assert normalize_answer_text(r"\frac{1}{2}") == normalize_answer_text("1/2")
+    assert normalize_answer_text(r"\dfrac{1}{2}") == normalize_answer_text("1/2")
+    assert normalize_answer_text(r"\sqrt{2}") == normalize_answer_text("√2")
+    assert normalize_answer_text(r"\boxed{3}") == normalize_answer_text("3")
+    assert normalize_answer_text(r"\text{x=1}") == normalize_answer_text("x=1")
     # 嵌套分数
-    assert normalize_math_answer(r"\frac{\frac{1}{2}}{3}") == normalize_math_answer("(1/2)/(3)")
+    assert normalize_answer_text(r"\frac{\frac{1}{2}}{3}") == normalize_answer_text("(1/2)/(3)")
 
 
 def test_run_eval_dual_mode(tmp_path) -> None:
-    # M000: solve + verify(A) + verify(B) = 3 calls；M001 同
-    # 模型对两题都判 CORRECT，但 M001 标准答案=2 而 SOLVE 输出 1/2 → 客观答案错误，
+    # A000: solve + verify(A) + verify(B) = 3 calls；A001 同
+    # 模型对两题都判 CORRECT，但 A001 标准答案=2 而 SOLVE 输出 1/2 → 客观答案错误，
     # 修复后的语义要求 verdict 强制降级为 ANSWER_INCORRECT（客观优先，防漏检）。
     client = FakeHy3([SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"),
                       SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")])
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
-    out = tmp_path / "eval_math.jsonl"
+    out = tmp_path / "eval_algorithm.jsonl"
     records = pipe.run_eval(Q, out, resume=False)
     assert len(records) == 2
     by_id = {r.question_id: r for r in records}
-    assert by_id["M000"].answer_correct is True          # 1/2 == 1/2
-    assert by_id["M000"].verification.verdict.value == "CORRECT"
-    assert by_id["M001"].answer_correct is False         # 1/2 != 2
-    assert by_id["M001"].verification.verdict.value == "ANSWER_INCORRECT"  # 降级
+    assert by_id["A000"].answer_correct is True          # 1/2 == 1/2
+    assert by_id["A000"].verification.verdict.value == "CORRECT"
+    assert by_id["A001"].answer_correct is False         # 1/2 != 2
+    assert by_id["A001"].verification.verdict.value == "ANSWER_INCORRECT"  # 降级
     # 断言响应全部消费（无多余调用）
     assert client.responses == []
 
@@ -89,8 +89,8 @@ def test_run_eval_resume_skips_done(tmp_path) -> None:
     client = FakeHy3([SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")])
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
-    out = tmp_path / "eval_math.jsonl"
-    first = pipe.run_eval(Q, out, resume=False)   # 跑 M000，M001 失败占位
+    out = tmp_path / "eval_algorithm.jsonl"
+    first = pipe.run_eval(Q, out, resume=False)   # 跑 A000，A001 失败占位
     assert len(first) == 2
     # 第二次 resume：全部已完成，不再调用模型
     client2 = FakeHy3([])
@@ -166,7 +166,7 @@ def test_run_refine_convergence(tmp_path) -> None:
     ])
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
-    out = tmp_path / "refine_math.jsonl"
+    out = tmp_path / "refine_algorithm.jsonl"
     records = pipe.run_refine(Q[:1], out, resume=False)
     assert len(records) == 1
     r: RefineRecord = records[0]

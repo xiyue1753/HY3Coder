@@ -20,14 +20,15 @@ from rex.models import (
 from rex.verifier.agent import VerifierAgent
 
 Q = QuestionItem(
-    id="M000", scene="math", title="t", prompt="求 x^2=4 的正整数解。",
+    id="A100", scene="algorithm", title="t",
+    prompt="给定整数 x，若满足 x^2=4 输出 2，否则输出 0。",
     difficulty="basic", source="self", standard_answer="2",
 )
 
 OK_ANSWER = Answer(
     steps=[
-        Step(id=1, kind="derive", content="x^2=4", conclusion="x=±2", deps=[]),
-        Step(id=2, kind="check", content="正数解", conclusion="x=2", deps=[1]),
+        Step(id=1, kind="understand", content="x^2=4", conclusion="x=±2", deps=[]),
+        Step(id=2, kind="selftest", content="正整数解", conclusion="x=2", deps=[1]),
     ],
     final_answer="2",
 )

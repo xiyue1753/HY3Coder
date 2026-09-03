@@ -1,8 +1,9 @@
 """Stratified sampling across difficulty tiers with a fixed seed.
 
-题库入库规模（算法 500+ / 数学 300+）与评估运行规模（默认 300 题）
-分离：sampling 从已入库的题库中按三档分层抽取运行子集，种子固定保证可复现。
+题库入库规模（算法竞赛题集）与评估运行规模分离：sampling 从已入库的
+题库中按三档分层抽取运行子集，种子固定保证可复现。
 --sample 档位: 5 / 10 / 50 / 100 / full
+（数学/MATH 场景已放弃，2026-09-03，仅剩算法场景。）
 
 另提供 audit_records_sample：从已评估记录（EvalRecord）中按
 「答案正确性 × 判定」分层抽取人工抽检样本，对齐任务书 P4 两套分母
@@ -21,7 +22,6 @@ SampleSize = Literal["5", "10", "50", "100", "full"]
 # 每档目标数：--sample=100 档 = 每难度档 100 题 → 运行 300 题（3 档 × 100）
 # 5/10/50 为渐进 demo 档，保证分档统计置信区间的档位是 100。
 _ALGO_PER_TIER = {"5": 2, "10": 4, "50": 20, "100": 100, "full": None}
-_MATH_PER_TIER = {"5": 1, "10": 3, "50": 15, "100": 100, "full": None}
 
 
 def _active(items: list[QuestionItem]) -> list[QuestionItem]:
@@ -39,11 +39,11 @@ def difficulty_stats(items: list[QuestionItem]) -> dict[str, int]:
 
 def stratified_sample(
     items: list[QuestionItem],
-    scene: Literal["algorithm", "math"],
-    sample: SampleSize,
+    scene: Literal["algorithm"] = "algorithm",
+    sample: SampleSize = "5",
     seed: int = 42,
 ) -> list[QuestionItem]:
-    """Sample `per_tier` items per difficulty tier.
+    """Sample `per_tier` items per difficulty tier (算法场景).
 
     Deprecated questions are excluded up front. `full` returns everything
     active (used for the final full-scale run).
@@ -52,7 +52,7 @@ def stratified_sample(
     if sample == "full":
         return list(items)
 
-    per_tier = _ALGO_PER_TIER[sample] if scene == "algorithm" else _MATH_PER_TIER[sample]
+    per_tier = _ALGO_PER_TIER[sample]
     if per_tier is None:
         return list(items)
 
@@ -70,18 +70,17 @@ def stratified_sample(
 
 
 def sample_sizes(
-    scene: Literal["algorithm", "math"],
-    sample: SampleSize,
+    scene: Literal["algorithm"] = "algorithm",
+    sample: SampleSize = "5",
     items: list[QuestionItem] | None = None,
 ) -> int | None:
     """Target sample size for the given tier setting.
 
     Without ``items`` this is the *theoretical upper bound* (per_tier × 3).
     Pass the real question pool to get the *actual* stratified_sample size,
-    which is lower when a tier pool is smaller than per_tier
-    (e.g. math hard=80 → 100 档实际 274 而非 300).
+    which is lower when a tier pool is smaller than per_tier.
     """
-    per_tier = _ALGO_PER_TIER[sample] if scene == "algorithm" else _MATH_PER_TIER[sample]
+    per_tier = _ALGO_PER_TIER[sample]
     if per_tier is None:
         return None
     if items is None:

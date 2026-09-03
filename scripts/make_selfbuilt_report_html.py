@@ -27,7 +27,6 @@ TYPE_CN = {
 KIND_CN = {
     "understand": "① 题意理解", "approach": "② 思路设计", "complexity": "③ 复杂度分析",
     "implement": "④ 代码实现", "selftest": "⑤ 自测验证",
-    "derive": "推导", "calc": "计算", "check": "检验",
 }
 VCOLOR = {"CORRECT": "#0a7d33", "PROCESS_INCORRECT": "#b26a00",
           "ANSWER_INCORRECT": "#c62828", "SILENT_FAILURE": "#6a1b9a", "FAILED": "#666"}

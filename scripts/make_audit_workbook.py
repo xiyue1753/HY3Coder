@@ -27,7 +27,6 @@ TYPE_CN = {
 KIND_CN = {
     "understand": "① 题意理解", "approach": "② 思路设计", "complexity": "③ 复杂度分析",
     "implement": "④ 代码实现", "selftest": "⑤ 自测验证",
-    "derive": "推导", "calc": "计算", "check": "检验",
 }
 VERDICTS = ["CORRECT", "PROCESS_INCORRECT", "ANSWER_INCORRECT", "SILENT_FAILURE"]
 

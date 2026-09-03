@@ -6,7 +6,6 @@ Silent failure = 最终答案正确但解题过程存在根本缺陷（评估器
 
 产出:
     data/golden/golden_algorithm.jsonl  (15 条)
-    data/golden/golden_math.jsonl       (8 条)
 """
 from __future__ import annotations
 
@@ -35,14 +34,6 @@ def algo_question(qid: str, prompt: str, answer: str, cases: list[tuple[str, str
         id=qid, scene="algorithm", title=prompt[:50], prompt=prompt,
         difficulty=Difficulty.BASIC, source="自编", standard_answer=answer,
         test_cases=[TestCase(input=i, output=o) for i, o in (cases or [])],
-        metadata={"golden": True},
-    )
-
-
-def math_question(qid: str, prompt: str, answer: str, diff: Difficulty) -> QuestionItem:
-    return QuestionItem(
-        id=qid, scene="math", title=prompt[:50], prompt=prompt,
-        difficulty=diff, source="自编", standard_answer=answer,
         metadata={"golden": True},
     )
 
@@ -273,110 +264,14 @@ def build_algorithm() -> list[GoldenSample]:
     return S
 
 
-def build_math() -> list[GoldenSample]:
-    S: list[GoldenSample] = []
-
-    # 1. 跳步推导：韦达定理反推根，不证明唯一性
-    q = math_question(
-        "GM001", "求方程 x^2-3x+2=0 的根。", "x=1 或 x=2", Difficulty.BASIC)
-    S.append(gs(q, ErrorType.JUMP,
-        "陷阱用韦达定理『根之和 3、根之积 2，故 x=1,2』，未证明解唯一性与推导过程；答案正确",
-        [
-            Step(id=1, kind="derive", content="x²-3x+2=0", conclusion="二次方程", deps=[]),
-            Step(id=2, kind="derive", content="韦达定理：x1+x2=3, x1·x2=2", conclusion="根为 1 和 2", deps=[1]),
-            Step(id=3, kind="check", content="1+2=3, 1·2=2 成立", conclusion="答案正确", deps=[2]),
-        ], "x=1 或 x=2"))
-
-    # 2. 跳步推导：特殊角正弦直接给值
-    q = math_question(
-        "GM002", "求 sin30° 的值。", "1/2", Difficulty.BASIC)
-    S.append(gs(q, ErrorType.JUMP,
-        "陷阱直接给出 sin30°=1/2（记忆值），无任何推导或单位圆/三角形依据；答案正确但过程不可验证",
-        [
-            Step(id=1, kind="derive", content="sin30°", conclusion="查表得 1/2", deps=[]),
-            Step(id=2, kind="calc", content="代入", conclusion="1/2", deps=[1]),
-            Step(id=3, kind="check", content="与已知一致", conclusion="正确", deps=[2]),
-        ], "1/2"))
-
-    # 3. 逻辑缺陷：不等式解法只取一半
-    q = math_question(
-        "GM003", "解不等式 x²<4。", "-2<x<2", Difficulty.BASIC)
-    S.append(gs(q, ErrorType.LOGIC,
-        "陷阱只推导 x<2（开方后漏 x>-2 分支），却在最终答案写 -2<x<2；过程无法推出最终答案（自相矛盾）",
-        [
-            Step(id=1, kind="derive", content="x²<4", conclusion="|x|<2", deps=[]),
-            Step(id=2, kind="derive", content="开方得 x<2", conclusion="x<2", deps=[1]),
-            Step(id=3, kind="check", content="取对称区间", conclusion="-2<x<2", deps=[2]),
-        ], "-2<x<2"))
-
-    # 4. 格式不符：要求保留 π 却写小数
-    q = math_question(
-        "GM004", "求半径 r=2 的圆面积（结果保留 π）。", "4π", Difficulty.BASIC)
-    S.append(gs(q, ErrorType.FORMAT,
-        "陷阱计算 4π≈12.56 并输出小数，题目明确要求保留 π 形式；数值等价但格式不符",
-        [
-            Step(id=1, kind="derive", content="S=πr²", conclusion="S=4π", deps=[]),
-            Step(id=2, kind="calc", content="π≈3.14", conclusion="12.56", deps=[1]),
-            Step(id=3, kind="check", content="单位平方", conclusion="12.56", deps=[2]),
-        ], "12.56"))
-
-    # 5. 概念错误：有序结果用组合计数，碰巧同值
-    q = math_question(
-        "GM005", "掷两枚骰子，和为 7 的概率。", "1/6", Difficulty.MEDIUM)
-    S.append(gs(q, ErrorType.CONCEPT,
-        "陷阱把 6 种有序组合 (1,6)..(6,1) 误用组合数 C(6,1)=6 计数，声明『无序组合』；恰好值同为 6，概率 6/36=1/6 正确",
-        [
-            Step(id=1, kind="derive", content="总结果 6×6=36", conclusion="36 种", deps=[]),
-            Step(id=2, kind="derive", content="和为 7 的组合 C(6,1)=6 种", conclusion="6 种", deps=[1]),
-            Step(id=3, kind="calc", content="6/36", conclusion="1/6", deps=[2]),
-        ], "1/6"))
-
-    # 6. 概念错误：完全平方误当分配律展开，a=0 时结果碰巧对
-    q = math_question(
-        "GM006", "计算 (0+2)² 的值。", "4", Difficulty.BASIC)
-    S.append(gs(q, ErrorType.CONCEPT,
-        "陷阱用 (a+b)²=a²+b²（把平方展开误当分配律）计算，恰好 a=0 使两路结果都为 4，概念错误被掩盖",
-        [
-            Step(id=1, kind="derive", content="(0+2)²", conclusion="展开平方", deps=[]),
-            Step(id=2, kind="calc", content="(a+b)²=a²+b² → 0²+2²", conclusion="0+4", deps=[1]),
-            Step(id=3, kind="calc", content="0+4", conclusion="4", deps=[2]),
-        ], "4"))
-
-    # 7. 概念错误：等比数列指数写错，q=1 时碰巧相同
-    q = math_question(
-        "GM007", "等比数列 a1=2，公比 q=1，求 a5。", "2", Difficulty.BASIC)
-    S.append(gs(q, ErrorType.CONCEPT,
-        "陷阱写 a5=a1·q^5（应为 q^(5-1)=q^4），恰逢 q=1 使 q^5=q^4=1，指数错误被掩盖，答案碰巧正确",
-        [
-            Step(id=1, kind="derive", content="等比数列通项 a_n=a1·q^(n)", conclusion="a5=2·1^5", deps=[]),
-            Step(id=2, kind="calc", content="2·1=2", conclusion="2", deps=[1]),
-            Step(id=3, kind="check", content="每项均为 2", conclusion="正确", deps=[2]),
-        ], "2"))
-
-    # 8. 概念错误：用几何定理证明三角恒等式
-    q = math_question(
-        "GM008", "证明恒等式 sin²x+cos²x=1。", "1（恒等）", Difficulty.MEDIUM)
-    S.append(gs(q, ErrorType.CONCEPT,
-        "陷阱用『直角三角形勾股定理』证明该恒等式（循环论证：勾股定理依赖三角定义），概念错误但结论正确",
-        [
-            Step(id=1, kind="derive", content="直角三角形中 sin=对/斜, cos=邻/斜", conclusion="定义", deps=[]),
-            Step(id=2, kind="derive", content="(对²+邻²)/斜²=1（勾股）", conclusion="恒等式成立", deps=[1]),
-            Step(id=3, kind="check", content="x=0 时 0+1=1", conclusion="验证通过", deps=[2]),
-        ], "1"))
-
-    return S
-
-
 def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
     algo = build_algorithm()
-    math = build_math()
-    for samples, name in ((algo, "golden_algorithm.jsonl"), (math, "golden_math.jsonl")):
-        out = GOLDEN_DIR / name
-        with out.open("w", encoding="utf-8") as f:
-            for s in samples:
-                f.write(s.model_dump_json() + "\n")
-        print(f"{name}: {len(samples)} samples")
+    out = GOLDEN_DIR / "golden_algorithm.jsonl"
+    with out.open("w", encoding="utf-8") as f:
+        for s in algo:
+            f.write(s.model_dump_json() + "\n")
+    print(f"golden_algorithm.jsonl: {len(algo)} samples")
     print("written to", GOLDEN_DIR)
 
 

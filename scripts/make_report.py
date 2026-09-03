@@ -32,21 +32,26 @@ def pct(x: float | None) -> str:
 def build() -> str:
     cfg = Config.from_env(ROOT)
     evals: list[EvalRecord] = []
-    for scene in ("math", "algorithm"):
-        evals += load_jsonl(cfg.outputs_dir / f"eval_{scene}.jsonl", EvalRecord)
+    for f in ("eval_algorithm.jsonl",):
+        p = cfg.outputs_dir / f
+        if p.exists():
+            evals += load_jsonl(p, EvalRecord)
     refines: list[RefineRecord] = []
-    for scene in ("math", "algorithm"):
-        refines += load_jsonl(cfg.outputs_dir / f"refine_{scene}.jsonl", RefineRecord)
+    for f in ("refine_algorithm.jsonl",):
+        p = cfg.outputs_dir / f
+        if p.exists():
+            refines += load_jsonl(p, RefineRecord)
     audits = load_jsonl(cfg.outputs_dir / "audit_records.jsonl", AuditRecord)
-    qmap = {q.id: q for q in
-            load_jsonl(cfg.data_dir / "questions" / "math.jsonl", QuestionItem) +
-            load_jsonl(cfg.data_dir / "questions" / "algorithm.jsonl", QuestionItem)}
-    golden = (load_jsonl(cfg.data_dir / "golden" / "golden_math.jsonl", GoldenSample) +
-              load_jsonl(cfg.data_dir / "golden" / "golden_algorithm.jsonl", GoldenSample))
+    qmap: dict[str, QuestionItem] = {}
+    for f in ("algorithm.jsonl", "abc_selfbuilt.jsonl", "cf_selfbuilt.jsonl"):
+        p = cfg.data_dir / "questions" / f
+        if p.exists():
+            qmap.update({q.id: q for q in load_jsonl(p, QuestionItem)})
+    golden = load_jsonl(cfg.data_dir / "golden" / "golden_algorithm.jsonl", GoldenSample)
 
     L: list[str] = []
     w = L.append
-    w("# ReAgents v2 分析报告")
+    w("# HY3Coder 分析报告")
     w(f"\n> 生成时间：{datetime.now():%Y-%m-%d %H:%M} ｜ 数据：`data/outputs/`（eval/refine 严格分离）\n")
 
     # ---- 1. 总览 ----
@@ -145,13 +150,11 @@ def build() -> str:
         w("> 口径说明：定位准确率分母为「答案错误」样本（用标准答案判定），"
           "误报率分母为「答案正确」样本中被评估器判过程有错者（经人工抽检确认）。\n")
     else:
-        w("\n_暂无抽检标注，运行 `python -m src.cli audit --results data/outputs/eval_math.jsonl` 生成模板。_\n")
+        w("\n_暂无抽检标注，运行 `python -m src.cli audit --results data/outputs/eval_algorithm.jsonl` 生成模板。_\n")
 
     # ---- 7. Golden ----
     w("## 7. Golden 沉默失败样本库")
-    w(f"\n共 {len(golden)} 条（算法 {sum(1 for g in golden if g.question.scene == 'algorithm')} / "
-      f"数学 {sum(1 for g in golden if g.question.scene == 'math')}），"
-      "全部为「答案正确但过程有缺陷」陷阱样本：\n")
+    w(f"\n共 {len(golden)} 条（算法），全部为「答案正确但过程有缺陷」陷阱样本：\n")
     for g in golden:
         w(f"- `{g.question.id}` [{g.question.scene}] {g.question.title} — 真实缺陷："
           f"{TYPE_CN.get(g.flaw_type.value, g.flaw_type.value)}（{g.construction_note[:60]}…）")
@@ -199,7 +202,7 @@ def build() -> str:
     w("\n| 维度 | 观察 | 建议 |")
     w("|---|---|---|")
     w("| 复杂度控制 | 见第 3 节错误类型占比，若 `复杂度不达标`/`边界条件` 占比高，反映算法场景实现严谨性不足 | 增加静态检查前置；对声明复杂度与实现做一致性校验 |")
-    w("| 跳步推导 | 数学场景 `跳步推导` 高发说明步骤颗粒度过粗 | 验证 prompt 强化逐步自含性要求 |")
+    w("| 跳步推导 | 算法场景 `跳步推导` 高发说明步骤颗粒度过粗 | 验证 prompt 强化逐步自含性要求 |")
     w("| 沉默失败 | golden 检出率与抽检误报率联动监控 | 高误报时收紧定位条件，低检出时增强回溯审查 |")
     w("| 分层退化 | 若 hard 档过程正确率显著低于 basic，符合预期；关注 medium 档是否突然跌落 | 对跌落档补充针对性用例 |")
     w("")

@@ -1,7 +1,7 @@
 """Metrics computation over eval records (+ optional human audit labels).
 
 Metrics produced (DESIGN.md §量化评估):
-  - answer_accuracy        答案准确率（exec 全过 或 数学答案比对通过）
+  - answer_accuracy        答案准确率（exec 全过 或 标准答案文本比对通过）
   - process_correctness    过程正确率（verdict == CORRECT）
   - verdict distribution   四类判定占比（含 SILENT_FAILURE 检出）
   - error_type distribution 错误类型分布（能力画像输入）

@@ -36,7 +36,7 @@ from rex.verifier.agent import VerifierAgent
 
 log = logging.getLogger(__name__)
 
-_MATH_NORM_RE = re.compile(r"\s+")
+_WS_NORM_RE = re.compile(r"\s+")
 # LaTeX 排版命令（无参数）——移除它们不影响语义
 _LATEX_NOARG = re.compile(
     r"\\\\(?:left|right|displaystyle|textstyle|large|Large|big|Big|bigg|Bigg|quad|qquad)"
@@ -151,18 +151,19 @@ def _latex_to_text(s: str) -> str:
     return "".join(out)
 
 
-def normalize_math_answer(s: str) -> str:
-    """Normalize a math answer for exact comparison (whitespace/case-insensitive).
+def normalize_answer_text(s: str) -> str:
+    """Normalize a final-answer text for exact comparison (whitespace/case-insensitive).
 
     覆盖：去除所有空白、统一小写、全角括号转半角，并将常见 LaTeX 结构
     （\\frac→/、\\sqrt→√、\\boxed/\\text 去壳）转成可比的文本形式。
-    不做语义等价（如 1/2 与 0.5），超出范围的比对留给 verifier 判定。
+    不做语义等价（如 0.5 与 1/2），超出范围的比对留给 verifier 判定。
+    （数学/MATH 场景已放弃后，本函数仅作算法题 standard_answer 文本比对兜底。）
     """
     if not s:
         return s
     s = s.replace("（", "(").replace("）", ")").replace("，", ",")
     s = _latex_to_text(s)
-    return _MATH_NORM_RE.sub("", s).lower()
+    return _WS_NORM_RE.sub("", s).lower()
 
 
 class Pipeline:
@@ -306,18 +307,11 @@ class Pipeline:
 
     # -- shared executor hook ----------------------------------------------
     def _execute(self, q: QuestionItem, answer: Answer) -> tuple[bool | None, float | None, str | None]:
-        """沙盒执行 + 答案比对。
+        """沙盒执行 + 答案比对（算法竞赛场景）。
 
         Returns (answer_correct, test_pass_rate, exec_error).
-        - 数学场景：比对 standard_answer（无法比对时 answer_correct=None）
-        - 算法场景：运行测试用例（无用例时仅比对 standard_answer 文本）
+        有代码+用例：跑测试用例；无用例时仅比对 standard_answer 文本。
         """
-        if q.scene == "math":
-            if q.standard_answer and answer.final_answer:
-                ok = normalize_math_answer(answer.final_answer) == normalize_math_answer(q.standard_answer)
-                return ok, None, None
-            return None, None, None
-        # algorithm
         if answer.code and q.test_cases:
             from rex.executor.sandbox import detect_language
             lang = detect_language(answer.code)
@@ -329,7 +323,7 @@ class Pipeline:
             )
             return (res.pass_rate >= 1.0), res.pass_rate, res.error
         if q.standard_answer and answer.final_answer:
-            return normalize_math_answer(answer.final_answer) == normalize_math_answer(q.standard_answer), None, None
+            return normalize_answer_text(answer.final_answer) == normalize_answer_text(q.standard_answer), None, None
         return None, None, None
 
 
@@ -341,15 +335,13 @@ def _execution_feedback(
 ) -> str | None:
     """把客观执行结果格式化为 verifier 可读的反馈文本（供 prompt 引用）。
 
-    算法场景：给出测试用例通过率/失败原因；数学场景：给出比对结果。
+    算法场景：给出测试用例通过率/失败原因（无用例时给出文本比对结果）。
     返回 None 表示无客观结果（answer_correct 未知），不注入反馈。
     """
     if answer_correct is None:
         return None
-    if q.scene == "math":
-        ok = "正确" if answer_correct else "错误"
-        return f"标准答案比对结果：最终答案{ok}。"
     if pass_rate is None:
+        return None
         return None
     if answer_correct:
         return f"沙盒执行：全部 {int(round(pass_rate * 100))}% 测试用例通过（公开+隐藏）。"
@@ -369,11 +361,10 @@ def _is_exec_failure(exec_err: str) -> bool:
     return any(m in low for m in markers)
 
 
-def _placeholder_answer(scene: str) -> Answer:
+def _placeholder_answer(scene: str = "algorithm") -> Answer:
     """合法占位 Answer：运行失败时无真实过程，但仍满足 steps 契约。"""
-    kind = "derive" if scene == "math" else "understand"
     return Answer(
-        steps=[Step(id=0, kind=kind, content="运行失败，无有效过程",
+        steps=[Step(id=0, kind="understand", content="运行失败，无有效过程",
                     conclusion="无", deps=[])],
         final_answer="",
     )

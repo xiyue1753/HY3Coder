@@ -17,11 +17,9 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 class Step(BaseModel):
     id: int
-    # 算法: understand/approach/complexity/implement/selftest
-    # 数学: derive/calc/check
+    # 算法竞赛步骤类型（数学/MATH 场景已放弃，2026-09-03）
     kind: Literal[
         "understand", "approach", "complexity", "implement", "selftest",
-        "derive", "calc", "check",
     ]
     content: str       # 本步文本（推导/代码/说明）
     conclusion: str    # 本步结论（供自含性检查）
@@ -31,7 +29,7 @@ class Step(BaseModel):
 class Answer(BaseModel):
     steps: list[Step] = Field(min_length=1)  # 过程评估：空步骤视为非法答案
     final_answer: str
-    code: str | None = None  # implement 步骤的完整代码（算法场景）
+    code: str | None = None  # implement 步骤的完整代码
 
 
 # ---------------------------------------------------------------------------
@@ -123,15 +121,15 @@ class Judge(str, Enum):
 class QuestionItem(BaseModel):
     """题集 JSONL 一条记录（data/questions/*.jsonl）。"""
 
-    id: str                       # 题号，如 A001 / M042
-    scene: Literal["algorithm", "math"]
+    id: str                       # 题号，如 A001
+    scene: Literal["algorithm"]
     title: str
     prompt: str                   # 完整题目文本
     difficulty: Difficulty
-    source: str                   # 来源：TACO/CodeContests/MATH/自编
+    source: str                   # 来源：TACO/CodeForces(镜像)/AtCoder-自编/自编
     source_id: str | None = None  # 原数据集 id（可复现溯源）
     layer_basis: str = ""         # 分层依据说明（可复现分层规则表）
-    standard_answer: str          # 标准答案（数学：精确值；算法：参考输出）
+    standard_answer: str          # 标准答案（算法：期望输出/参考文本）
     reference_solution: str | None = None
     test_cases: list[TestCase] = Field(default_factory=list)  # 算法场景
     metadata: dict = Field(default_factory=dict)
@@ -148,7 +146,7 @@ class EvalRecord(BaseModel):
     """单题评估运行完整记录（eval 模式）。"""
 
     question_id: str
-    scene: Literal["algorithm", "math"]
+    scene: Literal["algorithm"] = "algorithm"
     difficulty: Difficulty
     answer: Answer
     answer_correct: bool | None = None    # 沙盒/精确比对结果
@@ -170,7 +168,7 @@ class RefineRecord(BaseModel):
     """单题 refine 模式运行记录（含修正轮次轨迹）。"""
 
     question_id: str
-    scene: Literal["algorithm", "math"]
+    scene: Literal["algorithm"] = "algorithm"
     difficulty: Difficulty
     initial: VerificationResult
     rounds: list[RefineRound] = Field(default_factory=list)

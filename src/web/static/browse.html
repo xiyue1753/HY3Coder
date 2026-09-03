@@ -33,17 +33,11 @@
 <body>
 <div class="top">
   <h1>评测题集浏览器（临时）</h1>
-  <select id="scene">
-    <option value="">全部场景</option>
-    <option value="algorithm">算法</option>
-    <option value="math">数学</option>
-  </select>
   <select id="source">
     <option value="">全部来源</option>
     <option value="AtCoder">AtCoder 自建</option>
     <option value="TACO">TACO</option>
     <option value="CodeForces">CodeForces</option>
-    <option value="MATH">MATH</option>
     <option value="自编">自编</option>
   </select>
   <button onclick="load(0)">加载</button>
@@ -83,9 +77,8 @@ function renderMath(text){
 }
 async function load(offset){
   cur=Math.max(0,offset);
-  const scene=$('#scene').value, source=$('#source').value;
+  const source=$('#source').value;
   const q=new URLSearchParams({limit:'100',offset:String(cur)});
-  if(scene)q.set('scene',scene);
   if(source)q.set('source',source);
   const d=await (await fetch('/api/browse?'+q)).json();
   total=d.total;

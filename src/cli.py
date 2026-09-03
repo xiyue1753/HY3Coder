@@ -1,12 +1,11 @@
-"""ReAgents v2 CLI entry (typer).
+"""HY3Coder CLI entry (typer).
 
 用法示例:
     # 评估模式（数据纯净，一次性）
-    python -m src.cli run-eval --scene math --sample 5
     python -m src.cli run-eval --scene algorithm --sample 10 --resume
 
     # 修正模式（ReAct 闭环，限 3 轮）
-    python -m src.cli run-refine --scene math --sample 5
+    python -m src.cli run-refine --scene algorithm --sample 5
 
     # 答案校验 / 人工抽检模板 / 仪表盘
     python -m src.cli check-answers --results data/outputs/eval_results.jsonl
@@ -21,7 +20,7 @@ from pathlib import Path
 
 import typer
 
-app = typer.Typer(help="ReAgents v2 — 过程评估与自我修正评测系统")
+app = typer.Typer(help="HY3Coder — 可验证算法场景的过程评估与自我修正评测系统")
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,8 +45,8 @@ def _load_questions(scene: str, sample: str, difficulty: str | None, seed: int,
     from rex.datasets.schema import load_questions
 
     if questions:
-        # 直接指定题集文件（如自建 abc_selfbuilt.jsonl），便于 46 开独立评估。
-        # scene 仅用于抽样档位表（algorithm 档）；难度分层字段来自题目本身。
+        # 直接指定题集文件（如自建 abc_selfbuilt.jsonl），便于独立评估。
+        # scene 保留仅兼容签名（algorithm 档）；难度分层字段来自题目本身。
         pool = load_questions(ROOT / "data" / "questions" / questions)
     else:
         pool = load_questions(ROOT / "data" / "questions" / f"{scene}.jsonl")
@@ -59,7 +58,7 @@ def _load_questions(scene: str, sample: str, difficulty: str | None, seed: int,
 
 @app.command()
 def run_eval(
-    scene: str = typer.Option("math", help="algorithm | math（决定抽样档位表）"),
+    scene: str = typer.Option("algorithm", help="algorithm（数学/MATH 已放弃）"),
     sample: str = typer.Option("5", help="5/10/50/100/full"),
     difficulty: str = typer.Option(None, help="basic|medium|hard 过滤"),
     seed: int = typer.Option(42),
@@ -89,7 +88,7 @@ def run_eval(
 
 @app.command()
 def run_refine(
-    scene: str = typer.Option("math", help="algorithm | math"),
+    scene: str = typer.Option("algorithm", help="algorithm（数学/MATH 已放弃）"),
     sample: str = typer.Option("5", help="5/10/50/100/full"),
     max_rounds: int = typer.Option(3, help="ReAct 修正限轮数"),
     difficulty: str = typer.Option(None, help="basic|medium|hard 过滤"),
@@ -122,7 +121,7 @@ def check_answers(
     results: Path = typer.Option(..., help="eval 结果 jsonl"),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
-    """答案校验：对已有结果重新做数学比对/沙盒执行，并输出统计。"""
+    """答案校验：对已有结果重新做沙盒执行/文本比对，并输出统计。"""
     _logging(verbose)
     sys.path.insert(0, str(ROOT / "src"))
     from rex.metrics.compute import compute_metrics

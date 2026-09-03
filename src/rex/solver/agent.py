@@ -91,12 +91,9 @@ class SolverAgent:
         return answer
 
 
-def _validate_kinds(answer: Answer, scene: str) -> None:
-    # 未知场景视为"无合法 kind"（防未来新增 scene 时静默放行）
-    allowed = {
-        "algorithm": {"understand", "approach", "complexity", "implement", "selftest"},
-        "math": {"derive", "calc", "check"},
-    }.get(scene, set())
+def _validate_kinds(answer: Answer, scene: str = "algorithm") -> None:
+    # 算法竞赛允许的 step kinds（数学/MATH 已放弃）
+    allowed = {"understand", "approach", "complexity", "implement", "selftest"}
     bad = [s.id for s in answer.steps if s.kind not in allowed]
     if bad:
         raise ValueError(f"step kinds not allowed in scene '{scene}': {bad}")

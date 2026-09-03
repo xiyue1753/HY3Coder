@@ -64,7 +64,7 @@ class RecordStore:
         # 缓存（带 mtime 失效）：避免重复请求时全量重读文件，显著提速
         if self._eval_cache is not None:
             newest_mtime = max(
-                (self.eval_path(s).stat().st_mtime for s in ("math", "algorithm")
+                (self.eval_path(s).stat().st_mtime for s in self._scenes()
                  if self.eval_path(s).exists()), default=0.0
             )
             if newest_mtime <= self._eval_mtime:
@@ -72,7 +72,7 @@ class RecordStore:
                     return self._eval_cache
                 return [r for r in self._eval_cache if r.scene == scene]
 
-        scenes = [scene] if scene else ("math", "algorithm")
+        scenes = [scene] if scene else self._scenes()
         out: list[EvalRecord] = []
         for s in scenes:
             p = self.eval_path(s)
@@ -83,13 +83,18 @@ class RecordStore:
         if scene is None:
             self._eval_cache = out
             self._eval_mtime = max(
-                (self.eval_path(s).stat().st_mtime for s in ("math", "algorithm")
+                (self.eval_path(s).stat().st_mtime for s in self._scenes()
                  if self.eval_path(s).exists()), default=0.0
             )
         return out
 
+    @staticmethod
+    def _scenes() -> tuple[str, ...]:
+        """当前活跃场景（数学/MATH 已放弃，仅算法）。"""
+        return ("algorithm",)
+
     def load_refines(self, scene: str | None = None) -> list[RefineRecord]:
-        scenes = [scene] if scene else ("math", "algorithm")
+        scenes = [scene] if scene else self._scenes()
         out: list[RefineRecord] = []
         for s in scenes:
             p = self.refine_path(s)
@@ -206,7 +211,7 @@ class RecordStore:
             return len(to_remove_keys), 0
 
         removed = 0
-        for scene in ("math", "algorithm"):
+        for scene in self._scenes():
             p = self.eval_path(scene)
             if not p.exists():
                 continue

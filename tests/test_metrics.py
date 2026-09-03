@@ -18,7 +18,7 @@ from rex.models import (
 )
 
 Q = QuestionItem(
-    id="M000", scene="math", title="t", prompt="p",
+    id="A000", scene="algorithm", title="t", prompt="p",
     difficulty="basic", source="self", standard_answer="2",
 )
 
@@ -26,8 +26,8 @@ Q = QuestionItem(
 def _rec(qid: str, verdict: Verdict, answer_correct: bool = True,
          findings: list | None = None, diff: Difficulty = Difficulty.BASIC) -> EvalRecord:
     return EvalRecord(
-        question_id=qid, scene="math", difficulty=diff,
-        answer=Answer(steps=[Step(id=1, kind="derive", content="c", conclusion="c", deps=[])],
+        question_id=qid, scene="algorithm", difficulty=diff,
+        answer=Answer(steps=[Step(id=1, kind="understand", content="c", conclusion="c", deps=[])],
                       final_answer="2"),
         answer_correct=answer_correct, test_pass_rate=1.0,
         verification=VerificationResult(verdict=verdict, findings=findings or [],
@@ -141,18 +141,18 @@ def test_refine_comparison() -> None:
     def _round(no: int, v: Verdict) -> RefineRound:
         return RefineRound(
             round_no=no,
-            revised_answer=Answer(steps=[Step(id=1, kind="derive", content="c",
+            revised_answer=Answer(steps=[Step(id=1, kind="understand", content="c",
                                               conclusion="c", deps=[])],
                                   final_answer="2"),
             feedbacks=[], verification=_vr(v), cost_calls=2,
         )
 
     recs = [
-        RefineRecord(question_id="a", scene="math", difficulty=Difficulty.BASIC,
+        RefineRecord(question_id="a", scene="algorithm", difficulty=Difficulty.BASIC,
                      initial=_vr(Verdict.PROCESS_INCORRECT),
                      rounds=[_round(1, Verdict.PROCESS_INCORRECT), _round(2, Verdict.CORRECT)],
                      final=_vr(Verdict.CORRECT), converged=True),
-        RefineRecord(question_id="b", scene="math", difficulty=Difficulty.BASIC,
+        RefineRecord(question_id="b", scene="algorithm", difficulty=Difficulty.BASIC,
                      initial=_vr(Verdict.CORRECT),
                      rounds=[],   # 初始即正确 → 无修正轮，修正前必须计入
                      final=_vr(Verdict.CORRECT), converged=True),
@@ -169,8 +169,8 @@ def test_compute_metrics_excludes_failed() -> None:
     """运行失败（FAILED）样本不计入正确率分母，但仍保留在 verdict_dist。"""
     def _failed(qid: str) -> EvalRecord:
         return EvalRecord(
-            question_id=qid, scene="math", difficulty=Difficulty.BASIC,
-            answer=Answer(steps=[Step(id=1, kind="derive", content="c", conclusion="c", deps=[])],
+            question_id=qid, scene="algorithm", difficulty=Difficulty.BASIC,
+            answer=Answer(steps=[Step(id=1, kind="understand", content="c", conclusion="c", deps=[])],
                           final_answer=""),
             answer_correct=None, test_pass_rate=None,
             verification=VerificationResult(verdict=Verdict.FAILED, findings=[],
@@ -197,10 +197,10 @@ def test_refine_comparison_excludes_failed() -> None:
         return VerificationResult(verdict=v, findings=[], confidence=0.9, arbiter="V1")
 
     recs = [
-        RefineRecord(question_id="ok", scene="math", difficulty=Difficulty.BASIC,
+        RefineRecord(question_id="ok", scene="algorithm", difficulty=Difficulty.BASIC,
                      initial=_vr(Verdict.PROCESS_INCORRECT), rounds=[],
                      final=_vr(Verdict.CORRECT), converged=True),
-        RefineRecord(question_id="bad", scene="math", difficulty=Difficulty.BASIC,
+        RefineRecord(question_id="bad", scene="algorithm", difficulty=Difficulty.BASIC,
                      initial=_vr(Verdict.FAILED), rounds=[],
                      final=_vr(Verdict.FAILED), converged=False),
     ]

@@ -1,13 +1,13 @@
 # =============================================================================
-# ReAgents v2 统一运行脚本
+# HY3Coder 统一运行脚本
 # -----------------------------------------------------------------------------
 # 目的：固化 conda 虚拟环境 tensor_env（Python 3.9）的调用方式，避免误用
 #       系统 python（WindowsApps stub，会报 exit 9009）。
 #
 # 用法：
 #   .\run.ps1 test                 # 运行全部 pytest 测试
-#   .\run.ps1 run-eval math 5      # 评估数学 5 题（可再传 --concurrency 等）
-#   .\run.ps1 run-refine math 5    # 修正模式（ReAct 闭环）
+#   .\run.ps1 run-eval algorithm 5 # 评估算法 5 题（可再传 --concurrency 等）
+#   .\run.ps1 run-refine algorithm 5  # 修正模式（ReAct 闭环）
 #   .\run.ps1 report               # 生成 reports/REPORT.md
 #   .\run.ps1 serve                # 启动仪表盘 http://127.0.0.1:8000
 #   .\run.ps1 py "print(1)"        # 直接用该环境 python 执行一段代码
@@ -44,14 +44,14 @@ switch ($cmd) {
         & $PY -m pytest tests/ -q
     }
     "run-eval" {
-        $scene = if ($args[1]) { $args[1] } else { "math" }
+        $scene = if ($args[1]) { $args[1] } else { "algorithm" }
         $sample = if ($args[2]) { $args[2] } else { "5" }
         # 透传剩余参数（如 --concurrency 4 --retries 2）
         $rest = @($args[3..($args.Length - 1)])
         & $PY -m src.cli run-eval --scene $scene --sample $sample @rest
     }
     "run-refine" {
-        $scene = if ($args[1]) { $args[1] } else { "math" }
+        $scene = if ($args[1]) { $args[1] } else { "algorithm" }
         $sample = if ($args[2]) { $args[2] } else { "5" }
         $rest = @($args[3..($args.Length - 1)])
         & $PY -m src.cli run-refine --scene $scene --sample $sample @rest

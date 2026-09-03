@@ -3,10 +3,11 @@
 Sources & licenses (HuggingFace):
   - agentica-org/DeepCoder-Preview-Dataset/taco      — TACO 数据镜像 (Apache-2.0), 7436 题, 含参考解+测试用例
   - agentica-org/DeepCoder-Preview-Dataset/codeforces — Codeforces 精选 (MIT), 408 题, 含测试用例
-  - HuggingFaceH4/MATH                                — MATH (MIT), 含 level 1-5 + 标准解
 
 注：原 hkust-nlp/taco 与 deepmind/code_contests 因新版 datasets 不再支持
 loading script / 磁盘占用过大而不可用，故采用上述镜像与替代源。
+
+数学/MATH 评测场景已放弃（2026-09-03），不再加载该数据集。
 
 Loader normalizes every raw row into QuestionItem. Building the local question
 set is a separate step (scripts/build_questions.py) so the pipeline itself
@@ -108,7 +109,7 @@ def _heuristic_difficulty(prob_len: int, ref_len: int) -> Difficulty:
       medium : 参考解长度 350~800 或 题目长度 1200~2500
       basic  : 其余
     说明：数据源无官方难度时，以参考解与题目篇幅作为复杂度代理指标；
-    有官方 level 的源（MATH/TACO 原始数据）优先使用官方值。
+    有官方 level 的源（TACO 原始数据）优先使用官方值。
     """
     if ref_len > 800 or prob_len > 2500:
         return Difficulty.HARD
@@ -186,84 +187,6 @@ def load_code_contests(limit: int | None = None) -> list[QuestionItem]:
         ))
     log.info("CodeContests(CF镜像) loaded %d items", len(items))
     return items
-
-
-# ---------------------------------------------------------------------------
-# math scene
-# ---------------------------------------------------------------------------
-def load_math(limit: int | None = None) -> list[QuestionItem]:
-    """MATH (HuggingFaceH4/MATH): problem + level(1-5) + type + solution."""
-    rows = _try_load_hf("HuggingFaceH4/MATH")
-    if rows is None:
-        return []
-    items: list[QuestionItem] = []
-    for i, r in enumerate(rows):
-        if limit is not None and len(items) >= limit:
-            break
-        prob = str(r.get("problem", "")).strip()
-        if not prob:
-            continue
-        level = _parse_math_level(r.get("level"))
-        items.append(QuestionItem(
-            id=f"M{i:04d}",
-            scene="math",
-            title=prob[:60],
-            prompt=prob,
-            difficulty=_math_level_to_difficulty(level),
-            source="MATH",
-            source_id=str(r.get("id", i)),
-            layer_basis=f"MATH level={level} (官方难度)",
-            standard_answer=_extract_math_answer(r.get("solution", "")),
-            reference_solution=r.get("solution"),
-            test_cases=[],
-            metadata={"type": r.get("type", ""), "level": level},
-        ))
-    log.info("MATH loaded %d items", len(items))
-    return items
-
-
-def _parse_math_level(raw) -> int:
-    """HuggingFaceH4/MATH stores level as "Level 5" — normalize to int 1..5."""
-    if isinstance(raw, bool):
-        return 3
-    if isinstance(raw, (int, float)):
-        return max(1, min(5, int(raw)))
-    s = str(raw).strip().lower().replace("level", "").strip()
-    try:
-        return max(1, min(5, int(s)))
-    except (TypeError, ValueError):
-        return 3
-
-
-def _math_level_to_difficulty(level: int) -> Difficulty:
-    return _MATH_LEVEL_TO_DIFF.get(int(level), Difficulty.MEDIUM)
-
-
-_MATH_LEVEL_TO_DIFF = {
-    1: Difficulty.BASIC, 2: Difficulty.BASIC, 3: Difficulty.MEDIUM,
-    4: Difficulty.MEDIUM, 5: Difficulty.HARD,
-}
-
-
-def _extract_math_answer(solution: str) -> str:
-    """MATH solution ends with '\\boxed{...}'. Extract the inner answer."""
-    if not solution:
-        return ""
-    marker = r"\boxed"
-    idx = solution.rfind(marker)
-    if idx == -1:
-        return solution.strip().splitlines()[-1].strip()
-    rest = solution[idx + len(marker):].strip()
-    if rest.startswith("{"):
-        depth = 0
-        for j, ch in enumerate(rest):
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    return rest[1:j]
-    return rest
 
 
 # ---------------------------------------------------------------------------

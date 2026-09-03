@@ -5,7 +5,7 @@
   - 定位命中率 = findings 覆盖真实缺陷步骤的比例
 
 用法:
-    python scripts/eval_golden.py [--scene math|algorithm|all]
+    python scripts/eval_golden.py [--scene algorithm|all]
 """
 from __future__ import annotations
 
@@ -28,12 +28,12 @@ OUT = ROOT / "data" / "outputs" / "golden_eval.jsonl"
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--scene", default="all", choices=["all", "math", "algorithm"])
+    ap.add_argument("--scene", default="all", choices=["all", "algorithm"])
     args = ap.parse_args()
 
     cfg = Config.from_env(ROOT)
     golden: list[GoldenSample] = []
-    for name in ("golden_math.jsonl", "golden_algorithm.jsonl"):
+    for name in ("golden_algorithm.jsonl",):
         if args.scene != "all" and name != f"golden_{args.scene}.jsonl":
             continue
         golden += load_jsonl(ROOT / "data" / "golden" / name, GoldenSample)

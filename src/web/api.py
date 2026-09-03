@@ -1,4 +1,4 @@
-"""FastAPI backend for the ReAgents v2 dashboard.
+"""FastAPI backend for the HY3Coder dashboard.
 
 Endpoints (all data under Hy3_APP2/data/):
   GET  /api/summary        — 评估总览指标（含 refine 前后对比）
@@ -33,7 +33,7 @@ STATIC = ROOT / "src" / "web" / "static"
 from rex.store import RecordStore
 STORE = RecordStore(CFG.outputs_dir)
 
-app = FastAPI(title="ReAgents v2 评估仪表盘", version="2.0.0")
+app = FastAPI(title="HY3Coder 评估仪表盘", version="2.1.0")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
@@ -41,10 +41,7 @@ app.add_middleware(
 
 def _load_questions() -> list[QuestionItem]:
     qs: list[QuestionItem] = []
-    for scene in ("math", "algorithm"):
-        qs += load_jsonl(CFG.data_dir / "questions" / f"{scene}.jsonl", QuestionItem)
-    # 自建算法评测集（AtCoder ABC + Codeforces，独立文件便于扩充）
-    for f in ("abc_selfbuilt.jsonl", "cf_selfbuilt.jsonl"):
+    for f in ("algorithm.jsonl", "abc_selfbuilt.jsonl", "cf_selfbuilt.jsonl"):
         p = CFG.data_dir / "questions" / f
         if p.exists():
             qs += load_jsonl(p, QuestionItem)
@@ -57,8 +54,10 @@ def _load_evals() -> list[EvalRecord]:
 
 def _load_refines() -> list[RefineRecord]:
     out = []
-    for scene in ("math", "algorithm"):
-        out += load_jsonl(CFG.outputs_dir / f"refine_{scene}.jsonl", RefineRecord)
+    for f in ("refine_algorithm.jsonl",):
+        p = CFG.outputs_dir / f
+        if p.exists():
+            out += load_jsonl(p, RefineRecord)
     return out
 
 
@@ -73,8 +72,10 @@ def _dump(o):
 
 def _load_golden() -> list[GoldenSample]:
     out = []
-    for name in ("golden_math.jsonl", "golden_algorithm.jsonl"):
-        out += load_jsonl(CFG.data_dir / "golden" / name, GoldenSample)
+    for name in ("golden_algorithm.jsonl",):
+        p = CFG.data_dir / "golden" / name
+        if p.exists():
+            out += load_jsonl(p, GoldenSample)
     return out
 
 
@@ -186,9 +187,9 @@ class InteractSample(BaseModel):
 
 
 class InteractRequest(BaseModel):
-    scene: str = "math"
+    scene: str = "algorithm"
     prompt: str
-    answer: str = ""                     # 数学场景标准答案（可选）
+    answer: str = ""                     # standard_answer 文本比对（无测试用例时兜底）
     samples: list[InteractSample] = []   # 算法场景输入输出样例（可选）
     refine: bool = False                 # 是否演示修正闭环
     max_rounds: int = 2

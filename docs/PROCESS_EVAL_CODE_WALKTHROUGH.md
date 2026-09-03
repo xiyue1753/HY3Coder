@@ -20,7 +20,7 @@ src/rex/pipeline.py  (Pipeline：编排两种模式)
    │  (解题/修订)  ──────────────►           (双视角核对 + 仲裁)
    │                                            │
    │                    executor/tests.py  ◄────┤ ① 沙盒执行答案
-   │                    (数学比对/测试用例)      │
+   │                    (测试用例/文本比对)      │
    │                                            ▼
    │                                  models.py  (Verdict 判定结果)
    │
@@ -97,11 +97,11 @@ class VerificationResult(BaseModel):
 ### 关键命令
 ```4:15:src/cli.py
     # 评估模式（数据纯净，一次性）
-    python -m src.cli run-eval --scene math --sample 5
+    python -m src.cli run-eval --scene algorithm --sample 5
     python -m src.cli run-eval --scene algorithm --sample 10 --resume
 
     # 修正模式（ReAct 闭环，限 3 轮）
-    python -m src.cli run-refine --scene math --sample 5
+    python -m src.cli run-refine --scene algorithm --sample 5
 ```
 
 ### 关键代码要点
@@ -156,10 +156,8 @@ class Pipeline:
 ### 客观校验：`_execute`（答案对不对）
 ```169:187:src/rex/pipeline.py
     def _execute(self, q, answer) -> tuple[bool|None, float|None, str|None]:
-        if q.scene == "math":           # 数学：比对标准答案
-            ok = normalize_math_answer(answer.final_answer) == normalize_math_answer(q.standard_answer)
-            return ok, None, None
-        # algorithm
+        # 算法场景：有代码+用例走沙盒；无用例时比对 standard_answer 文本
+        # (归一化用 normalize_answer_text)
         if answer.code and q.test_cases:   # 算法：沙盒跑测试用例
             res = run_test_cases(answer.code, q.test_cases)
             return (res.pass_rate >= 1.0), res.pass_rate, res.error
@@ -176,7 +174,7 @@ Solver 负责两件事：`solve`（独立解题）和 `revise`（根据反馈修
 - **`solve`（36-40 行）**：eval 路径，题目 → 首次答案，无反馈。
 - **`revise`（42-56 行）**：refine 路径，上一版答案 + 验证反馈 → 修订版。对算法长答案做了 8000 字符截断控制 token 成本。
 - **JSON 容错（67-83 行 `_ask`）**：模型可能输出带 markdown 围栏 / 前导废话 / 非法 JSON，解析失败会把错误**回喂给模型**重试（最多 2 次）。
-- **场景合法性校验（94-102 行 `_validate_kinds`）**：step 的 `kind` 必须符合场景白名单（算法：understand/approach/complexity/implement/selftest；数学：derive/calc/check）。
+- **场景合法性校验（94-102 行 `_validate_kinds`）**：step 的 `kind` 必须符合算法场景白名单（understand/approach/complexity/implement/selftest）。
 
 ---
 
@@ -263,7 +261,7 @@ def verifier_system(view: str) -> str:
 
 ### 关键函数与要点
 - **`compute_metrics`（67-95 行）**：
-  - `answer_accuracy`（答案准确率）：`_is_answer_correct` 判定（数学比对 或 算法沙盒全过）。
+  - `answer_accuracy`（答案准确率）：`_is_answer_correct` 判定（沙盒全过 或 文本比对通过）。
   - `process_correctness`（过程正确率）：`verification.verdict == CORRECT`。
   - `verdict_dist`：四类判定占比（**含 SILENT_FAILURE 检出率**）。
   - `error_type_dist`：错误类型分布（能力画像）。

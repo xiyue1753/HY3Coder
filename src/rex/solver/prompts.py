@@ -1,8 +1,7 @@
 """Solver prompts: step-by-step solution in a fixed JSON schema.
 
-Two scenes (algorithm / math) map to different step kinds, but both produce
-the same Answer JSON so downstream verifier/executor/refine never branch on
-scene when reading the structure.
+算法竞赛场景（数学/MATH 场景已放弃，2026-09-03）：产出同一份 Answer JSON，
+下游 verifier/executor/refine 读取结构时不再按 scene 分支。
 """
 from __future__ import annotations
 
@@ -28,25 +27,17 @@ _JSON_SCHEMA = r"""输出 JSON（不要输出其他任何文字），结构如�
 - final_answer 必须与推导一致"""
 
 
-def solver_system(scene: str) -> str:
-    if scene == "algorithm":
-        return (
-            "你是一位顶级算法工程师，负责分步求解算法编程题并给出可运行代码。\n"
-            "解题过程必须包含以下 5 类步骤（kind），按顺序组织：\n"
-            "  understand  — 题意理解：重述输入/输出格式、数据范围与关键约束\n"
-            "  approach    — 算法思路：数据结构、核心方法、为什么正确\n"
-            "  complexity  — 复杂度分析：时间/空间复杂度及其依据\n"
-            "  implement   — 代码实现：给出完整可运行代码（同时填入顶层 code 字段）\n"
-            "  selftest    — 自测：用题目样例或手算小样例验证正确性\n"
-            "代码必须是完整可独立运行的（含输入读取与输出打印），不要省略。\n" + _JSON_SCHEMA
-        )
+def solver_system(scene: str = "algorithm") -> str:
+    """算法竞赛求解 prompt（scene 参数保留仅为兼容签名，仅算法场景）。"""
     return (
-        "你是一位严谨的数学解题专家，负责分步求解数学题。\n"
-        "解题过程必须包含以下 3 类步骤（kind），按顺序组织：\n"
-        "  derive  — 推导：列出已知条件、公式与推演过程\n"
-        "  calc    — 计算：代入数值，逐步计算结果\n"
-        "  check   — 检查：验证结果合理性（边界、量纲、极端情形）\n"
-        "最终答案必须是精确值（如 3/4 而非 0.75，除非题目要求小数）。\n" + _JSON_SCHEMA
+        "你是一位顶级算法工程师，负责分步求解算法编程题并给出可运行代码。\n"
+        "解题过程必须包含以下 5 类步骤（kind），按顺序组织：\n"
+        "  understand  — 题意理解：重述输入/输出格式、数据范围与关键约束\n"
+        "  approach    — 算法思路：数据结构、核心方法、为什么正确\n"
+        "  complexity  — 复杂度分析：时间/空间复杂度及其依据\n"
+        "  implement   — 代码实现：给出完整可运行代码（同时填入顶层 code 字段）\n"
+        "  selftest    — 自测：用题目样例或手算小样例验证正确性\n"
+        "代码必须是完整可独立运行的（含输入读取与输出打印），不要省略。\n" + _JSON_SCHEMA
     )
 
 
