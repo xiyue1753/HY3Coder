@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from rex.executor.judge import run_checker
 from rex.executor.sandbox import run_code
-from rex.models import TestCase
+from rex.models import Judge, TestCase
 
 _MAX_REPORTED_FAILURES = 5
 
@@ -20,20 +21,53 @@ class TestRunResult:
     timed_out: bool = False
 
 
+_FLOAT_TOL = 1e-5
+
+
+def _text_match(got: str, expected: str) -> bool:
+    """宽松文本比较：去尾空白逐行精确比对；两侧同行皆浮点数时按误差容忍。"""
+    g = [ln.strip() for ln in got.rstrip().split("\n")]
+    e = [ln.strip() for ln in expected.rstrip().split("\n")]
+    if len(g) != len(e):
+        return False
+    for gl, el in zip(g, e):
+        if gl == el:
+            continue
+        try:
+            fg, fe = float(gl), float(el)
+        except ValueError:
+            return False
+        if abs(fg - fe) > _FLOAT_TOL * max(1.0, abs(fe), abs(fg)):
+            return False
+    return True
+
+
 def run_test_cases(
     code: str,
     test_cases: list[TestCase],
     timeout: float = 10.0,
     language: str = "python",
+    judge: Judge | str = Judge.EXACT,
+    checker_code: str | None = None,
+    checker_language: str = "python",
+    checker_timeout: float = 20.0,
 ) -> TestRunResult:
     """Execute each test case in isolation; compare stdout to expected output.
 
     Normalization: strip trailing whitespace from both sides, and ignore a
     single trailing blank line difference (many judges accept it).
     ``language`` is passed to the sandbox (python/cpp).
+
+    Judge modes:
+    - exact (default): text compare (with float tolerance, see _text_match)
+    - special: output has no unique reference text (constructive problems);
+      run ``checker_code`` against (tc.input, solver stdout) to decide AC.
     """
     if not code:
         return TestRunResult(0, 0, 0.0, error="no code to run")
+    special = Judge(judge) == Judge.SPECIAL
+    if special and not checker_code:
+        return TestRunResult(len(test_cases), 0, 0.0, error="special judge missing checker_code")
     total = len(test_cases)
     passed = 0
     failed_public: list[int] = []
@@ -48,10 +82,18 @@ def run_test_cases(
                 compile_err = compile_err or res.error or res.stderr.strip()[:300]
             if res.timed_out:
                 pass  # 计入失败
+        elif special:
+            # SPJ：判定输出是否满足题目谓词（不比对期望文本）
+            ok, _msg = run_checker(checker_code, checker_language,
+                                   tc.input, res.stdout, timeout=checker_timeout)
+            if ok:
+                passed += 1
+                continue
         else:
-            actual = res.stdout.rstrip("\n")
-            expected = tc.output.rstrip("\n")
-            if actual == expected:
+            # 多数 OJ 判题忽略行尾空白/尾部换行差异：两边统一 rstrip() 比较。
+            # 浮点输出：若两侧同位置行都可解析为浮点数，按相对/绝对误差 1e-5 判定
+            # （不同 AC 提交打印精度不同，如 1.0000000001 vs 1.0）。
+            if _text_match(res.stdout, tc.output):
                 passed += 1
                 continue
         if tc.hidden:

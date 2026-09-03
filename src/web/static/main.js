@@ -169,23 +169,28 @@ async function loadAudit(){
 
 // ---------- 交互式解题 ----------
 // ---------- 交互式解题：辅助函数 ----------
-// 用 marked 渲染 Markdown + KaTeX 渲染 $$..$$ 与 $..$ 公式
+// 用 marked 渲染 Markdown + KaTeX 渲染 $$..$$ 与 $..$ 公式。
+// 顺序：先提取公式（KaTeX）用占位符保护，再对剩余文本做 marked ——
+// 若先 marked 会把公式里的 < > 转义成 &lt; &gt;，KaTeX 拿到后渲染乱码。
 function renderMath(text){
   if(!text) return '';
-  let html;
-  try { html = (window.marked ? marked.parse(text) : escapeHtml(text)); }
-  catch(e){ html = escapeHtml(text); }
+  const katexHtml = [];
+  let safe = text;
   if (window.katex) {
-    // 行内/行间 LaTeX：$$...$$ 与 $...$
-    html = html.replace(/\$\$([\s\S]+?)\$\$/g, (m, exp) => {
-      try { return katex.renderToString(exp, {displayMode:true, throwOnError:false}); }
-      catch(e){ return m; }
-    });
-    html = html.replace(/\$([^$\n]+?)\$/g, (m, exp) => {
-      try { return katex.renderToString(exp, {displayMode:false, throwOnError:false}); }
-      catch(e){ return m; }
+    safe = text.replace(/\$\$([\s\S]+?)\$\$/g, (m, exp) => {
+      try { katexHtml.push(katex.renderToString(exp, {displayMode:true, throwOnError:false})); }
+      catch(e){ katexHtml.push(''); }
+      return '\u0000K' + (katexHtml.length - 1) + '\u0000';
+    }).replace(/\$([^$\n]+?)\$/g, (m, exp) => {
+      try { katexHtml.push(katex.renderToString(exp, {displayMode:false, throwOnError:false})); }
+      catch(e){ katexHtml.push(''); }
+      return '\u0000K' + (katexHtml.length - 1) + '\u0000';
     });
   }
+  let html;
+  try { html = (window.marked ? marked.parse(safe) : escapeHtml(safe)); }
+  catch(e){ html = escapeHtml(safe); }
+  html = html.replace(/\u0000K(\d+)\u0000/g, (m, i) => katexHtml[+i] || '');
   return html;
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}

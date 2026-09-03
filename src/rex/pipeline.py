@@ -219,10 +219,34 @@ class Pipeline:
         return list(done.values())
 
     def _eval_one(self, q: QuestionItem) -> EvalRecord:
+        from rex.executor.static_check import check_static, static_evidence_block, static_result_to_dict
+
         t0 = time.time()
         answer = self.solver.solve(q)
-        answer_correct, pass_rate, _ = self._execute(q, answer)
-        verification = self.verifier.verify(q, answer)
+        answer_correct, pass_rate, exec_err = self._execute(q, answer)
+        # 静态规则校验：作为独立验证维度喂给 verifier（补充诊断，不改主判定）
+        static = check_static(q, answer)
+        evidence = static_evidence_block(static)
+        # 客观执行反馈：沙盒/比对结果是事实性证据，喂给 verifier 防止"答案错却判 CORRECT"
+        exec_fb = _execution_feedback(q, answer_correct, pass_rate, exec_err)
+        verification = self.verifier.verify(q, answer, static_evidence=evidence,
+                                            execution_feedback=exec_fb)
+        # 客观优先兜底：沙盒证明答案错时，verdict 绝不可能是 CORRECT（防止 LLM 漏检）
+        if answer_correct is False and verification.verdict == Verdict.CORRECT:
+            verification.verdict = Verdict.ANSWER_INCORRECT
+            log.info("eval %s: 客观答案错误但 LLM 判 CORRECT，强制降级为 ANSWER_INCORRECT", q.id)
+        # 编译/运行级失败兜底：执行反馈含编译/语法错误但 verifier 未定位时，程序化补一条
+        # s4 finding（指向 implement 步骤），保证"编译失败"类错误一定有可定位诊断，
+        # 不依赖 LLM 自觉（曾出现 A1098 编译失败却 findings 空的情况）。
+        if exec_err and _is_exec_failure(exec_err) and not verification.findings:
+            from rex.models import ErrorFinding, ErrorType
+            verification.findings.append(ErrorFinding(
+                step_id=4,
+                error_type=ErrorType.OTHER,
+                detail=f"代码存在编译/运行级错误：{exec_err[:200]}",
+                evidence="沙盒执行返回编译/运行错误（客观事实），对应 implement 步骤代码不可执行。",
+            ))
+            log.info("eval %s: 编译/运行失败未定位，程序化补充 s4 finding", q.id)
         rec = EvalRecord(
             question_id=q.id,
             scene=q.scene,
@@ -231,6 +255,7 @@ class Pipeline:
             answer_correct=answer_correct,
             test_pass_rate=pass_rate,
             verification=verification,
+            static_check=static_result_to_dict(static),
             cost_calls=self.client.call_count,
             created_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
         )
@@ -294,11 +319,54 @@ class Pipeline:
             return None, None, None
         # algorithm
         if answer.code and q.test_cases:
-            res = run_test_cases(answer.code, q.test_cases)
+            from rex.executor.sandbox import detect_language
+            lang = detect_language(answer.code)
+            res = run_test_cases(
+                answer.code, q.test_cases,
+                language=lang,
+                judge=q.judge, checker_code=q.checker_code,
+                checker_language=q.checker_language,
+            )
             return (res.pass_rate >= 1.0), res.pass_rate, res.error
         if q.standard_answer and answer.final_answer:
             return normalize_math_answer(answer.final_answer) == normalize_math_answer(q.standard_answer), None, None
         return None, None, None
+
+
+def _execution_feedback(
+    q: QuestionItem,
+    answer_correct: bool | None,
+    pass_rate: float | None,
+    exec_err: str | None,
+) -> str | None:
+    """把客观执行结果格式化为 verifier 可读的反馈文本（供 prompt 引用）。
+
+    算法场景：给出测试用例通过率/失败原因；数学场景：给出比对结果。
+    返回 None 表示无客观结果（answer_correct 未知），不注入反馈。
+    """
+    if answer_correct is None:
+        return None
+    if q.scene == "math":
+        ok = "正确" if answer_correct else "错误"
+        return f"标准答案比对结果：最终答案{ok}。"
+    if pass_rate is None:
+        return None
+    if answer_correct:
+        return f"沙盒执行：全部 {int(round(pass_rate * 100))}% 测试用例通过（公开+隐藏）。"
+    why = f"（运行错误：{(exec_err or '')[:120]}）" if exec_err else ""
+    return f"沙盒执行：测试用例通过率 {pass_rate:.0%}，最终答案未通过全部用例{why}。"
+
+
+def _is_exec_failure(exec_err: str) -> bool:
+    """判断执行错误是否为编译/运行级失败（非普通 WA）。
+
+    用于程序化兜底：这类错误说明代码本身不可执行（语法/编译错误、崩溃、
+    超时），应定位到 implement 步骤，而非静默判"答案错"无诊断。
+    """
+    low = (exec_err or "").lower()
+    markers = ("compile", "syntax", "compile failed", "error:", "traceback",
+               "timeout", "segmentation", "returncode")
+    return any(m in low for m in markers)
 
 
 def _placeholder_answer(scene: str) -> Answer:

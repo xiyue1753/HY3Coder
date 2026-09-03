@@ -12,6 +12,7 @@ from rex.models import (
     QuestionItem,
     RefineRecord,
     Step,
+    TestCase,
 )
 from rex.pipeline import Pipeline, normalize_math_answer
 
@@ -65,7 +66,9 @@ def test_normalize_math_answer() -> None:
 
 
 def test_run_eval_dual_mode(tmp_path) -> None:
-    # M000: solve + verify(A) + verify(B) = 3 calls；M001 因无 key 异常前先给足响应
+    # M000: solve + verify(A) + verify(B) = 3 calls；M001 同
+    # 模型对两题都判 CORRECT，但 M001 标准答案=2 而 SOLVE 输出 1/2 → 客观答案错误，
+    # 修复后的语义要求 verdict 强制降级为 ANSWER_INCORRECT（客观优先，防漏检）。
     client = FakeHy3([SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"),
                       SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")])
     cfg = _cfg(tmp_path)
@@ -73,8 +76,11 @@ def test_run_eval_dual_mode(tmp_path) -> None:
     out = tmp_path / "eval_math.jsonl"
     records = pipe.run_eval(Q, out, resume=False)
     assert len(records) == 2
-    assert all(r.verification.verdict.value == "CORRECT" for r in records)
-    assert records[0].answer_correct is True  # 1/2 == 1/2
+    by_id = {r.question_id: r for r in records}
+    assert by_id["M000"].answer_correct is True          # 1/2 == 1/2
+    assert by_id["M000"].verification.verdict.value == "CORRECT"
+    assert by_id["M001"].answer_correct is False         # 1/2 != 2
+    assert by_id["M001"].verification.verdict.value == "ANSWER_INCORRECT"  # 降级
     # 断言响应全部消费（无多余调用）
     assert client.responses == []
 
@@ -92,6 +98,60 @@ def test_run_eval_resume_skips_done(tmp_path) -> None:
     second = pipe2.run_eval(Q, out, resume=True)
     assert len(second) == 2
     assert client2.responses == [] and client2.calls == 0
+
+
+def test_run_eval_algorithm_static_check_recorded(tmp_path) -> None:
+    """算法场景：static_check 结果写入 EvalRecord，且规则校验证据进入 verifier prompt。"""
+    code = "while True:\n    pass\n"
+    algo_q = QuestionItem(id="A000", scene="algorithm", title="t", prompt="输出 1",
+                          difficulty="basic", source="self", standard_answer="1")
+    solve = json.dumps({
+        "steps": [{"id": 1, "kind": "implement", "content": code,
+                   "conclusion": "实现", "deps": []}],
+        "final_answer": "1",
+        "code": code,
+    })
+    client = FakeHy3([solve, _verdict_json("CORRECT"), _verdict_json("CORRECT")])
+    cfg = _cfg(tmp_path)
+    pipe = Pipeline(cfg, client=client)
+    out = tmp_path / "eval_algorithm.jsonl"
+    records = pipe.run_eval([algo_q], out, resume=False)
+    assert len(records) == 1
+    rec: EvalRecord = records[0]
+    assert rec.static_check is not None
+    assert rec.static_check["loop_risk"] is True
+    assert any(d["category"] == "loop" for d in rec.static_check["diagnostics"])
+    # 写盘后可回读（验证 static_check 序列化可持久化）
+    raw = out.read_text(encoding="utf-8")
+    assert '"loop_risk":true' in raw
+
+
+def test_compile_failure_gets_fallback_finding(tmp_path) -> None:
+    """编译/语法失败：verifier 无 findings 时程序化补 s4 finding（不依赖 LLM）。"""
+    bad_code = "def broken(\n"   # Python 语法错误 → 沙盒 SyntaxError
+    algo_q = QuestionItem(id="A001", scene="algorithm", title="t", prompt="输出 1",
+                          difficulty="basic", source="self", standard_answer="1",
+                          test_cases=[TestCase(input="", output="1")])
+    solve = json.dumps({
+        "steps": [{"id": 1, "kind": "implement", "content": bad_code,
+                   "conclusion": "实现", "deps": []}],
+        "final_answer": "1",
+        "code": bad_code,
+    })
+    # LLM 双视角都判 CORRECT（不看沙盒）——兜底应补 s4 finding 且降级 ANSWER_INCORRECT
+    client = FakeHy3([solve, _verdict_json("CORRECT"), _verdict_json("CORRECT")])
+    cfg = _cfg(tmp_path)
+    pipe = Pipeline(cfg, client=client)
+    rec = pipe._eval_one(algo_q)
+    # 客观答案错 → 兜底降级
+    assert rec.answer_correct is False
+    assert rec.verification.verdict.value == "ANSWER_INCORRECT"
+    # 编译失败未定位 → 程序化补 s4 finding
+    assert len(rec.verification.findings) >= 1
+    fb = rec.verification.findings[-1]
+    assert fb.step_id == 4
+    assert "编译" in fb.detail or "运行" in fb.detail
+    assert client.responses == []
 
 
 def test_run_refine_convergence(tmp_path) -> None:

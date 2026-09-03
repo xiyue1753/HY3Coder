@@ -97,8 +97,12 @@ def test_runner_eval_basic(tmp_path) -> None:
     out = tmp_path / "eval_math.jsonl"
     records, costs = runner.run_eval(Q, out, resume=False)
     assert len(records) == 2
-    assert all(r.verification.verdict.value == "CORRECT" for r in records)
-    assert records[0].answer_correct is True
+    by_id = {r.question_id: r for r in records}
+    # 模型对两题都判 CORRECT，但 M001 答案错（1/2 != 2）→ 客观优先降级
+    assert by_id["M000"].verification.verdict.value == "CORRECT"
+    assert by_id["M001"].verification.verdict.value == "ANSWER_INCORRECT"
+    assert by_id["M000"].answer_correct is True
+    assert by_id["M001"].answer_correct is False
     # 每个 client 响应全部消费，各自恰好 3 次
     for cli in state["clients"]:
         assert cli.responses == []
@@ -155,9 +159,10 @@ def test_runner_retry_transient_failure(tmp_path) -> None:
     out = tmp_path / "eval_math.jsonl"
     records, _ = runner.run_eval(Q, out, resume=False)
     assert len(records) == 2
-    # 重试后成功：M000 与 M001 均 CORRECT（若响应不足，会抛 unexpected chat → 占位失败）
-    assert records[0].verification.verdict.value == "CORRECT"
-    assert records[1].verification.verdict.value == "CORRECT"
+    by_id = {r.question_id: r for r in records}
+    # 重试后成功；M001 答案错（1/2 != 2）→ 客观优先降级 ANSWER_INCORRECT
+    assert by_id["M000"].verification.verdict.value == "CORRECT"
+    assert by_id["M001"].verification.verdict.value == "ANSWER_INCORRECT"
     # 失败 1 次 + 成功 6 次 = 7 次模型调用（验证 retry 不重复算、不遗漏）
     assert total_attempted["n"] == 7
 

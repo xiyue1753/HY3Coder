@@ -40,6 +40,18 @@ class SandboxResult:
 GPP = os.environ.get("REX_GPP", r"D:\msys64\ucrt64\bin\g++.exe")
 
 
+def detect_language(code: str) -> str:
+    """启发式检测提交代码语言（python / cpp）。
+
+    - 含 `#include <...>` / `using namespace` / `int main()` → cpp
+    - 否则视为 python（AI 输出以两者为主，其他语言暂不支持）
+    """
+    head = (code or "")[:4000]
+    if "#include" in head or "using namespace" in head:
+        return "cpp"
+    return "python"
+
+
 def run_code(
     code: str,
     stdin: str = "",
@@ -88,9 +100,15 @@ def _run_proc(cmd: list[str], stdin, timeout, work, env, t0) -> SandboxResult:
         )
         out = proc.stdout.decode("utf-8", errors="replace").replace("\r\n", "\n")[:_MAX_OUTPUT]
         err = proc.stderr.decode("utf-8", errors="replace").replace("\r\n", "\n")[:_MAX_OUTPUT]
+        # 非零退出 = 运行/语法/崩溃错误：stderr 是诊断依据，标记为 error 便于上层识别
+        # （此前仅 cpp 编译错误标记 error，python 语法/运行错误被当成普通 WA，诊断信息丢失）
+        err_note = None
+        if proc.returncode != 0:
+            err_note = (err.strip() or f"exit code {proc.returncode}")[:400]
         return SandboxResult(
             returncode=proc.returncode, stdout=out, stderr=err,
             timed_out=False, duration=time.time() - t0,
+            error=err_note,
         )
     except subprocess.TimeoutExpired:
         return SandboxResult(

@@ -60,12 +60,25 @@ let cur=0, total=0;
 const $=s=>document.querySelector(s);
 function renderMath(text){
   if(!text)return'';
-  let html;
-  try{html=window.marked?marked.parse(text):text.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}catch(e){html=text;}
-  if(window.katex){
-    html=html.replace(/\$\$([\s\S]+?)\$\$/g,(m,e)=>{try{return katex.renderToString(e,{displayMode:true,throwOnError:false});}catch(x){return m;}});
-    html=html.replace(/\$([^$\n]+?)\$/g,(m,e)=>{try{return katex.renderToString(e,{displayMode:false,throwOnError:false});}catch(x){return m;}});
+  // 先提取公式（KaTeX）用占位符保护，再对剩余文本做 marked ——
+  // 若先 marked 会把公式里的 < > 转义成 &lt; &gt; 导致 KaTeX 渲染乱码。
+  const katexHtml = [];
+  let safe = text;
+  if (window.katex) {
+    safe = text.replace(/\$\$([\s\S]+?)\$\$/g, (m, e) => {
+      try { katexHtml.push(katex.renderToString(e, {displayMode:true, throwOnError:false})); }
+      catch(x) { katexHtml.push(''); }
+      return '\u0000K' + (katexHtml.length - 1) + '\u0000';
+    }).replace(/\$([^$\n]+?)\$/g, (m, e) => {
+      try { katexHtml.push(katex.renderToString(e, {displayMode:false, throwOnError:false})); }
+      catch(x) { katexHtml.push(''); }
+      return '\u0000K' + (katexHtml.length - 1) + '\u0000';
+    });
   }
+  let html;
+  try{html=window.marked?marked.parse(safe):safe.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}catch(e){html=safe;}
+  // 恢复公式占位符
+  html = html.replace(/\u0000K(\d+)\u0000/g, (m, i) => katexHtml[+i] || '');
   return html;
 }
 async function load(offset){

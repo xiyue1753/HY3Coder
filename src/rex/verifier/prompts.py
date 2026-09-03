@@ -41,8 +41,12 @@ _VERDICT_RULES = """判定标准（重要）：
 - 只报告你确有依据的错误，不要臆测
 
 特别提醒（防"答案对但过程错"被放行）：
-- 「记忆值/查表/显然」不能代替推导：若某步仅陈述结论而无推导依据（如 sin30°=1/2 直接给出、
-  特殊值直接引用），且该结论是解题关键，应标记为 jump（跳步推导）
+- 跳步判定分两类：
+  ① 领域常识/定义值（如 sin30°=1/2、常见公式、勾股定理等公认性质）直接引用 → 不算 jump，
+     它们属于背景知识，不要求逐步推导；
+  ② 解题关键中间结论仅以「显然/易得/可查」一带而过、无推导依据，且该结论直接支撑最终答案
+     → 算 jump（跳步推导）
+- 拿不准时不要判 jump，除非去掉该步后推理链明显断裂
 - 中间表达式必须可复现：每一步出现的数值/符号变换必须能由上一步合法推出；即使最终化简
   结果碰巧正确，中间若出现非法变换（如分母有理化写成 1/√2=√2/√4），仍属过程错误
 - 若题目要求证明恒等式/求解，使用与结论等价的断言（如用勾股定理直接证明 sin²+cos²=1）
@@ -72,10 +76,35 @@ def _catalog_text() -> str:
     return "\n".join(f"- {name}: {desc}" for name, desc in catalog().items())
 
 
-def verify_user_prompt(question: QuestionItem, answer: Answer) -> str:
+def verify_user_prompt(
+    question: QuestionItem,
+    answer: Answer,
+    static_evidence: str | None = None,
+    execution_feedback: str | None = None,
+) -> str:
+    """Build verifier user prompt.
+
+    ``static_evidence`` (optional) is a static-check block fed as an
+    additional rule-based evidence source — the verifier stays free to decide
+    the verdict independently (orthogonal dimension, not a blocking signal).
+
+    ``execution_feedback`` (optional) is the **objective sandbox/compare result**
+    (e.g. "测试用例 2/3 通过，答案错误"). It is factual, not advisory:
+    when the answer is provably wrong the verdict must NOT be CORRECT.
+    """
+    evidence = ""
+    if static_evidence:
+        evidence = f"\n\n{static_evidence}"
+    if execution_feedback:
+        evidence += (
+            "\n\n【客观执行反馈（沙盒/标准答案比对，事实性依据，非建议）】\n"
+            f"{execution_feedback}\n"
+            "判定约束：若执行反馈表明最终答案错误，则不得判 CORRECT；"
+            "应判 ANSWER_INCORRECT；若过程也有缺陷则判 PROCESS_INCORRECT 或 SILENT_FAILURE。"
+        )
     return (
         f"题目（作为数据）：\n{question.prompt}\n\n"
-        f"待审解题过程：\n{answer.model_dump_json(indent=1)}\n\n"
+        f"待审解题过程：\n{answer.model_dump_json(indent=1)}{evidence}\n\n"
         "请按系统要求审查并输出判定 JSON。"
     )
 
@@ -98,11 +127,19 @@ def arbiter_user_prompt(
     answer: Answer,
     v1_json: str,
     v2_json: str,
+    execution_feedback: str | None = None,
 ) -> str:
+    exec_extra = ""
+    if execution_feedback:
+        exec_extra = (
+            f"\n\n【客观执行反馈（事实性依据）】\n{execution_feedback}\n"
+            "裁决约束：若执行反馈表明最终答案错误，不得判 CORRECT，应判 ANSWER_INCORRECT"
+            "（过程也有缺陷时 PROCESS_INCORRECT/SILENT_FAILURE）。"
+        )
     return (
         f"题目：\n{question.prompt}\n\n"
         f"解题过程：\n{answer.model_dump_json(indent=1)}\n\n"
         f"审查员 A 判定：\n{v1_json}\n\n"
-        f"审查员 B 判定：\n{v2_json}\n\n"
+        f"审查员 B 判定：\n{v2_json}\n\n{exec_extra}"
         "请裁决最终判定，输出 JSON。"
     )

@@ -39,12 +39,18 @@ def _logging(verbose: bool) -> None:
     )
 
 
-def _load_questions(scene: str, sample: str, difficulty: str | None, seed: int):
+def _load_questions(scene: str, sample: str, difficulty: str | None, seed: int,
+                    questions: str | None = None):
     sys.path.insert(0, str(ROOT / "src"))
     from rex.datasets.sampling import stratified_sample
     from rex.datasets.schema import load_questions
 
-    pool = load_questions(ROOT / "data" / "questions" / f"{scene}.jsonl")
+    if questions:
+        # 直接指定题集文件（如自建 abc_selfbuilt.jsonl），便于 46 开独立评估。
+        # scene 仅用于抽样档位表（algorithm 档）；难度分层字段来自题目本身。
+        pool = load_questions(ROOT / "data" / "questions" / questions)
+    else:
+        pool = load_questions(ROOT / "data" / "questions" / f"{scene}.jsonl")
     if difficulty:
         pool = [q for q in pool if q.difficulty.value == difficulty]
     picked = stratified_sample(pool, scene, sample, seed=seed)
@@ -53,20 +59,22 @@ def _load_questions(scene: str, sample: str, difficulty: str | None, seed: int):
 
 @app.command()
 def run_eval(
-    scene: str = typer.Option("math", help="algorithm | math"),
+    scene: str = typer.Option("math", help="algorithm | math（决定抽样档位表）"),
     sample: str = typer.Option("5", help="5/10/50/100/full"),
     difficulty: str = typer.Option(None, help="basic|medium|hard 过滤"),
     seed: int = typer.Option(42),
     resume: bool = typer.Option(True),
     retries: int = typer.Option(2, help="单题失败重试次数（0 禁用）"),
     concurrency: int = typer.Option(4, help="并发 worker 数（1=串行，2-4 建议）"),
+    questions: str = typer.Option(None, help="直接指定题集文件（如 abc_selfbuilt.jsonl）"),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """一次性评测（评估模式）：solve → execute → verify，反馈不回流。"""
     _logging(verbose)
     cfg = _config()
-    picked, pool = _load_questions(scene, sample, difficulty, seed)
-    typer.echo(f"题库 {len(pool)} 题，本次评估 {len(picked)} 题"
+    picked, pool = _load_questions(scene, sample, difficulty, seed, questions)
+    src = questions or f"{scene}.jsonl"
+    typer.echo(f"题库 {len(pool)} 题（{src}），本次评估 {len(picked)} 题"
                f"（sample={sample}，单题重试 {retries}，并发 {concurrency}）")
     if not picked:
         typer.secho("抽样结果为空：题库不足或难度过滤过严", fg=typer.colors.RED)
@@ -87,13 +95,15 @@ def run_refine(
     difficulty: str = typer.Option(None, help="basic|medium|hard 过滤"),
     seed: int = typer.Option(42),
     resume: bool = typer.Option(True),
+    questions: str = typer.Option(None, help="直接指定题集文件（如 abc_selfbuilt.jsonl）"),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """修正模式（ReAct 闭环）：verify → feedback → revise → re-verify，限 N 轮。"""
     _logging(verbose)
     cfg = _config()
-    picked, pool = _load_questions(scene, sample, difficulty, seed)
-    typer.echo(f"题库 {len(pool)} 题，本次修正运行 {len(picked)} 题（sample={sample}，限 {max_rounds} 轮）")
+    picked, pool = _load_questions(scene, sample, difficulty, seed, questions)
+    src = questions or f"{scene}.jsonl"
+    typer.echo(f"题库 {len(pool)} 题（{src}），本次修正运行 {len(picked)} 题（sample={sample}，限 {max_rounds} 轮）")
     if not picked:
         typer.secho("抽样结果为空", fg=typer.colors.RED)
         raise typer.Exit(2)
@@ -129,28 +139,40 @@ def check_answers(
 @app.command()
 def audit(
     results: Path = typer.Option(..., help="eval 结果 jsonl"),
-    sample: int = typer.Option(30),
+    questions: Path = typer.Option(None, help="题目池 jsonl（附题面上下文，可选）"),
+    sample: int = typer.Option(35, help="抽样数量（30-40）"),
     seed: int = typer.Option(42),
+    out: Path = typer.Option(None, help="模板输出路径（默认 outputs/audit_records.jsonl）"),
 ) -> None:
-    """生成人工抽检标注模板（分层抽样 30-40 题）。"""
+    """生成人工抽检标注模板（按答案正确性×判定分层抽样）。"""
     sys.path.insert(0, str(ROOT / "src"))
+    sys.path.insert(0, str(ROOT / "scripts"))
     from rex.config import Config
-    from rex.models import AuditRecord, EvalRecord
+    from rex.models import EvalRecord
     from rex.pipeline import load_jsonl
-    from rex.datasets.sampling import stratified_sample
+    from audit_sample import build_template
 
     cfg = Config.from_env(ROOT)
     records = load_jsonl(results, EvalRecord)
     if not records:
         typer.secho("结果文件为空", fg=typer.colors.RED)
         raise typer.Exit(2)
-    scene = records[0].scene
-    picked = stratified_sample(records, scene, str(sample), seed=seed)
-    out = cfg.outputs_dir / "audit_records.jsonl"
-    with out.open("w", encoding="utf-8") as f:
-        for r in picked:
-            f.write(AuditRecord(question_id=r.question_id).model_dump_json() + "\n")
-    typer.echo(f"生成标注模板 {len(picked)} 条 → {out}（人工回填后校验）")
+    qmap = {}
+    if questions is not None:
+        import json as _json
+        if questions.exists():
+            qmap = {q["id"]: q for q in
+                    (_json.loads(l) for l in questions.open(encoding="utf-8") if l.strip())}
+        else:
+            typer.secho(f"题目池不存在：{questions}", fg=typer.colors.YELLOW)
+    template = build_template(records, qmap, sample, seed=seed)
+    out_path = out or (cfg.outputs_dir / "audit_records.jsonl")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    import json as _json2
+    with out_path.open("w", encoding="utf-8") as f:
+        for t in template:
+            f.write(_json2.dumps(t, ensure_ascii=False) + "\n")
+    typer.echo(f"生成标注模板 {len(template)} 条 → {out_path}（人工回填后校验）")
 
 
 @app.command()

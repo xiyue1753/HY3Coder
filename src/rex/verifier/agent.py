@@ -36,11 +36,28 @@ class VerifierAgent:
         self._max_json_retries = max_json_retries
         self._reasoning = reasoning_effort
 
-    def verify(self, question: QuestionItem, answer: Answer) -> VerificationResult:
-        """Two-perspective cross-check + arbitration when they disagree."""
+    def verify(
+        self,
+        question: QuestionItem,
+        answer: Answer,
+        static_evidence: str | None = None,
+        execution_feedback: str | None = None,
+    ) -> VerificationResult:
+        """Two-perspective cross-check + arbitration when they disagree.
+
+        ``static_evidence``: optional rule-based diagnostic block (from
+        static_check) fed to both views as an additional evidence source.
+        The verdict remains decided by the LLM judge — static checks are an
+        orthogonal signal, never a blocking verdict.
+
+        ``execution_feedback``: optional **objective** sandbox/compare result
+        (e.g. answer is provably wrong on hidden tests). It is fed to both
+        views and the arbiter as factual evidence; when it shows the answer is
+        wrong, the verdict must not be CORRECT.
+        """
         t0 = time.time()
-        v1 = self._verify_view("A", question, answer)
-        v2 = self._verify_view("B", question, answer)
+        v1 = self._verify_view("A", question, answer, static_evidence, execution_feedback)
+        v2 = self._verify_view("B", question, answer, static_evidence, execution_feedback)
 
         if v1.verdict == v2.verdict:
             merged = self._merge(v1, v2)
@@ -52,7 +69,7 @@ class VerifierAgent:
         log.info("verifier views disagree (%s vs %s), calling arbiter",
                  v1.verdict.value, v2.verdict.value)
         try:
-            verdict = self._arbitrate(question, answer, v1, v2)
+            verdict = self._arbitrate(question, answer, v1, v2, execution_feedback)
         except Hy3Error as e:
             log.warning("arbiter call failed (%s); fall back to higher-confidence view", e)
             verdict = v1 if v1.confidence >= v2.confidence else v2
@@ -64,9 +81,16 @@ class VerifierAgent:
         return verdict
 
     # -- internals ---------------------------------------------------------
-    def _verify_view(self, view: str, question: QuestionItem, answer: Answer) -> VerificationResult:
+    def _verify_view(
+        self,
+        view: str,
+        question: QuestionItem,
+        answer: Answer,
+        static_evidence: str | None = None,
+        execution_feedback: str | None = None,
+    ) -> VerificationResult:
         system = verifier_system(view)
-        user = verify_user_prompt(question, answer)
+        user = verify_user_prompt(question, answer, static_evidence, execution_feedback)
         raw = self._chat_json(system, user)
         return _parse_verification(raw)
 
@@ -76,9 +100,11 @@ class VerifierAgent:
         answer: Answer,
         v1: VerificationResult,
         v2: VerificationResult,
+        execution_feedback: str | None = None,
     ) -> VerificationResult:
         user = arbiter_user_prompt(
-            question, answer, v1.model_dump_json(indent=1), v2.model_dump_json(indent=1)
+            question, answer, v1.model_dump_json(indent=1),
+            v2.model_dump_json(indent=1), execution_feedback,
         )
         raw = self._chat_json(ARBITER_SYSTEM, user)
         return _parse_verification(raw)

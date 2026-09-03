@@ -131,3 +131,139 @@ def test_static_complexity_mismatch() -> None:
     res = check_static(Q, ans)
     assert res.mismatch is True
     assert any(d.category == "complexity" and d.severity == "warn" for d in res.diagnostics)
+
+
+AQ = QuestionItem(
+    id="A000", scene="algorithm", title="t",
+    prompt="给定 n，输出 1..n 的和。", difficulty="basic",
+    source="self", standard_answer="",
+)
+
+
+def _algo_answer(code: str) -> Answer:
+    return Answer(
+        steps=[
+            Step(id=1, kind="implement", content=code, conclusion="实现", deps=[]),
+        ],
+        final_answer="",
+        code=code,
+    )
+
+
+def test_static_infinite_loop_while_true_no_break() -> None:
+    res = check_static(AQ, _algo_answer("while True:\n    print(1)\n"))
+    assert res.loop_risk is True
+    assert any(d.category == "loop" and d.severity == "warn" for d in res.diagnostics)
+
+
+def test_static_while_condition_var_not_updated() -> None:
+    res = check_static(AQ, _algo_answer("i = 0\nwhile i < 10:\n    print(i)\n"))
+    assert res.loop_risk is True
+    assert any(d.category == "loop" for d in res.diagnostics)
+
+
+def test_static_loop_no_risk_normal_while() -> None:
+    res = check_static(AQ, _algo_answer("i = 0\nwhile i < 10:\n    i += 1\n    print(i)\n"))
+    assert res.loop_risk is False
+    assert not any(d.category == "loop" for d in res.diagnostics)
+
+
+def test_static_loop_no_risk_container_method_mutation() -> None:
+    """`while dq:` + 循环内 dq.popleft() 是常见 BFS 终止模式，不应误报死循环。"""
+    res = check_static(AQ, _algo_answer(
+        "from collections import deque\ndq = deque([1])\n"
+        "while dq:\n    u = dq.popleft()\n    print(u)\n"
+    ))
+    assert res.loop_risk is False
+    assert not any(d.category == "loop" and d.severity == "warn" for d in res.diagnostics)
+
+
+def test_static_recursion_no_base_case() -> None:
+    res = check_static(AQ, _algo_answer(
+        "def fib(n):\n    return fib(n - 1) + fib(n - 2)\nprint(fib(5))\n"
+    ))
+    assert res.recursion_risk is True
+    assert any(d.category == "recursion" and d.severity == "warn" for d in res.diagnostics)
+
+
+def test_static_recursion_with_base_no_risk() -> None:
+    res = check_static(AQ, _algo_answer(
+        "def fib(n):\n    if n <= 1:\n        return n\n    return fib(n - 1) + fib(n - 2)\nprint(fib(5))\n"
+    ))
+    assert res.recursion_risk is False
+    assert not any(d.category == "recursion" for d in res.diagnostics)
+
+
+def test_static_evidence_block_only_warns() -> None:
+    from rex.executor.static_check import static_evidence_block
+
+    ok = check_static(AQ, _algo_answer("print(1)\n"))
+    assert static_evidence_block(ok) is None
+    bad = check_static(AQ, _algo_answer("while True:\n    pass\n"))
+    block = static_evidence_block(bad)
+    assert block is not None
+    assert "规则校验证据" in block
+
+
+def test_static_result_to_dict_roundtrip() -> None:
+    from rex.executor.static_check import static_result_to_dict
+
+    res = check_static(AQ, _algo_answer("while True:\n    pass\n"))
+    d = static_result_to_dict(res)
+    assert d["loop_risk"] is True
+    assert d["declared"] is None
+    assert any(x["category"] == "loop" for x in d["diagnostics"])
+
+
+def _static_q(prompt: str) -> QuestionItem:
+    return QuestionItem(id="X", scene="algorithm", title="t", prompt=prompt,
+                        difficulty="medium", source="self", standard_answer="")
+
+
+def test_static_boundary_negative_missing_detected() -> None:
+    """题目含负数但代码只用 max()（未真正处理负数）→ 应报 boundary warn。
+
+    回归保护：旧规则把 max() 当负数处理信号导致漏检（return max(a) 不报错）。
+    """
+    from rex.executor.static_check import check_static
+
+    q = _static_q("数组中可能含负数，求最大子数组和。")
+    res = check_static(q, _algo_answer("def f(a):\n    return max(a)\n"))
+    assert any(d.category == "boundary" and d.severity == "warn" for d in res.diagnostics)
+
+
+def test_static_boundary_negative_handled_no_warn() -> None:
+    """Kadane（负无穷初始化 + 比较）视为已处理负数 → 不报 boundary warn。"""
+    from rex.executor.static_check import check_static
+
+    q = _static_q("数组中可能含负数，求最大子数组和。")
+    code = ("def f(a):\n    cur = 0\n    best = -10**9\n"
+            "    for x in a:\n        cur = max(x, cur + x)\n"
+            "        best = max(best, cur)\n    return best\n")
+    res = check_static(q, _algo_answer(code))
+    assert not any(d.category == "boundary" and d.severity == "warn" for d in res.diagnostics)
+
+
+def test_static_boundary_empty_missing_detected() -> None:
+    from rex.executor.static_check import check_static
+
+    q = _static_q("若输入为空，返回空数组。")
+    res = check_static(q, _algo_answer("def f(n):\n    return sum(n)\n"))
+    assert any(d.category == "boundary" and d.severity == "warn" for d in res.diagnostics)
+
+
+def test_verifier_receives_static_evidence() -> None:
+    from rex.executor.static_check import check_static, static_evidence_block
+
+    agent = VerifierAgent(FakeHy3([
+        _verdict_json("PROCESS_INCORRECT", 0.8,
+                      [{"step_id": 1, "error_type": "logic", "detail": "死循环", "evidence": "while True"}]),
+        _verdict_json("PROCESS_INCORRECT", 0.7,
+                      [{"step_id": 1, "error_type": "logic", "detail": "死循环", "evidence": "while True"}]),
+    ]))
+    static = check_static(AQ, _algo_answer("while True:\n    pass\n"))
+    res = agent.verify(AQ, _algo_answer("while True:\n    pass\n"),
+                       static_evidence=static_evidence_block(static))
+    assert res.verdict == Verdict.PROCESS_INCORRECT
+    # 两个视角的 prompt 都应包含规则校验证据块
+    assert all("规则校验证据" in c for c in agent._client.calls[:2])

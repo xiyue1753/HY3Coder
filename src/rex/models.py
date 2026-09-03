@@ -109,6 +109,17 @@ class TestCase(BaseModel):
     hidden: bool = False  # hidden 用例不随仓库公开（评测时注入）
 
 
+class Judge(str, Enum):
+    """算法题判题模式。
+
+    - EXACT: 输出唯一，比对期望文本（含浮点容差，见 executor/tests.py）
+    - SPECIAL: 多解/构造题，跑 checker 判定输出是否满足题目谓词（SPJ）
+    """
+
+    EXACT = "exact"
+    SPECIAL = "special"
+
+
 class QuestionItem(BaseModel):
     """题集 JSONL 一条记录（data/questions/*.jsonl）。"""
 
@@ -124,6 +135,10 @@ class QuestionItem(BaseModel):
     reference_solution: str | None = None
     test_cases: list[TestCase] = Field(default_factory=list)  # 算法场景
     metadata: dict = Field(default_factory=dict)
+    # ---- 判题模式（多解构造题支持）----
+    judge: Judge = Judge.EXACT          # 默认精确比对；special 时走 checker
+    checker_code: str | None = None     # special 判定程序源码
+    checker_language: Literal["python", "cpp"] = "python"
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +154,7 @@ class EvalRecord(BaseModel):
     answer_correct: bool | None = None    # 沙盒/精确比对结果
     test_pass_rate: float | None = None   # 算法场景用例通过率
     verification: VerificationResult
+    static_check: dict | None = None      # 静态规则校验结果（static_check.py，作为补充诊断）
     # 有效性验证字段
     process_ok: bool | None = None        # 人工抽检/判定后回填
     located_step: int | None = None       # 实际出错步骤（人工抽检回填）
