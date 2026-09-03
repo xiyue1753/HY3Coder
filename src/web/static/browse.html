@@ -36,8 +36,8 @@
   <select id="source">
     <option value="">全部来源</option>
     <option value="AtCoder">AtCoder 自建</option>
+    <option value="Codeforces">Codeforces 自建</option>
     <option value="TACO">TACO</option>
-    <option value="CodeForces">CodeForces</option>
     <option value="自编">自编</option>
   </select>
   <button onclick="load(0)">加载</button>
@@ -52,6 +52,7 @@
 <script>
 let cur=0, total=0;
 const $=s=>document.querySelector(s);
+function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function renderMath(text){
   if(!text)return'';
   // 先提取公式（KaTeX）用占位符保护，再对剩余文本做 marked ——
@@ -100,9 +101,9 @@ async function load(offset){
       </div>
       <div class="sec"><div class="lb">题目</div><div class="body">${renderMath(q.prompt)}</div></div>
       <div class="sec"><div class="lb">标准答案</div><div class="body">${renderMath(q.standard_answer||'—')}</div></div>
-      <div class="sec"><div class="lb">参考解 ${hasRef?'':'（缺失）'}</div>${hasRef?`<pre class="code">${q.reference_solution}</pre>`:'<div class="muted">无参考解</div>'}</div>
+      <div class="sec"><div class="lb">参考解 ${hasRef?'':'（缺失）'}</div>${hasRef?`<pre class="code">${escapeHtml(q.reference_solution)}</pre>`:'<div class="muted">无参考解</div>'}</div>
       <div class="sec"><div class="lb">测试用例（${tcs.length}）</div>
-        ${tcs.map((tc,i)=>`<div class="tc"><b>#${i+1}</b>${tc.hidden?' [hidden]':''}<br>输入：<pre class="body">${tc.input}</pre>输出：<pre class="body">${tc.output}</pre></div>`).join('')||'<div class="muted">无测试用例</div>'}
+        ${tcs.map((tc,i)=>`<div class="tc"><b>#${i+1}</b>${tc.hidden?' [hidden]':''}<br>输入：<pre class="body">${escapeHtml(tc.input)}</pre>输出：<pre class="body">${escapeHtml(tc.output)}</pre></div>`).join('')||'<div class="muted">无测试用例</div>'}
       </div>
       <div class="meta"><b>分层依据：</b>${q.layer_basis||'—'}<br><b>source_id：</b>${q.source_id||'—'}<br><b>metadata：</b>${JSON.stringify(q.metadata||{})}</div>
     </div>`;

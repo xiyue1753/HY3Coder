@@ -188,6 +188,7 @@ def report(out: Path = typer.Option(ROOT / "reports" / "REPORT.md")) -> None:
 def serve(port: int = 8000, host: str = "127.0.0.1") -> None:
     """启动评估仪表盘（FastAPI + 静态 SPA）。"""
     import uvicorn
+    sys.path.insert(0, str(ROOT / "src"))
     uvicorn.run("web.api:app", host=host, port=port, reload=False)
 
 
