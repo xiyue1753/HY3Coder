@@ -17,12 +17,15 @@
 ## 2. 架构总览
 
 ```
-data/questions（算法 707 / 数学 326，三档分层）
-        │  QuestionItem（题目/标准答案/测试用例/难度/来源/分层依据）
+data/questions（题集：公开集 + 自建，三档分层）
+        │  QuestionItem（题目/标准答案/测试用例/难度/来源/分层依据/判题模式）
+        │  公开集: algorithm.jsonl（TACO 350 活跃，CF 350 已 deprecated 弃用）
+        │          math.jsonl（MATH 326）
+        │  自建:   abc_selfbuilt.jsonl（AtCoder ABC 175 题，独立产线见 §3）
         ▼
 solver/  分步求解 Agent ──► Answer(steps[]+final_answer+code)
         │                     │
-        │                     ├─► executor/  沙盒执行+公开/隐藏用例+静态检查
+        │                     ├─► executor/  沙盒执行+公开/隐藏用例+静态检查+SPJ
         │                     │        （算法：测试通过率；数学：标准答案比对）
         ▼                     ▼
 verifier/  验证 Agent×2（自含性检查+全局回溯）──► VerificationResult
@@ -42,10 +45,16 @@ web/ 仪表盘（总览/单题回放/golden/抽检/交互式解题）  ·  cli.p
 
 | 场景 | 来源 | 许可 | 入库 | 分层映射 | 分层依据 |
 |---|---|---|---|---|---|
-| 算法 | TACO + CodeContests（agentica-org/DeepCoder-Preview-Dataset） | Apache-2.0 | 707 | difficulty∈{easy→basic, medium→medium, hard→hard} | 官方难度标签 |
+| 算法·公开集 | TACO（agentica-org/DeepCoder-Preview-Dataset） | Apache-2.0 | 350 活跃 | difficulty∈{easy→basic, medium→medium, hard→hard} | 官方难度标签 |
+| 算法·公开集(弃用) | CodeForces 镜像（同上源） | Apache-2.0 | 350 deprecated | — | 已标 metadata.deprecated，抽样/评测自动排除 |
+| 算法·自建 | AtCoder ABC（scripts/ingest_abc.py 抓取） | 竞赛题（抓题面+公开 AC 解） | 175 | 官方分值 100→basic, 200-400→medium, 500+→hard | 官方分值 + layer_basis |
 | 数学 | HuggingFaceH4/MATH | MIT | 326 | level∈{1,2→basic, 3,4→medium, 5→hard} | 官方难度等级 |
 
-分层抽样（`datasets/sampling.py`）：
+- 自建题产线（响应任务书"46 开"：公开集为主 + 自建补充）：
+  `ingest_abc.py`（抓题面+AC 解）→ 官方样例 + 人工边界用例（gen_hidden_cases.py，期望由参考解跑出）→ `abc_selfbuilt.jsonl`；
+  多解构造题以 `judge=special` 入库（SPJ checker，见 §5.5）。独立文件便于扩充，web/browse 合并展示；
+  进入 run-eval 前需并入评估池（见 §10 数据流说明）。
+- 分层抽样（`datasets/sampling.py`，自动过滤 deprecated）：
 
 | --sample | 算法（basic/medium/hard） | 数学（basic/medium/hard） |
 |---|---|---|
@@ -53,7 +62,7 @@ web/ 仪表盘（总览/单题回放/golden/抽检/交互式解题）  ·  cli.p
 | 10 | 5/3/2 | 3/4/3 |
 | 50 | 30/15/5 | 20/20/10 |
 | 100 | 100/100/100 | 100/100/74（池兜底） |
-| full | 全部 707 | 全部 326 |
+| full | 全部活跃（TACO 357 或并入自建后的池） | 全部 326 |
 
 - 抽样种子固定（默认 42），保证分档统计可复现。
 - 每档实际抽样数 = min(档位需求, 池内数量)，池不足时按池兜底。
@@ -121,6 +130,37 @@ class RefineRecord(BaseModel):
 | | boundary 边界条件 | 输入边界处理缺失 | 除零、空输入、0 值特例 |
 | | complexity 复杂度不达标 | 复杂度声明与实际不符 | 声明 O(n) 实际 O(n²)/O(2^n) |
 
+## 5.5 算法判题模式（executor/judge.py：exact vs special/SPJ）
+
+常规算法题输出唯一，判题用"期望文本比对"（`run_test_cases`，含浮点容差 1e-5）。
+但**构造/多解题**（如输出任意合法操作序列）没有唯一期望文本——官方样例只是众多
+合法解之一，与 AI 解文本不同不代表错误。这类题由 AtCoder/CF 用 **Special Judge** 判定。
+
+本系统在 `QuestionItem` 上以 `judge` 字段区分两模式：
+
+| judge | 含义 | 判题方式 |
+|---|---|---|
+| `exact`（默认） | 输出唯一 | 期望文本逐行比对 + 浮点容差 |
+| `special` | 构造/多解 | 跑 checker 判定"输出满足题目谓词" |
+
+- `checker_code`/`checker_language`：`special` 模式的判定程序（可信代码，Python/C++，
+  由人工为题目编写）。stdin 协议见 `executor/judge.py`：`原题输入\n@@REX_USER_OUTPUT@@\n被测输出`，
+  输出 `AC` 表示合法。
+- 接入点：① 评测 `run_test_cases(judge=..., checker_code=...)` ② 入库
+  `ingest_abc.py --judge special --checker-file ...`（此时自动找 AC 也用 checker 而非样例比对）。
+- checker 运行仍走沙盒（继承超时/输出上限），不信任输入输出内容。
+
+自建题 SPJ 清单（5 题，checker 在 `scripts/checkers/`）：
+- A1031 abc271_d Flip and Adjust（Yes/No + H/T 方案，DP 可达判定 + 方案校验）
+- A1072 abc315_e Prerequisites（输出依赖闭包的任意拓扑序）
+- A1076 abc299_e Nearest Black Vertex（Yes/No + 涂色串，候选域可行性判定 + BFS 校验）
+- A1103 abc216_c Many Balls（构造 A/B 操作序列到 N）
+- A1104 abc251_d At Most 3（构造 ≤300 砝码覆盖 [1,W]）
+
+存量扫描：algorithm.jsonl（公开集，已弃用标记）内 ~50 题命中 SPJ 特征词，
+不在本次处理范围；abc_selfbuilt 内 A1098 abc228_d 的 "one such" 为误报（指查询存在）。
+
+
 ## 6. 验证流程（src/rex/verifier/）
 
 1. **V1**：逐步自含性检查——每步 content 推导 conclusion 是否成立、deps 是否覆盖前置。
@@ -178,14 +218,20 @@ class RefineRecord(BaseModel):
 ## 10. 运行方式
 
 ```bash
-# 环境
-pip install -r requirements.txt
+# 环境（优先级：优先 tensor_env，其次 anaconda）
+#   D:\.conda\envs\tensor_env\python.exe  (Python 3.9, 推荐, run.ps1 默认)
+#   D:\ProgramData\anaconda3\python.exe   (Python 3.13, 备选)
+#   .\run.ps1 ...  统一入口；或 $env:REX_PYTHON=... 覆盖解释器
 # .env 提供 HY3_API_KEY / HY3_BASE_URL / HY3_MODEL
 
 # 评估模式（数据纯净）
 python -m src.cli run-eval --scene math --sample 5        # demo
 python -m src.cli run-eval --scene algorithm --sample 100 # 放大
 python -m src.cli run-eval --scene math --sample 100
+
+# 自建题（AtCoder 175 题）跑评估：先并入评估池再跑，或由脚本按文件加载
+#   例：python scripts/build_questions.py --include-selfbuilt   # 合并 abc_selfbuilt 进 algorithm.jsonl
+#   （自建题独立文件便于扩充；跑 run-eval 前需合并，web/browse 始终合并展示）
 
 # 修正模式（ReAct 闭环）
 python -m src.cli run-refine --scene math --sample 5 --max-rounds 3
@@ -201,8 +247,11 @@ python -m pytest tests/
 
 ## 11. 交付物清单
 
-- 源码（src/rex/ 模块化，tests/ 27 项单测）
-- 题集 data/questions/（算法 707 + 数学 326，含标准答案与分层依据）
+- 源码（src/rex/ 模块化，tests/ 63 项单测）
+- 题集 data/questions/：
+  - 公开集：algorithm.jsonl（TACO 350 活跃 + CF 350 deprecated + 自编 7）、math.jsonl（MATH 326）
+  - 自建：abc_selfbuilt.jsonl（AtCoder ABC 175 题，含参考解/用例/SPJ，按难度分层）
+  - 均含标准答案/参考解、分层依据（layer_basis）
 - Golden 样本库 data/golden/（15+8，含构造说明）
 - 评估结果 data/outputs/（eval/refine 严格分离，可断点续跑）
 - 分析报告 reports/（分层退化、错误分布、case 归因、修正前后对比、能力画像）

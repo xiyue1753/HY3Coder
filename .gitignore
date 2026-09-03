@@ -7,6 +7,8 @@ scripts/cf_login.py
 scripts/cf_cookie_test.py
 data/cases/cf_cookies*.json
 data/cases/ref_originals.json
+# 抓题中间缓存（题面 HTML 等，不入 git）
+data/cases/_batch*_prompts/
 
 # Python
 __pycache__/

@@ -385,4 +385,596 @@ src/web/static/
 
 ---
 
+## 任务 static-check：静态规则校验接入 pipeline（第 4 类验证手段落地）
+
+**状态**：✅ 已完成
+
+### 目标
+任务书要求"实现方式含规则校验"。`static_check.py` 已有复杂度声明一致性 + 边界启发式，但**未被 pipeline 调用**（规则校验手段未落地）。本次：① 扩展死循环/递归无终止检测；② 作为 verifier 的**补充诊断源**接入 eval 链路；③ 补测试。
+
+### 实现逻辑
+
+**1. 死循环检测（`static_check.py` 新增 `_loop_and_recursion_diagnostics`）**
+- `while True:` 且循环体内无 `break` → `loop_risk=True`（warn）
+- `while <cond>:` 条件依赖的变量在循环体内未被赋值更新（启发式，排除嵌套循环与函数定义干扰）→ `loop_risk=True`（info）
+- 正常 `while i < n: i += 1` 不误报
+
+**2. 递归无终止检测**
+- 函数存在对自身的调用，且**所有 return 都是递归路径**（如 `def fib(n): return fib(n-1)+fib(n-2)`）→ `recursion_risk=True`（warn）
+- 存在非递归 return（如 `if n<=1: return n`）视为 base case → 不误报
+- 修正过程：初版"有任意 return 即安全"会漏检 `return fib(...)` 形式，改为"return 值含递归调用不算终止路径"
+
+**3. 接入 verifier（正交补充诊断，不改主判定）**
+- `VerifierAgent.verify(question, answer, static_evidence=None)`：`static_evidence` 为可选的规则校验证据块，作为**补充证据**附加到 V1/V2 两视角 prompt（`verify_user_prompt` 新增参数），verdict 仍由 LLM 判定独立决定
+- `static_evidence_block(result)`：仅在有 warn 级诊断/复杂度不匹配/死循环/递归风险时返回非空证据块，无告警返回 None（不污染正常样本）
+- `Pipeline._eval_one`：求解后调用 `check_static(q, answer)`，证据块传入 `verifier.verify`，原始结果存 `EvalRecord.static_check`（dict，可持久化）
+
+### 输入 / 输出
+- 输入：`QuestionItem + Answer`（含 code）
+- 输出：`StaticCheckResult`（declared/estimated/mismatch/diagnostics/loop_risk/recursion_risk）；`EvalRecord.static_check` 序列化 dict
+
+### 调用文件
+- `src/rex/executor/static_check.py`：检测逻辑 + `static_result_to_dict` + `static_evidence_block`
+- `src/rex/verifier/agent.py`：`verify` / `_verify_view` 支持 `static_evidence`
+- `src/rex/verifier/prompts.py`：`verify_user_prompt` 支持 `static_evidence`
+- `src/rex/pipeline.py`：`_eval_one` 调用 check_static 并落盘
+- `src/rex/models.py`：`EvalRecord` + `static_check: dict | None`（向后兼容）
+
+### 验证
+- 新增 8 项 static-check 测试（死循环 while True / 条件变量不更新 / 正常 while 不误报 / 递归无 base / 递归有 base 不误报 / evidence 块仅 warn / dict 序列化 / verifier 收到证据）
+- 新增 1 项 pipeline 集成测试（算法场景 EvalRecord 落盘 static_check，持久化可读回）
+- 全量 **58 项测试通过**，lint 干净
+- 设计约束：静态校验是启发式诊断，**不阻塞、不改变 verifier 判定**，符合任务书"规则校验与分步 LLM 审查等多手段正交"要求
+
+---
+
+## 任务 selfbuilt-questions-AtCoder：自建题扩充（AtCoder ABC，10 题）
+
+**状态**：✅ 已完成（AtCoder 部分）
+
+### 目标
+呼应"公开集为主+自建补充（46开）"：CodeForces 改由自建覆盖后，AtCoder ABC 作为自建题主力扩充。本次从 3 题扩到 **10 题**，按算法类型均匀覆盖：模拟、DFS、二分、双指针、数学枚举、树、DP、前缀和计数、排序贪心。
+
+### 实现逻辑
+
+**1. `ingest_abc.py` 增强（自动抓取 + 样例验证）**
+- **cookie 隔离**：`ATCODER_REVEL_SESSION` 经项目根 `.env` 读取（gitignore 排除），`load_dotenv` 加载，不落盘不入 git
+- **请求限速**：`_get()` 统一入口，每次请求固定间隔 2 秒，避免封号
+- **题面抓取**：`fetch_problem()` 提取英文题面（lang-en），`_html_to_text` 修正块级标签换行（避免 "StatementYou" 粘连）
+- **样例提取**：`extract_samples()` 从题面正则提取 (input, output) 对
+- **自动找 AC**：`find_ac_with_verification()` 翻页从 `status/json` 拿候选 AC id → 抓代码 → **用题面样例沙盒验证**，通过才采用
+- **入库**：`QuestionItem`（source="AtCoder-自建"，含 reference_solution + test_cases）
+
+### 流程规则（本任务沉淀，批量抓取通用）
+1. **AtCoder `status/json` API 的 `f.Task` 筛选不生效**（实测返回全局最近 AC 提交）→ 必须"抓候选 + 题面样例沙盒验证"，不能用 API 按题筛选
+2. **部分分 AC 提交混入**（Score 200/300）→ 样例验证自动跳过输出不符/编译失败的提交
+3. **老 ABC 比赛（~abc1xx）CD 题名为 `arcXXX_a/b`**（如 abc098_c=arc098_a）→ 选题优先用较新 ABC，task id 与比赛一致
+4. **Windows GBK 控制台打印非 ASCII 编译错误会崩溃** → 脚本开头 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`
+5. **隐藏用例期望值不能手算**（易错）→ 用**已验证 AC 解的输出**作为期望值（通过官方样例的正解算隐藏边界）
+
+### 题集现状（data/questions/abc_selfbuilt.jsonl，10 题）
+
+| id | source_id | 类型 | 难度 | 用例 | 通过率 |
+|---|---|---|---|---|---|
+| A1001 | abc161_d | DFS | medium | 8 | 100% |
+| A1002 | abc328_b | 模拟 | medium | 6 | 100% |
+| A1003 | abc139_a | 模拟/字符串 | basic | 6 | 100% |
+| A1004 | abc248_d | 二分/预处理 | medium | 6 | 100% |
+| A1005 | abc229_d | 双指针/贪心 | medium | 8 | 100% |
+| A1006 | abc330_c | 数学/枚举 | medium | 7 | 100% |
+| A1007 | abc148_f | 树/距离 | hard | 6 | 100% |
+| A1008 | abc088_b | 排序/贪心 | basic | 6 | 100% |
+| A1009 | abc248_c | DP | hard | 7 | 100% |
+| A1010 | abc330_d | 前缀和/计数 | medium | 6 | 100% |
+
+### 调用文件
+- `scripts/ingest_abc.py`（增强）：`fetch_problem` / `extract_samples` / `find_ac_with_verification` / `_get`（限速+cookie）
+- `data/cases/*_cases.json`（7 份新增用例文件）
+- `data/questions/abc_selfbuilt.jsonl`（10 条）
+- `.env`：`ATCODER_REVEL_SESSION`（本地隔离）
+
+### 验证
+- 10 题参考解全部通过各自测试用例（100%）
+- 每道 AC 提交都经题面样例沙盒验证（非手写、非猜测）
+
+---
+
+## 任务 selfbuilt-questions-AtCoder-批量：第一轮扩充（10→27 题）
+
+**状态**：✅ 已完成（第一轮 17 题，含 3 题批量流程问题修复）
+
+### 目标
+按用户口径：自建总量=公开集 350，AtCoder:CF=5:5（各 175），每轮 1/10（~17 题）在 browse 页展示。本轮 AtCoder 从 10 题扩到 **27 题**，类型覆盖：BFS计数/0-1BFS/树DFS/并查集×2/栈/DP×3/数论/贪心区间/判环/有序集合/字符画/前缀和/模拟集合/博弈DP。
+
+### 新增脚本
+- `scripts/batch_ingest_abc.py`：批量入库 runner（题单 PLAN + 逐题 auto-ac + 失败容错 + **source_id 去重防重复入库**）
+
+### 关键坑与修复（本轮沉淀的流程规则）
+
+1. **`status/json` API 完全不可用**：`f.Task`/`page` 参数**全部失效**，永远返回固定 20 条全局 AC 提交 → **改用提交列表页 HTML**（`/contests/{contest}/submissions?f.Task=..&f.Status=AC&f.User=`，带 cookie 时服务端渲染，`f.Task` 筛选生效）。这是本轮**最大突破**，老比赛从"翻 5 页 100 条碰不到"变为"一次命中"。
+2. **预筛跳过垃圾提交**：非 C++（无 `#include`）/ >15KB 巨型模板 / 依赖 `atcoder/` 库（本机无）→ 直接跳过，**省掉大量无效编译**（编译是大头耗时）。
+3. **Windows GBK 打印崩溃**：脚本开头 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`。
+4. **样例比对 \r 差异**：题面 HTML 可能残留 CRLF → `extract_samples` 和 `verify_code_with_samples` 统一 `\r\n`→`\n`。
+5. **run_test_cases 尾空白**：不同 AC 提交可能多打尾随空格 → 比对统一 `rstrip()`（多数 OJ 忽略行尾空白），这是合理的判题健壮性增强。
+6. **重复入库防护**：`batch_ingest_abc.py` 检查 `source_id` 已存在则跳过。
+7. **失败容错**：单题失败不中断批量，最后汇总"需人工提供 submission id"清单。
+
+### 当前题集（27 题，全部参考解通过测试用例）
+- 类型：17 种算法类型均匀覆盖；难度：basic 3 / medium 17 / hard 7
+- 每道 AC 提交经题面样例沙盒验证 + 自建 cases 全绿
+- browse 页（`http://127.0.0.1:8000/browse`，筛选 "AtCoder 自建"）可查看每道题的题面/参考解/测试用例/类型标签（metadata.type）
+
+### 调用文件
+- `scripts/ingest_abc.py`：`iter_ac_submissions` 改为解析提交列表页 HTML + `_prescreen_cpp` 预筛 + 样例 \r 归一
+- `scripts/batch_ingest_abc.py`：批量 runner（新）
+- `src/rex/executor/tests.py`：`run_test_cases` 比对改为 `rstrip()`（尾空白容差）
+- `data/cases/*_cases.json`（17 份）、`data/questions/abc_selfbuilt.jsonl`（27 条）
+
+### 验证
+- 27 题参考解 100% 通过测试用例
+- 全量 pytest 58 项通过
+
+---
+
+## 修复：超长模板参考解重写（A1010/A1013/A1014/A1017/A1018）
+
+**状态**：✅ 已完成
+
+### 背景
+批量抓取"第一个通过样例的 AC 提交"时命中了**巨型竞赛模板库**提交（几十个 include + atcoder/pb_ds 库 + 宏），虽能运行但作为"标准答案/参考解"不可读。用户指出 A1010（9988 字符）违反"参考解=可读清晰版"规则。
+
+### 处理
+新增 `scripts/rewrite_long_refs.py`，为 5 题**手写清晰版**参考解（保留原 AC 解核心算法，去掉模板壳），沙盒验证通过全部用例：
+
+| id | source_id | 原长度 | 重写后 | 算法 |
+|---|---|---|---|---|
+| A1017 | abc230_d | 66147 | 634 | 按 R 排序贪心最小拳击 |
+| A1010 | abc330_d | 9988 | 1393 | 4 方向 o 计数 |
+| A1013 | abc277_e | 9179 | 1246 | 0-1 BFS 开关图 |
+| A1018 | abc285_d | 8672 | 778 | DFS 判环 |
+| A1014 | abc283_d | 7891 | 684 | 括号栈 + 字母集合 |
+
+### 流程规则补充
+1. **入库时应设参考解长度上限**（如 ≤3KB），超长模板提交应跳过换下一条；本次为事后补救。
+2. `batch_ingest_abc.py` 预筛 `_prescreen_cpp` 已有 >15KB 跳过，但部分题命中 7-10KB 的"中型模板"仍超标 → 阈值应下调并加"重写兜底"。
+
+### 调用文件
+- `scripts/rewrite_long_refs.py`（新）
+- `data/questions/abc_selfbuilt.jsonl`（5 题参考解更新）
+
+### 验证
+- 5 题重写后全部通过测试用例；27 题总计 100% 通过
+
+---
+
+## 修复：AtCoder 自建题补充隐藏边界测试用例（80 隐藏）
+
+**状态**：✅ 已完成
+
+### 背景
+用户指出测试用例偏少（这轮 17 题入库时 cases 大多只含官方样例，隐藏用例近 0），不满足任务书"含难例与反例、可自动校验"要求。
+
+### 实现
+新增 `scripts/gen_hidden_cases.py`：
+- 为 17 题（A1011~A1027）各设计 **3~5 个合法边界输入**（最小规模 N=1/空、极端值、关键分支如自环/链/星形/菱形/重叠区间/跨层括号等）
+- **期望输出由已验证的参考解自动生成**（参考解已过官方样例；避免手算错）
+- 追加为 `hidden=true` 用例写入 jsonl
+
+### 人工抽检（防止"参考解错→错误期望被固化"）
+抽查 8 道题 20+ 边界期望值，全部人工验证合理（如 `abc292_d: 1 0→No`、`abc283_d: (a(b)a)→No`、`abc211_d: 菱形→2`、`abc235_d: 3 3→1`）。
+
+### 验证
+- 27 题参考解通过**全部 160 个用例**（公开 80 + 隐藏 80），100%
+- 全量 pytest 58 项通过
+
+### 调用文件
+- `scripts/gen_hidden_cases.py`（新）
+- `data/questions/abc_selfbuilt.jsonl`（测试用例扩充）
+
+---
+
+## 任务 selfbuilt-questions-AtCoder-第2轮：扩充（27→44 题）
+
+**状态**：✅ 已完成
+
+### 目标
+按每轮 1/10（17 题）节奏继续扩充 AtCoder 自建题，**优先新算法类型**。本轮新增 17 题（A1028~A1044），累计 44 题。
+
+### 新增题与类型（17 种新类型）
+质数/数论、gcd/数论、网格BFS、多源BFS、DP背包、DP选择、DP规划、DP环计数、BFS字符串、字符串LCP、DFS划分、组合计数、优先队列、滑动窗口、二分+图、三分数学、DFS计数。
+
+### 关键技术点
+1. **`iter_ac_submissions` 已改解析提交列表页 HTML**（第 1 轮沉淀），本轮 17 题全部一次命中（偶发 status=500 重试后成功）。
+2. **边界输入设计要严格符合约束**：本次发现 `abc310_d` 隐藏用例误写 `T=0`（违反 `1≤T≤N`）→ 参考解崩溃（rc=3221225477）。排查后确认为**输入非法而非参考解 bug**，已删非法用例、用合法边界重生成。**规则：边界用例必须满足题目全部约束，尤其参数下限（如 T≥1、N 下限）**。
+3. **A1035 (abc310_d) 参考解重写**：原 AC 解对部分输入崩溃且写法易越界，重写为"组无标号去重 DFS"（927 字符，含 5 官方 + 3 合法隐藏全部通过）。
+
+### 验证
+- 44 题参考解通过全部 **260 个用例**（公开 127 + 隐藏 133），100%
+- 全量 pytest 58 项通过
+- 无超长模板参考解（最长 2306 字符）
+
+### 调用文件
+- `scripts/batch_ingest_abc.py`（PLAN 更新为第 2 轮）
+- `scripts/gen_hidden_cases.py`（新增第 2 轮边界输入）
+- `scripts/fix_a1035.py`（A1035 专项修复）
+- `data/questions/abc_selfbuilt.jsonl`（44 条）
+
+---
+
+## 任务 selfbuilt-questions-AtCoder-第3轮：扩充（44→78 题）+ 浮点容差支持
+
+**状态**：✅ 已完成
+
+### 目标
+第 3 轮 34 题（A/B 两批），类型：hard 为主（MST/Floyd/状压/第K小/期望DP/概率DP/二叉树等），当前 AtCoder 自建题累计 78 题。
+
+### 关键问题与修复
+1. **浮点输出题无法自动入库**（abc314_e 等）：官方样例期望 `215.913355350494384765625`（高精度），各 AC 提交打印位数不同，字符串比对必失败。
+   - **修复**：`verify_code_with_samples`（scripts/ingest_abc.py）与 `run_test_cases`（src/rex/executor/tests.py）的比对改为**浮点容差**——两侧同位置行都能解析为浮点数时，按相对/绝对误差 ≤1e-5 判定（AtCoder 浮点题判据）。普通文本仍精确逐行比对。
+   - 效果：abc314_e（Roulette）成功自动入库（A1078）。
+2. **超长模板参考解**：A1069/A1073/A1074（abc301_e 状压糖果、abc321_e 二叉树计数、abc323_e 概率DP）重写为清晰版并验证。
+3. **批量提速尝试**：用户提出"一次多执行"——网络限速不变，但减少轮次往返 overhead，本轮 34 题一次连续跑（A/B 两批）。
+
+### 验证
+- 78 题参考解通过各自用例 100%
+- pytest 58 项通过
+- 隐藏用例：第 1/2 轮已补（133 个）；第 3 轮 34 题待逐题补（用户选"逐题补分批慢做"）
+
+### 调用文件
+- `scripts/ingest_abc.py`（`_outputs_match` 浮点容差）
+- `src/rex/executor/tests.py`（`_text_match` 浮点容差）
+- `scripts/rewrite_long_refs3.py`（3 超长参考解重写）
+- `data/questions/abc_selfbuilt.jsonl`（78 条）
+
+---
+
+## 修复：第 3 轮 34 题隐藏用例补齐（78 题全部含隐藏）
+
+**状态**：✅ 已完成
+
+### 目标
+用户选择"逐题补，分批慢做"。为第 3 轮 34 题（A1045-A1078）逐个设计合法边界输入补隐藏用例，**防止 abc310_d（T=0 非法输入）重演**。
+
+### 流程（沉淀的规则）
+1. **设计输入前必须核对题目输入格式**（读 sample input 结构），不能凭直觉写。
+2. 每批先在 `scripts/gen_hidden_cases.py` 的 `BOUNDARY_INPUTS` 定义边界输入 → 跑脚本（参考解生成期望）→ **清理 output 为空的用例**（格式错误输入会导致参考解无输出/崩溃，这类用例必须删除）→ 去重（输入等于官方样例的隐藏项删除）。
+3. 期间发现的格式错误题（abc257_d/abc302_e/abc304_e/abc317_e/abc289_e/abc286_e 等图论/网格题）逐个对照官方样例修正。
+
+### 验证
+- 78 题参考解通过全部 **412 用例**（公开 216 + 隐藏 196），100%
+- 清理了 7 个输入与官方样例重复的隐藏用例、13 个空输出坏用例
+- pytest 58 项通过
+
+### 当前 AtCoder 自建题规模：78/175（还剩 ~97 题）
+
+---
+
+## 任务 selfbuilt-questions-AtCoder-第4轮：扩充（78→102 题）+ 隐藏用例补齐
+
+**状态**：✅ 已完成
+
+### 目标
+第 4 轮 24 题，**刻意补难度分层**（basic 4 + medium 12 + hard 8）与类型均匀
+（数学/构造/串/图/DP/模拟/数据结构），并把新题隐藏用例分批补齐。
+
+### 关键问题与修复
+1. **多解构造题无法入库**（abc216_c Many Balls、abc251_d At Most 3）：题目允许多种合法输出
+   （如 AABA 与 ABBA 都对），精确样例比对永远匹配不上 AC 提交 → **替换**为输出唯一的
+   abc255_d（排序/二分）、abc272_d（BFS/网格）。
+   **沉淀规则：入库前识别"多解构造题"（题面出现 "other acceptable outputs" 等），直接用样例验证不可行。**
+2. **500 偶发错误**：AtCoder submissions 页偶发 status=500 → `batch_ingest_abc.py` 加
+   `--retry 2`（重试间隔 8s），实际命中多题，重试后成功。
+3. 老比赛（abc196-284）提交页混入大量**其他题/非 C++/模板/atcoder 库依赖**提交，
+   靠样例验证逐条跳过，最终都能在 1-3 页内命中（代价是较多编译耗时）。
+
+### 验证
+- 102 题参考解通过全部 **536 用例**（公开 278 + 隐藏 258），100%
+- 第 4 轮 24 题全部入库并补隐藏用例（批 1-3，共 +62 隐藏；abc224_d/abc236_d 格式复杂保守保留官方样例）
+- 隐藏输入均合法（参考解跑出非空期望）；清理临时脚本
+- pytest 58 项通过
+
+### 当前 AtCoder 自建题规模：102/175（还剩 ~73 题）
+
+### 调用文件
+- `scripts/batch_ingest_abc.py`（PLAN 更新为第 4 轮 24 题 + `--retry`）
+- `scripts/gen_hidden_cases.py`（BOUNDARY_INPUTS 追加第 4 轮 22 题）
+- `data/questions/abc_selfbuilt.jsonl`（102 条）
+
+---
+
+## 功能：引入 Special Judge（checker），支持多解构造题
+
+**状态**：✅ 已完成
+
+### 背景
+第 4 轮发现 abc216_c/abc251_d 这类**多解构造题**（输出任意合法解，无唯一期望文本），
+文本比对永远判不了——这是评测体系缺 SPJ 机制，而非题目不该入。讨论后用户决定引入 checker。
+
+### 实现
+1. **模型**：`QuestionItem` 增加 `judge: Judge = exact|special`、`checker_code`、`checker_language`。
+2. **新模块 `src/rex/executor/judge.py`**：checker 执行协议——
+   stdin = `原题输入\n@@REX_USER_OUTPUT@@\n被测输出`；checker 输出 `AC` 表示合法。
+   `run_checker()` 复用沙盒（可信 checker 也隔离执行），`build/parse_split_stdin` 提供拼接/还原。
+3. **判题接入**：`run_test_cases(judge=, checker_code=, checker_language=)` 支持 special；
+   `pipeline._execute` 从 `q` 透传。
+4. **入库接入**：`ingest_abc.py` 加 `--judge special --checker-file`；SPJ 模式下自动找 AC
+   改用 checker 校验候选提交（替代样例文本比对）。
+5. **真实验证**：首两题入库 + 端到端通过：
+   - A1103 abc216_c Many Balls（checker: 模拟 A/B 序列到 N）
+   - A1104 abc251_d At Most 3（checker: bitset 验证 [1,W] 均可用 ≤3 砝码表示）
+   - 两题参考解 special pass=1.0、故意坏解 pass=0.0
+6. **存量扫描**：algorithm.jsonl 707 题中 ~50 题命中 SPJ 特征词；abc_selfbuilt 中
+   A1072 abc315_e、A1076 abc299_e 为真多解（题面写 "may print any"），A1098 abc228_d 误报。
+   → 后续需人工复核补 checker 或降级。
+
+### 验证
+- 新增 `tests/test_judge.py` 5 项（checker 接受多合法解 / 拒绝非法 / 端到端 special 判定）
+- pytest 63 项全绿
+- lint 无错误
+
+### 调用文件
+- `src/rex/models.py`（Judge 枚举 + QuestionItem 字段）
+- `src/rex/executor/judge.py`（新）
+- `src/rex/executor/tests.py`（run_test_cases 支持 special）
+- `src/rex/pipeline.py`（_execute 透传 judge/checker）
+- `scripts/ingest_abc.py`（CLI 加 SPJ 参数）
+- `scripts/checkers/abc216_c_checker.py`（入库内嵌，无独立文件）、`scripts/checkers/abc251_d_checker.cpp`
+- `DESIGN.md`（5.5 节判题模式）
+
+---
+
+## 存量自建题补 checker（SPJ 覆盖扩展到 5 题）
+
+**状态**：✅ 已完成
+
+### 范围决策
+用户指示：**公开集（algorithm.jsonl / CF350）不管**（已标记弃用），只处理自建题。
+
+### 全面扫描 abc_selfbuilt + cf_selfbuilt 的 SPJ 特征（"print any"/"may print any"/
+"any of them"/"multiple solutions"/"one such" 等），逐个人工复核确认：
+- **A1031 abc271_d Flip and Adjust** → 真多解（选 H/T 多种可行方案）→ 转 SPJ
+- **A1072 abc315_e Prerequisites** → 真多解（依赖闭包顺序可任意）→ 转 SPJ
+- **A1076 abc299_e Nearest Black Vertex** → 真多解（涂色方案不唯一）→ 转 SPJ
+- **A1098 abc228_d** → 误报（"one such" 指查询存在，输出确定）→ 不处理
+
+### 新增 checker（scripts/checkers/，均自测通过）
+| 题 | checker 判定策略 |
+|---|---|
+| abc271_d | DP 可达性判定（No 仅当不可达）；Yes 校验 H/T 串长+字符+求和==S |
+| abc315_e | 依赖闭包集合精确相等 + 拓扑序校验 |
+| abc299_e | 黑点候选域 C={v:∀i dist(p_i,v)≥d_i} 可行性判定（No 仅当无解）；Yes 用多源 BFS 逐约束核距 |
+| （既有）abc216_c / abc251_d | 见上一节 |
+
+### 顺带清理
+A1072/A1076 原先各有 2 个**非法格式隐藏用例**（如 `2 1\n0 1\n1 1` 违反 C_1≥1、
+`2 1 0\n1 2` 违反输入格式）——第 3 轮构造时格式错但未被发现。已删除，
+并为两题补了合法隐藏用例（构造合法依赖图/连通图）。A1031 hidden 用例合法保留。
+
+### 验证
+- 全自建题 104/104 参考解通过（总 545 用例，隐藏 263，SPJ 5）
+- pytest 63 项全绿
+- 每个 checker 均用「多解合法变体应 AC / 非法方案应 WA」自测
+
+### 调用文件
+- `scripts/checkers/abc271_d_checker.py`（新）
+- `scripts/checkers/abc315_e_checker.py`（新）
+- `scripts/checkers/abc299_e_checker.py`（新）
+- `data/questions/abc_selfbuilt.jsonl`（3 题 judge=special）
+- `DESIGN.md`（5.5 节清单更新）
+
+---
+
+## 任务 selfbuilt-questions-AtCoder-第5轮：扩充（104→128 题）+ 隐藏用例补齐
+
+**状态**：✅ 已完成
+
+### 目标
+第 5 轮 24 题，**进一步补难度分层**（basic 8 + medium 8 + hard 8），当前分布
+basic 17 / medium 69 / hard 42。场次全部用**未收录的 abc333-360**（提交列表干净，
+auto-ac 命中快，无老比赛混题问题）。
+
+### 关键点
+1. **预筛 SPJ**：候选 24 题抓题面时预检特征词，发现 abc347_d (Popcount and XOR)
+   命中 → 替换为 abc348_d (Medicines on Grid)。
+2. basic 题全选 c 题（数学/进制/映射/栈/位枚举等），medium 选图最短路/背包/哈希/计数，
+   hard 选数位 DP/环差分/双人 BFS/二分数学（网格题保守保留官方样例，未强补隐藏）。
+3. 隐藏用例分批补齐（批 1 basic 8、批 2 medium 8、批 3 hard 5 纯数/环题；
+   网格 hard abc339_d/348_d/351_d 格式复杂风险高，保留官方样例）。
+4. 修正 A1116 abc344_d 一个设计为"不可行"的隐藏输入（`abc\n1\n3 a b c`）为可行方案。
+
+### 验证
+- 128/128 题参考解通过全部 **666 用例**（隐藏 316），100%
+- pytest 63 项全绿
+- 无 SPJ 新增（本轮未遇多解构造）
+
+### 当前 AtCoder 自建题规模：128/175（还剩 ~47 题，约 2 轮）
+
+### 调用文件
+- `scripts/batch_ingest_abc.py`（PLAN 更新为第 5 轮 24 题）
+- `scripts/gen_hidden_cases.py`（BOUNDARY_INPUTS 追加第 5 轮 21 题）
+- `data/questions/abc_selfbuilt.jsonl`（128 条）
+
+---
+
+## 任务 selfbuilt-questions-AtCoder-第6轮：扩充（128→152 题）+ 隐藏用例补齐
+
+**状态**：✅ 已完成
+
+### 目标
+第 6 轮 24 题（场次 abc361-375，全部未收录），难度 basic 8 / medium 6 / hard 10。
+**用户策略确认**：先把 AtCoder 自编题整体流程跑到 175 目标规模，CodeForces 后续
+作为新数据源按同流程（ingest → cases → 参考解验证 → 隐藏用例）单独处理。
+
+### 关键点
+1. **SPJ 预筛前置**：抓候选 64 题标题时检测特征词，标出 abc362_c/362_f/364_c/364_e/
+   369_e/369_f/373_d 等疑似多解 → 全部避开。**误判澄清**：abc370_c (Word Ladder)
+   初看像多解（每步换一字符输出中间串），实际题面要求"字典序最小的最少元素序列"——
+   **解唯一**，exact 判定即可，无需转 SPJ。
+2. 隐藏用例分批补齐 57 个（basic 7 + medium 6 + hard 10；abc371_c 图同构构造复杂，
+   官方已有 5 样例，未强补）。
+3. auto-ac 偶发 500（abc367_d/375_d）由 `--retry 2` 自动重试成功。
+
+### 验证
+- 152/152 题参考解通过全部 **791 用例**（隐藏 373），100%
+- pytest 63 项全绿
+- 无 SPJ 新增
+
+### 当前 AtCoder 自建题规模：152/175（还剩 ~23 题，约 1 轮收尾）
+
+### 调用文件
+- `scripts/batch_ingest_abc.py`（PLAN 更新为第 6 轮 24 题）
+- `scripts/gen_hidden_cases.py`（BOUNDARY_INPUTS 追加第 6 轮 23 题）
+- `data/questions/abc_selfbuilt.jsonl`（152 条）
+
+---
+
+## 任务 selfbuilt-questions-AtCoder-第7轮：收尾（152→175 题，**175 满额达成**）
+
+**状态**：✅ 已完成
+
+### 目标
+第 7 轮 23 题（场次 abc376-395 未收录），补满 **175 题**（用户既定目标规模）。
+后续 CodeForces 将作为新数据源复用同一套 ingest/checker/隐藏用例流程。
+
+### 关键点
+1. **发现并修复 extract_samples 跨块吞内容 bug**：abc389_c 的 Sample Output 2 为
+   空代码块（后跟解释文字），原非贪婪正则 ``(.*?)`` 吞到下一个代码块导致样例错位，
+   auto-ac 永不匹配。修复：按 `### Sample` 分割 + 编号配对，空 input/output 块直接丢弃。
+   （修复同时惠及未来所有入库题。）
+2. abc389_c cases 文件手工修正（去掉错位的坏样例）。
+3. 预筛 SPJ：剔除 abc377_c/387_e/394_d/396_e/397_d 等疑似多解题。
+4. 隐藏用例补 37 个；复杂查询/网格题（abc379_d/385_d/386_d/395_d/383_e/384_e）
+   保守保留官方样例。
+
+### 验证
+- **175/175** 题参考解通过全部 **889 用例**（隐藏 411），100%
+- 难度分布：basic 33 / medium 82 / hard 60（分层合理）
+- SPJ 5 题；pytest 63 项全绿
+
+### AtCoder 自编题集：175/175 ✅（下一步：成规模跑整体流程 / CodeForces 复用流程）
+
+### 调用文件
+- `scripts/batch_ingest_abc.py`（PLAN 更新为第 7 轮 23 题）
+- `scripts/gen_hidden_cases.py`（BOUNDARY_INPUTS 追加第 7 轮 18 题）
+- `scripts/ingest_abc.py`（extract_samples 跨块修复）
+- `data/questions/abc_selfbuilt.jsonl`（175 条）
+
+---
+
+## 任务 doc-align：DESIGN.md 过时更新 + cli 支持自建题加载
+
+**状态**：✅ 已完成
+
+### 目标
+DESIGN/README 与代码现状脱节（题集规模、自建产线、环境写法过时），且自建 175 题无法直接跑 eval。
+
+### 实现逻辑
+1. DESIGN §2 架构图：题集描述更新为"公开集(TACO 350 活跃 + CF 350 deprecated) + math 326 + 自建 abc_selfbuilt 175"；executor 标注 SPJ。
+2. DESIGN §3 数据集表：拆 TACO/CF/自建/数学四行，自建注明 46 开产线与 SPJ；§10 运行方式补 `--questions`；§11 交付清单刷新（63 测试、175 自建题）。
+3. README 环境优先级：① tensor_env 3.9（run.ps1 默认）② anaconda 3.13（REX_PYTHON 覆盖）——与用户偏好一致。
+4. `cli.py`：run-eval/run-refine 增加 `--questions <file>`，可直接加载 abc_selfbuilt.jsonl 评估。
+
+### 验证
+- pytest 63 通过；`_load_questions("algorithm","full","hard",42,"abc_selfbuilt.jsonl")` 加载 60 hard 题。
+
+---
+
+## 任务 hard-eval：Hy3 hard 题实测（12 题）+ 修复"答案错却判 CORRECT"漏检
+
+**状态**：✅ 已完成
+
+### 背景
+用户要求对 hard 自建题实测 Hy3，观察失败效果。发现 .env 已有 HY3_API_KEY（此前检查只匹配 ATCODER 前缀漏看）。
+
+### 实测（12 道 hard 自建题，并发 2，真实调用 Hy3）
+- 答案准确率 58.3%（7/12），过程正确率 50%（6/12 CORRECT）
+- verdict 分布：CORRECT 6 / PROCESS_INCORRECT 2 / ANSWER_INCORRECT 4
+- 代表样本：A1013 答案对(pass=1.0)但判 PROCESS_INCORRECT——步骤1 题意误读（声称"无重边"而原题含 multi-edges），代码却用邻接表正确处理 → 双视角验证器抓出"过程描述错但实现碰巧对"。
+
+### 发现并修复的重大缺陷：verifier 不看沙盒结果 → 漏检
+- 现象：5 个样本（A1015/1024/1030/1039/1040）**答案全错（pass=0.0）但 verdict=CORRECT**。
+- 根因：`pipeline._eval_one` 先 `_execute`（沙盒）再 `verifier.verify()`，但 verify 的 LLM **看不到沙盒结果**，纯读代码判 CORRECT。
+- 修复：① pipeline 把沙盒结果格式化为 `execution_feedback` 喂给 verifier（prompt 明示"答案错不得判 CORRECT"）；② **程序化兜底**：answer_correct=False 且 verdict==CORRECT → 强制降级 ANSWER_INCORRECT。
+- 涉及：`pipeline.py`（`_execution_feedback` + 兜底）、`verifier/agent.py`、`verifier/prompts.py`。
+- 重跑验证：5 题中 4 题正确降级 ANSWER_INCORRECT、1 题（A1039）本次实际解对 → CORRECT 合理。
+- 测试更新：test_pipeline/test_runner 中 M001（答案错）预期从 CORRECT 改为 ANSWER_INCORRECT；pytest 67 全绿。
+
+### 全量 hard 实测（60/60 完成，真实调用 Hy3，累计 ~150 次模型调用）
+修复后补齐全部 60 道 hard 自建题，最终结果（eval_selfbuilt_hard.jsonl + smoke/fixverify 合并去重）：
+- **答案准确率 41.7%（25/60）**；**过程正确率 36.7%（22/60 CORRECT）**
+- verdict：CORRECT 22 / PROCESS_INCORRECT 10 / ANSWER_INCORRECT 28
+- **交叉统计完全自洽（修复后零矛盾样本）**：
+  - ans 错 + ANSWER_INCORRECT = 28（客观降级正确）
+  - ans 错 + PROCESS_INCORRECT = 7（答案错且过程有错）
+  - ans 对 + CORRECT = 22
+  - ans 对 + PROCESS_INCORRECT = 3（**沉默失败候选**）
+- 3 个沉默失败候选（答案全对但过程被验证器判错）：
+  - A1013 (abc277_e)：题意误读（称"无重边"，原题含 multi-edges）+ static loop 风险
+  - A1169 (abc383_e)：概念错误（diff 定义与使用不一致）
+  - A1171 (abc386_e)：复杂度分析错误（声明 ~10^7，K≈N 时实际 ~4e10）+ static complexity-mismatch 双重印证
+- 结论：hard 对 Hy3 足够有区分度（答案准确率 42%），且系统能检出 3 类"答案对但过程不成立"样本，评测链路端到端验证通过。
+
+### ⚠️ 重大纠错：执行层语言检测 bug（41.7% → 90.0%）
+人工核验时发现 A1065「AI 自测说通过公开用例但展示实际输出全空」。排查定位到**系统性 bug**：
+- **根因**：solver prompt 未限定输出语言，60 题中 32 题 AI 提交 **C++** 代码；但 `pipeline._execute` 调 `run_test_cases` **未传 language，默认按 Python 沙盒执行** → C++ 代码被 Python 解释器跑必然 stdout 为空 → 32 题全部 pass=0 被误判答案错，且 verifier 在"沙盒全败"错误反馈下给出一批错误的 ANSWER_INCORRECT。
+- **影响**：原报告「答案准确率 41.7%」**严重低估**，实际 **90.0%（54/60）**；23 个"ans 对却判 ANSWER_INCORRECT"矛盾样本由此而生。
+- **修复**：
+  1. `sandbox.py` 新增 `detect_language()`（含 `#include`/`using namespace` → cpp，否则 python）；
+  2. `pipeline._execute` 对提交代码自动检测语言传入 `run_test_cases`；
+  3. `make_exec_evidence.py` 同样自动检测（人工核验证据修正）。
+- **数据修正**（eval_selfbuilt_hard.jsonl 已重判重写）：客观字段沙盒重跑（正确语言）+ 29 个矛盾样本在正确执行反馈下重新 verify（真实 Hy3，分批完成）。
+- **修正后终值**：答案准确率 **90.0%（54/60）**，过程正确率 **70.0%（42/60 CORRECT）**；
+  verdict：CORRECT 42 / PROCESS_INCORRECT 13 / ANSWER_INCORRECT 5；
+  交叉零矛盾：ans错=6（5 AI + 1 PI），ans对=54（42 CORRECT + **12 PROCESS_INCORRECT 沉默候选**）。
+- 12 个沉默候选经抽查均为**真实过程缺陷**（非语言问题），如 A1024 解释 off-by-one 代码修正、A1030 误称"多源 BFS 每顶点至多入队一次"、A1073 `unsigned long long→int` 窄化隐患——这些恰是任务书要的"答案对但过程不成立"活样本。
+- **测试固化**：`test_sandbox.py` 新增 3 用例（detect_language python/cpp + C++ run_test_cases 自动判题）；pytest **72 全绿**。
+- **教训**：评测前未校验"代码语言×执行器"匹配，导致整批数据失真；抽检展示把 A1065 的 C++ 当 Python 跑 → stdout 空，恰好暴露此缺陷。
+
+### 抽检发现次生污染并清除（12 沉默候选 → 8）
+小规模人工抽检 A1068 时发现 verifier finding 引用"沙盒通过率 0%"，但实际 pass=1.0——语言 bug 修复时只 reverify 了"ans对但判 ANSWER_INCORRECT"的矛盾题，遗漏了"ans 对但判 PROCESS_INCORRECT 且 finding 基于 0% 错误反馈"的题。排查出 4 题污染（A1068/A1069/A1126/A1173，均引用 0%），reverify（正确反馈+新版 prompt）后：A1068/A1069/A1173/A1169 → CORRECT（确认污染），A1126/A1171 仍 PROCESS_INCORRECT（真缺陷），A1148 → SILENT_FAILURE（严格标出）。修正后硬档：答案率 90%（54/60）不变，过程率 76.7%（46 CORRECT）。
+
+### AtCoder 自建题集全量评测（175/175，basic 33 + medium 82 + hard 60）
+补测 basic+medium（`eval_selfbuilt_bm.jsonl`，resume 分批完成，185 次模型调用），交叉零矛盾、无语言污染：
+- **basic**（33）：答案率 93.9%（31），过程率 87.9%（29）
+- **medium**（82）：答案率 89.0%（73），过程率 86.6%（71）
+- **hard**（60）：答案率 90.0%（54），过程率 76.7%（46）
+- **总计 175 题：答案率 90.3%（158/175），过程率 83.4%（146/175）**
+- verdict 总分布：CORRECT 146 / PROCESS_INCORRECT 15 / ANSWER_INCORRECT 12 / SILENT_FAILURE 2
+- 提示：hard 档过程率（76.7%）明显低于 basic/medium（~87%），符合难度分层预期（hard 推理链更易出现缺陷）；含 4 个 SPJ 题（A1103/A1104/A1031/A1072）正常按 checker 判题。
+- 产物：`data/outputs/eval_selfbuilt_bm.jsonl`、`data/outputs/eval_selfbuilt_all.jsonl`、`reports/selfbuilt_report.html`（175 题全量展示）。
+
+### 人工抽检专项：修坏用例 + 编译兜底 + 回填（basic/medium 补充）
+小规模人工抽检扩展到 basic+medium 后执行三项修复（按序）：
+1. **坏用例修复（3 题 5 用例）**：核验发现 A1035/A1057/A1059 的隐藏用例字段与数据不符
+   （M/N/A 声明数 ≠ 实际行数），导致 AI 严格解析崩溃被判"答案错"，但参考解容错通过。
+   修复：`scripts/fix_bad_cases.py` 补齐合法输入 + 参考解重算期望（语义不变）。
+   **结果：3 题全部 ANSWER_INCORRECT → CORRECT（AI 代码本正确，系用例误杀）**；
+   medium 答案率 89.0% → 92.7%。**教训：隐藏用例生成需校验"声明数=实际行数"**。
+2. **编译失败定位兜底**：A1098（编译失败）findings 空。根因：① sandbox 对 python 语法/
+   运行错误不标记 error（仅 cpp 编译标记）→ 被当普通 WA 丢失诊断；② verifier 无程序化兜底。
+   修复：① `sandbox._run_proc` 非零退出时标记 error（python 语法/崩溃暴露）；② `pipeline._eval_one`
+   当 exec_err 是编译/运行失败且 verifier 未给 finding 时，程序化补 s4 finding。
+   测试：`test_compile_failure_gets_fallback_finding` + sandbox 变更；pytest 73 全绿。
+3. **抽检回填**：28 题人工判定回填 `audit_records.jsonl`（40 条，28 已判），跑 audit_metrics：
+   - **误报率 = 8.3%**（fp_n=12 中 A1104 误报，边缘样本）
+   - **定位命中：答案错且系统判过程错的 5 题全部 HIT（100%）**；全局口径 35.7% 偏低系
+     9 个答案错样本系统仅判 ANSWER_INCORRECT 未判过程错（口径语义，非定位不准）
+   - 命中明细与人工核验逐一一致。
+
+---
+
+## 任务 static-verify：static_check 规则有效性验证 + 修复两处漏检/误报
+
+**状态**：✅ 已完成
+
+### 实现逻辑
+1. 构造 4 类缺陷代码（死循环/递归无 base/复杂度不达标/while 条件不更新）+ 正确基线，对 5 道真实 hard 题验证 → **25/25 检出正确，无正确代码误报**。
+2. **修复负数边界漏检**：旧规则把 `max()`/`min()` 当负数处理信号，`return max(a)` 未处理负数却不报 warn → 改为正则检测 abs/与 0 比较/负字面量。
+3. **修复 while dq+popleft 误报**：BFS 常见 `while dq: dq.popleft()` 被判"条件变量不更新"死循环风险 → 新增"条件变量被方法调用修改(dq.popleft 等)"识别。
+
+### 验证
+- pytest 67 全绿（新增 4 个 static 边界/循环单测）；修复后 Kadane 正确代码不报 warn、BFS popleft 不误报。
+
+---
+
 <!-- 后续任务按此格式追加 -->

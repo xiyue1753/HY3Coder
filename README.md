@@ -1,6 +1,6 @@
 # ReAgents v2 — 可验证场景的过程评估与错误定位系统
 
-犀牛鸟实战任务 2 参赛作品。面向算法编程与数学解题两个可验证场景，构建"**分步求解 → 过程评估 → 错误定位归类 → 自我修正**"的完整闭环：给定一道题，系统产出结构化分步过程，自动判定推理链是否成立、定位错误起始步骤、归纳错误类型，并识别"**答案正确但过程不成立**"的沉默失败样本；验证反馈可回流驱动求解 Agent 迭代修订（ReAct 闭环），实现从"评测器"到"评测 + 增强"的应用闭环。
+犀牛鸟开源实战任务 2 参赛作品（个人/活动作品）。面向算法编程与数学解题两个可验证场景，构建"**分步求解 → 过程评估 → 错误定位归类 → 自我修正**"的完整闭环：给定一道题，系统产出结构化分步过程，自动判定推理链是否成立、定位错误起始步骤、归纳错误类型，并识别"**答案正确但过程不成立**"的沉默失败样本；验证反馈可回流驱动求解 Agent 迭代修订（ReAct 闭环），实现从"评测器"到"评测 + 增强"的应用闭环。本仓库为个人参赛作品，非腾讯官方发布。
 
 ## 核心能力
 
@@ -19,7 +19,8 @@
 ## 环境要求
 
 > 系统 `python` 是 WindowsApps 占位程序（调用会报 exit 9009），**不可用**。
-> 请使用 conda 虚拟环境 **`tensor_env`**（Python 3.9，含本项目全部依赖）。
+> 解释器优先级：① **`tensor_env`**（Python 3.9，推荐，run.ps1 默认）
+> ② anaconda base（Python 3.13，备选）。两者均已装好依赖。
 
 ```powershell
 # 1. 创建并激活 conda 环境（若尚未创建）
@@ -31,7 +32,8 @@ pip install -r requirements.txt
 > 说明：代码使用了 `X | None` 等 3.10+ 类型注解语法，在 Python 3.9 下依赖
 > `eval_type_backport`（已写入 requirements.txt）求值。
 
-**推荐用仓库自带的 `run.ps1` 统一调用**（自动使用 tensor_env 的 python，避免用错环境）：
+**推荐用仓库自带的 `run.ps1` 统一调用**（默认 tensor_env；备选 anaconda 时
+设 `$env:REX_PYTHON="D:\ProgramData\anaconda3\python.exe"` 覆盖）：
 
 ```powershell
 .\run.ps1 test              # 运行全部 pytest
@@ -66,11 +68,16 @@ copy .env.example .env
 .\run.ps1 exec -m src.cli audit --results data/outputs/eval_math.jsonl --sample 30
 .\run.ps1 serve        # 打开 http://127.0.0.1:8000
 
-# 7. 测试
+# 7. 自建 AtCoder ABC 题集评测 / 全量展示 / 抽检（真实 Hy3 调用）
+.\run.ps1 exec -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --resume --concurrency 4
+& D:\ProgramData\anaconda3\python.exe scripts/make_selfbuilt_report_html.py --records data/outputs/eval_selfbuilt_bm.jsonl --questions data/questions/abc_selfbuilt.jsonl --out reports/selfbuilt_report.html
+.\run.ps1 exec -m src.cli audit --results data/outputs/eval_selfbuilt_bm.jsonl --questions data/questions/abc_selfbuilt.jsonl --sample 30
+
+# 8. 测试
 .\run.ps1 test
 ```
 
-`--sample` 支持 `5 / 10 / 50 / 100 / full`，抽样种子固定（默认 42）保证可复现；`--resume` 断点续跑。
+`--sample` 支持 `5 / 10 / 50 / 100 / full`，抽样种子固定（默认 42）保证可复现；`--resume` 断点续跑。自建题评测结果追加写入 `data/outputs/eval_selfbuilt_*.jsonl`（与官方题集 `eval_{scene}.jsonl` 分离，互不污染）。
 
 ## 双模式与数据纯净性
 
@@ -91,8 +98,12 @@ copy .env.example .env
 | TACO（算法） | agentica-org/DeepCoder-Preview-Dataset | Apache-2.0 |
 | CodeContests（算法） | 同上 | Apache-2.0 |
 | MATH（数学） | HuggingFaceH4/MATH | MIT |
+| 自建 AtCoder ABC（算法） | AtCoder ABC 比赛原题 + AC 参考解 | 数据版权归 AtCoder，仅供研究 |
 
-题集（`data/questions/*.jsonl`）由上述数据集经 HuggingFace datasets 加载、字段归一化与三档分层后入库，含标准答案与分层依据，可复现（`scripts/build_questions.py`）。Golden 沉默失败样本为人工构造，`data/golden/`。
+题集（`data/questions/*.jsonl`）：
+- 公开集（`algorithm.jsonl` TACO/CodeContests、`math.jsonl` MATH）经 HuggingFace datasets 加载、字段归一化与三档分层后入库，含标准答案与分层依据，可复现（`scripts/build_questions.py`）；
+- **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题）**：由独立产线抓题面+AC 参考解+人工设计隐藏用例入库（`scripts/ingest_abc.py`，SOP 见 `docs/DATASET_BUILD_SOP.md`），难度按 ABC 分值映射三档，含 SPJ 多解构造题（checker 判题）；
+- Golden 沉默失败样本为人工构造，`data/golden/`。
 
 ## 目录结构
 
@@ -112,12 +123,15 @@ Hy3_APP2/
 │   └── metrics/   compute.py  stats.py
 ├── src/web/  api.py  static/index.html      # FastAPI 仪表盘
 ├── src/cli.py                               # typer 入口
-├── data/questions/  algorithm.jsonl(707) math.jsonl(326)
+├── data/questions/  algorithm.jsonl(707) math.jsonl(326) abc_selfbuilt.jsonl(175)
 ├── data/golden/     golden_algorithm.jsonl(15) golden_math.jsonl(8)
-├── data/outputs/    eval/refine 结果 + audit_records.jsonl
+├── data/outputs/    eval/refine 结果 + audit_records.jsonl（.gitignore 排除，可再生成）
 ├── scripts/         build_questions.py build_golden.py audit_sample.py check_answers.py
-├── reports/         分析报告 + demo 脚本
+│                    ingest_abc.py fix_bad_cases.py make_exec_evidence.py make_audit_review_md.py
+├── reports/         分析报告 + demo 脚本 + 自建题全量展示页(selfbuilt_report.html)
 └── tests/           pytest（FakeHy3 + 沙盒隔离 + refine 闭环）
+```
+方案文档见 `方案文档.md`；任务与设计文档 `DESIGN.md`；实现日志 `docs/IMPL_LOG.md`。
 ```
 
 ## 评估指标口径
