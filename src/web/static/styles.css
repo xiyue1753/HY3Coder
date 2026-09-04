@@ -119,3 +119,8 @@
   .phase-pill{padding:3px 10px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--sub);transition:.2s;white-space:nowrap}
   .phase-pill.active{color:#fff;border-color:var(--pri);background:linear-gradient(120deg,var(--pri),var(--pri2));box-shadow:0 0 10px var(--pri-ring)}
   .phase-pill.done{color:var(--ok);border-color:var(--ok-line);background:var(--ok-bg)}
+  /* 步骤逐张出现动画（模拟"逐段落生成"感知） */
+  @keyframes stepIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .step-in{animation:stepIn .35s ease both}
+  /* 置信度说明 tooltip */
+  .conf-help{cursor:help;border-bottom:1px dotted var(--line)}

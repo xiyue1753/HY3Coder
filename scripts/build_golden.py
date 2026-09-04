@@ -51,15 +51,17 @@ def gs(question: QuestionItem, flaw_type: ErrorType, note: str,
 def build_algorithm() -> list[GoldenSample]:
     S: list[GoldenSample] = []
 
-    # 1. 概念错误：1 被误判为质数；用例恰好从 2 开始
+    # 1. 概念错误：1 被误判为质数；约束 1≤n 使 n=1 成为合法输入，
+    #    但公开用例恰好只覆盖 n≥2（2/17/21），缺陷在用例上不暴露 → 静默失败有效
     q = algo_question(
-        "GA001", "判断整数 n(2≤n≤10^4) 是否为质数，是输出 yes，否则 no。", "yes",
+        "GA001", "判断整数 n(1≤n≤10^4) 是否为质数，是输出 yes，否则 no。", "yes",
         [("2", "yes"), ("17", "yes"), ("21", "no")],
     )
     S.append(gs(q, ErrorType.CONCEPT,
-        "陷阱把 1 当质数（is_prime 缺 n<2 分支），但公开/隐藏用例恰好 n≥2，答案全部正确",
+        "陷阱把 1 当质数（is_prime 缺 n<2 分支）。题目合法输入含 n=1，但公开/隐藏用例"
+        "恰好只覆盖 n≥2，故缺陷不触发、答案全部正确——过程却对合法输入 1 会答错",
         [
-            Step(id=1, kind="understand", content="n≥2", conclusion="n≥2", deps=[]),
+            Step(id=1, kind="understand", content="n∈[1,10^4]，质数需大于 1", conclusion="n≥1 为合法输入", deps=[]),
             Step(id=2, kind="approach", content="从 2 到 √n 试除即可判定质数", conclusion="试除法", deps=[1]),
             Step(id=3, kind="implement", content="for i in range(2,int(n**0.5)+1): if n%i==0: return no", conclusion="无因子则 yes", deps=[2]),
             Step(id=4, kind="selftest", content="n=2 无因子", conclusion="2 是质数", deps=[3]),

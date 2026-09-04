@@ -239,7 +239,7 @@ function renderInterimAnswer(ans){
   body.style.alignItems='stretch';body.style.justifyContent='flex-start';body.style.display='block';
   body.innerHTML=`<div class="flex items-center gap-2 mb-2"><span class="tag" style="color:var(--pri)">解答过程已生成</span>
     <span class="muted text-sm">等待过程评估完成，最终判定将更新于此</span></div>
-    ${steps.map(s=>`<div class="step-card" title="依赖：${(s.deps||[]).join(',')||'无'}">
+    ${steps.map((s,i)=>`<div class="step-card step-in" style="animation-delay:${i*0.12}s" title="依赖：${(s.deps||[]).join(',')||'无'}">
       <div class="k">${KIND_CN[s.kind]||s.kind} · STEP ${s.id}</div>
       <div class="mt-1">${renderMath(s.content)}</div>
       <div class="mt-1 text-sm" style="color:var(--pri2)">→ ${renderMath(s.conclusion)}</div></div>`).join('')||'<div class="muted">无步骤</div>'}`;
@@ -281,7 +281,7 @@ function renderFinalResult(d){
     html+=`<div class="mt-2 mb-2 text-sm">沙盒执行：
       <span style="color:${ex.test_pass_rate>=1?'var(--ok)':'var(--warn)'}">${ex.test_pass_rate==null?'—':Math.round(ex.test_pass_rate*100)+'% 通过'}</span>
       ${ex.error?`<span class="finding" style="margin-left:6px">${ex.error}</span>`:''}</div>`;}
-  html+=steps.map(s=>`<div class="step-card ${errIds.has(s.id)?'err':verdict.verdict==='CORRECT'?'ok':''}" title="依赖：${(s.deps||[]).join(',')||'无'}">
+  html+=steps.map((s,i)=>`<div class="step-card step-in ${errIds.has(s.id)?'err':verdict.verdict==='CORRECT'?'ok':''}" style="animation-delay:${i*0.08}s" title="依赖：${(s.deps||[]).join(',')||'无'}">
     <div class="k">${KIND_CN[s.kind]||s.kind} · STEP ${s.id}${errIds.has(s.id)?' · 检出错误':''}</div>
     <div class="mt-1">${renderMath(s.content)}</div><div class="mt-1 text-sm" style="color:var(--pri2)">→ ${renderMath(s.conclusion)}</div></div>`).join('')
     || '<div class="muted">无步骤</div>';
@@ -295,29 +295,70 @@ function renderFinalResult(d){
   const fEl=body.querySelector('#iFindings');
   if(fEl)fEl.innerHTML=findings.length
     ? findings.map(f=>`<div class="finding"><b>${TYPE_CN[f.error_type]||f.error_type}</b> · 第${f.step_id??'—'}步：${f.detail}</div>`).join('')
-    : `<div class="text-sm muted mt-2">未检出过程错误 · 置信度 ${(verdict.confidence??0).toFixed(2)}</div>`;
+    : `<div class="text-sm muted mt-2">未检出过程错误 · 置信度 ${(verdict.confidence??0).toFixed(2)}
+        <span class="mono" title="置信度 = 验证器对判定结果的自评确信度（0~1）：由 V1/V2 两视角独立审查后合并；同判取较高置信度，分歧则经仲裁决定。数值来自验证器，非统计置信区间。" style="cursor:help;border-bottom:1px dotted var(--line)">ⓘ</span>
+        <span class="muted">仲裁：${verdict.arbiter||'—'}</span>
+      </div>`;
 }
 function resetResultArea(){
+  UI_STAGE={mode:'eval', pills:null, cursor:-1};
   const body=$('#iResultBody');
   body.style.alignItems='center';body.style.justifyContent='center';
   body.innerHTML='结果将显示在这里';
   $('#iProgress').style.display='none';
   $('#iProgressSteps').innerHTML='';
   $('#iProgressElapsed').textContent='';
+  const spin=$('#iProgress .spin'); if(spin)spin.style.display='inline-block';
+  const mark=$('#iProgressMark'); if(mark)mark.style.display='none';
 }
-function setPhaseUI(phase, mode, elapsed){
-  $('#iProgress').style.display='block';
-  $('#iProgressMsg').textContent=PHASE_CN[phase]?('阶段：'+PHASE_CN[phase]):('阶段：'+phase);
-  if(elapsed)$('#iProgressElapsed').textContent=elapsed+'s';
+// 阶段推进状态：记录 refine 的轮次循环，保证徽章连续点亮
+let UI_STAGE={mode:'eval', pills:null, cursor:-1, render:0};
+function phaseIndex(phase, mode){
   const pills=mode==='refine'?PHASE_PILLS_REFINE:PHASE_PILLS_EVAL;
-  const idx=pills.indexOf(phase);
-  const doneIdx=idx>=0?idx:-1;
+  // solve/answer/execute/static/verify 及 revise-N/verify-N 归一化到 pills 下标
+  const norm=phase.replace(/-\d+$/,'');
+  const mapRefine={solve:0,answer:1,verify:2,revise:3}; // verify 归一后可能回跳（轮次）
+  const mapEval={solve:0,answer:1,execute:2,static:3,verify:4};
+  const map=mode==='refine'?mapRefine:mapEval;
+  if(phase==='verify'||phase==='verify-1'||phase==='verify-2'||phase==='verify-3')
+    return mode==='refine'?2:4;
+  if(map[norm]!==undefined)return map[norm];
+  return -1;
+}
+function advancePhaseUI(phase, mode, elapsed){
+  UI_STAGE.mode=mode;
+  $('#iProgress').style.display='block';
+  const idx=phaseIndex(phase, mode);
+  if(idx>=0)UI_STAGE.cursor=Math.max(UI_STAGE.cursor, idx);
+  $('#iProgressMsg').textContent='阶段：'+ (PHASE_CN[phase.replace(/-\d+$/,'')]||phase.replace(/-\d+$/,''))+(/-?\d+$/.test(phase)?'（第'+phase.split('-')[1]+'轮）':'');
+  if(elapsed)$('#iProgressElapsed').textContent=elapsed+'s';
+  renderPhasePills(mode);
+}
+function renderPhasePills(mode){
+  const pills=mode==='refine'?PHASE_PILLS_REFINE:PHASE_PILLS_EVAL;
   $('#iProgressSteps').innerHTML=pills.map((p,i)=>{
-    const cls=i<doneIdx?'phase-pill done':(i===doneIdx?'phase-pill active':'phase-pill');
+    const cls=i<UI_STAGE.cursor?'phase-pill done':(i===UI_STAGE.cursor?'phase-pill active':'phase-pill');
     let label=PHASE_CN[p]||p;
-    if(p==='revise')label='修正';
+    if(p==='revise'&&mode==='refine')label='修正';
     return `<span class="${cls}">${label}</span>`;
   }).join('');
+}
+function setPhaseUI(phase, mode, elapsed){
+  UI_STAGE.mode=mode;
+  $('#iProgress').style.display='block';
+  $('#iProgressMsg').textContent=phase==='done'?'评估完成':(PHASE_CN[phase]?('阶段：'+PHASE_CN[phase]):phase);
+  if(elapsed)$('#iProgressElapsed').textContent=elapsed+'s';
+  // done/failed：停止转圈，改为完成图标
+  const spin=$('#iProgress .spin');
+  if(spin)spin.style.display=(phase==='done'||phase==='failed')?'none':'inline-block';
+  const mark=$('#iProgressMark');
+  if(mark){
+    mark.style.display=(phase==='done'||phase==='failed')?'inline-flex':'none';
+    mark.style.color=phase==='done'?'var(--ok)':'var(--bad)';
+    mark.textContent=phase==='done'?'✓':'✕';
+  }
+  if(phase==='done')UI_STAGE.cursor=(mode==='refine'?PHASE_PILLS_REFINE:PHASE_PILLS_EVAL).length;
+  renderPhasePills(mode);
 }
 async function interact(){
   const btn=$('#iGo');btn.disabled=true;btn.textContent='求解中…';
@@ -336,17 +377,18 @@ async function interact(){
     const jobId=d.job_id;
     setPhaseUI('solve', d.mode, '');
     // 轮询状态（SSE 端点存在但轮询更简单稳定；两个端点可任选）
-    let finalPayload=null, phaseSeen=new Set();
+    let finalPayload=null, answerShown=false;
     for(let tries=0; tries<600; tries++){
-      await new Promise(res=>setTimeout(res,800));
+      await new Promise(res=>setTimeout(res,500));
       let st;
       try{ st=await (await fetch('/api/interact/job/'+jobId)).json(); }
       catch(e){ continue; }
-      if(st.phase && !phaseSeen.has(st.phase)){
-        phaseSeen.add(st.phase);
-        setPhaseUI(st.phase, d.mode, st.elapsed);
+      // 阶段按序推进：即使 execute/static 毫秒级被轮询跳过，
+      // 用"已到达阶段 → 之前的全部点亮"保证徽章顺序完整
+      if(st.phase && st.phase!=='done' && st.phase!=='failed'){
+        advancePhaseUI(st.phase, d.mode, st.elapsed);
       }
-      if(st.answer && !finalPayload) renderInterimAnswer(st.answer);   // B：先展示过程
+      if(st.answer && !answerShown){ answerShown=true; renderInterimAnswer(st.answer); }   // B：先展示过程
       if(st.result){ finalPayload=st.result; break; }
       if(st.status==='failed'){ throw new Error(st.error||'运行失败'); }
     }
