@@ -134,17 +134,44 @@ class CFBatch:
     def _goto_ready(self, url: str, tries: int = 15, delay: float = 2.0) -> None:
         """goto 并等待 Cloudflare challenge 消失。
 
-        headless=True 且仍被拦截 → 抛 CFChallengeError 止损；
-        headless=False（交互）→ 打印提示并等待用户手动完成验证框，通过后继续。
+        处理顺序：
+        1) 先按给定等待次数等 challenge 自动放行（CF 的 JS challenge 常自动过）；
+        2) 仍被拦截 → 截图存档 + headless 下自动延长等待并重载几次（尝试拿新
+           clearance）；仍失败抛 CFChallengeError；
+        3) headless=False（交互）→ 打印提示并等待用户手动完成验证框。
         """
         self.pg.goto(url, timeout=30000, wait_until="domcontentloaded")
         if self._wait_challenge_clear(tries, delay):
             return
+        self._snapshot_challenge(url)
         if self.headless:
+            # 自动再等一轮（CF JS challenge 可能几秒后自行放行），并重载一次
+            if self._wait_challenge_clear(20, 3.0):
+                print("[+] challenge 自动放行（等待后通过）")
+                return
+            try:
+                self.pg.reload(timeout=30000, wait_until="domcontentloaded")
+            except Exception:  # noqa: BLE001
+                pass
+            if self._wait_challenge_clear(15, 2.0):
+                print("[+] challenge 自动放行（reload 后通过）")
+                return
             raise CFChallengeError(
-                "Cloudflare 安全验证拦截：请先运行 scripts/cf_cookie_session.py "
-                "人工验证一次生成 cf_cookies.json，或用 --headed 交互模式")
+                "Cloudflare 安全验证拦截：已截图存档（data/cases/cf_challenge_*.png）。"
+                "请运行 scripts/cf_cookie_session.py 重新人工验证生成新 cookie，"
+                "或用 --headed 交互模式手动点击验证框。")
         self._resolve_challenge_human(url)
+
+    def _snapshot_challenge(self, url: str) -> None:
+        """把 challenge 页截图存档（便于确认验证类型/是否需人工点击）。"""
+        try:
+            d = Path(__file__).resolve().parents[1] / "data" / "cases"
+            d.mkdir(parents=True, exist_ok=True)
+            p = d / f"cf_challenge_{time.strftime('%Y%m%d_%H%M%S')}.png"
+            self.pg.screenshot(path=str(p), full_page=False)
+            print(f"[challenge] 验证页已截图存档: {p.name}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[challenge] 截图失败: {e}")
 
     def _wait_challenge_clear(self, tries: int, delay: float) -> bool:
         for _ in range(tries):
