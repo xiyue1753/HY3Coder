@@ -25,6 +25,13 @@ import sys
 import time
 from pathlib import Path
 
+# Windows 控制台默认 GBK：强制 UTF-8 输出，避免 ✓/… 等字符 UnicodeEncodeError
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:  # noqa: BLE001
+    pass
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from playwright.sync_api import sync_playwright  # noqa: E402
 
