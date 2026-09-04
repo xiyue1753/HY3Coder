@@ -64,7 +64,17 @@ def _is_answer_correct(r: EvalRecord) -> bool:
     return r.test_pass_rate is not None and r.test_pass_rate >= 1.0 and r.error is None
 
 
-def compute_metrics(records: list[EvalRecord]) -> MetricsReport:
+def compute_metrics(records: list[EvalRecord],
+                    formal_only: bool = False) -> MetricsReport:
+    """Compute aggregate metrics over eval records.
+
+    ``formal_only=True``：只统计正式评测（source="run-eval"），排除
+    source="interactive" 交互演示记录——保证仪表盘指标口径 = 正式评测。
+    旧实现把交互记录混入总览（交互样本无标准答案，污染指标），此参数用于
+    面板层启用过滤；批处理统计与测试保持默认不过滤（兼容）。
+    """
+    if formal_only:
+        records = [r for r in records if r.source == "run-eval"]
     if not records:
         return MetricsReport(n=0, answer_accuracy=0.0, process_correctness=0.0)
 

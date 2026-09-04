@@ -45,10 +45,24 @@ class RecordStore:
 
     All record I/O goes through here so that a single implementation provides
     consistent timestamps, source tagging, retrieval and retention.
+
+    ``eval_files``: 正式评测记录文件白名单（默认 ``("eval_selfbuilt_all.jsonl",)``，
+    ABC 自建 175 题全量）。过去绑定 ``eval_algorithm.jsonl``（旧 TACO 评测）的
+    做法已废弃——数据集按来源隔离命名（abc/cf/taco 各自独立评测文件）。
     """
 
-    def __init__(self, outputs_dir: str | Path) -> None:
+    #: 评测记录文件白名单。正式评测主数据源为 ABC 自建全量
+    #: `eval_selfbuilt_all.jsonl`（run-eval 记录）；交互演示记录
+    #: `eval_interactive.jsonl` 一并读取，供单题回放检索，但**指标口径
+    #: 由上层按 source="run-eval" 过滤**（见 metrics.compute）。过去绑定
+    #: `eval_algorithm.jsonl`（旧 TACO 评测）的做法已废弃——数据集按来源
+    #: 隔离命名（abc/cf/taco 各自独立评测文件）。
+    DEFAULT_EVAL_FILES = ("eval_selfbuilt_all.jsonl", "eval_interactive.jsonl")
+
+    def __init__(self, outputs_dir: str | Path,
+                 eval_files: tuple[str, ...] | None = None) -> None:
         self.outputs_dir = Path(outputs_dir)
+        self._eval_files = tuple(eval_files) if eval_files else self.DEFAULT_EVAL_FILES
         self._eval_cache: list[EvalRecord] | None = None
         self._eval_mtime: float = 0.0
 
@@ -60,22 +74,23 @@ class RecordStore:
         return self.outputs_dir / f"refine_{scene}.jsonl"
 
     # -- read ---------------------------------------------------------------
+    def _formal_eval_paths(self) -> list[Path]:
+        return [self.outputs_dir / f for f in self._eval_files]
+
     def load_evals(self, scene: str | None = None) -> list[EvalRecord]:
         # 缓存（带 mtime 失效）：避免重复请求时全量重读文件，显著提速
+        paths = self._formal_eval_paths()
         if self._eval_cache is not None:
             newest_mtime = max(
-                (self.eval_path(s).stat().st_mtime for s in self._scenes()
-                 if self.eval_path(s).exists()), default=0.0
+                (p.stat().st_mtime for p in paths if p.exists()), default=0.0
             )
             if newest_mtime <= self._eval_mtime:
                 if scene is None:
                     return self._eval_cache
                 return [r for r in self._eval_cache if r.scene == scene]
 
-        scenes = [scene] if scene else self._scenes()
         out: list[EvalRecord] = []
-        for s in scenes:
-            p = self.eval_path(s)
+        for p in paths:
             if p.exists():
                 for line in p.open(encoding="utf-8"):
                     if line.strip():
@@ -83,18 +98,15 @@ class RecordStore:
         if scene is None:
             self._eval_cache = out
             self._eval_mtime = max(
-                (self.eval_path(s).stat().st_mtime for s in self._scenes()
-                 if self.eval_path(s).exists()), default=0.0
+                (p.stat().st_mtime for p in paths if p.exists()), default=0.0
             )
         return out
 
-    @staticmethod
-    def _scenes() -> tuple[str, ...]:
-        """当前活跃场景（数学/MATH 已放弃，仅算法）。"""
-        return ("algorithm",)
+    #: refine 记录场景（数学/MATH 已放弃，仅算法）
+    REFINE_SCENES = ("algorithm",)
 
     def load_refines(self, scene: str | None = None) -> list[RefineRecord]:
-        scenes = [scene] if scene else self._scenes()
+        scenes = [scene] if scene else self.REFINE_SCENES
         out: list[RefineRecord] = []
         for s in scenes:
             p = self.refine_path(s)
@@ -106,9 +118,18 @@ class RecordStore:
 
     # -- append -------------------------------------------------------------
     def append_eval(self, rec: EvalRecord) -> None:
+        """落盘一条评估记录。
+
+        正式评测（source="run-eval"）追加到主评测文件（与 ``load_evals`` 同一文件，
+        保证 append→load 闭环一致）；交互演示（source="interactive"）独立写入
+        `eval_interactive.jsonl`，避免混入正式统计口径。
+        """
         if rec.created_at is None:
             rec.created_at = _now_iso()
-        p = self.eval_path(rec.scene)
+        if rec.source == "interactive":
+            p = self.outputs_dir / "eval_interactive.jsonl"
+        else:
+            p = self._formal_eval_paths()[0]
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
             f.write(rec.model_dump_json() + "\n")
@@ -211,8 +232,7 @@ class RecordStore:
             return len(to_remove_keys), 0
 
         removed = 0
-        for scene in self._scenes():
-            p = self.eval_path(scene)
+        for p in self._formal_eval_paths():
             if not p.exists():
                 continue
             keep_lines = []

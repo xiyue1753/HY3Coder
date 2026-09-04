@@ -66,6 +66,7 @@ def run_eval(
     retries: int = typer.Option(2, help="单题失败重试次数（0 禁用）"),
     concurrency: int = typer.Option(4, help="并发 worker 数（1=串行，2-4 建议）"),
     questions: str = typer.Option(None, help="直接指定题集文件（如 abc_selfbuilt.jsonl）"),
+    out: str = typer.Option(None, help="评测输出文件（默认正式主源 eval_selfbuilt_all.jsonl）"),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """一次性评测（评估模式）：solve → execute → verify，反馈不回流。"""
@@ -81,9 +82,10 @@ def run_eval(
 
     from rex.runner import EvalRunner
     runner = EvalRunner(cfg, retries=retries, concurrency=concurrency)
-    out = cfg.outputs_dir / f"eval_{scene}.jsonl"
-    records, costs = runner.run_eval(picked, out, resume=resume)
-    typer.echo(f"评估完成 {len(records)} 题 → {out}（模型调用 {costs['calls']} 次）")
+    # 正式评测默认写主数据源（ABC 自建全量记录文件），可用 --out 覆盖
+    out_path = cfg.outputs_dir / (out or "eval_selfbuilt_all.jsonl")
+    records, costs = runner.run_eval(picked, out_path, resume=resume)
+    typer.echo(f"评估完成 {len(records)} 题 → {out_path}（模型调用 {costs['calls']} 次）")
 
 
 @app.command()
@@ -95,6 +97,7 @@ def run_refine(
     seed: int = typer.Option(42),
     resume: bool = typer.Option(True),
     questions: str = typer.Option(None, help="直接指定题集文件（如 abc_selfbuilt.jsonl）"),
+    out: str = typer.Option(None, help="修正输出文件（默认正式 refine 主源 refine_selfbuilt_all.jsonl）"),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """修正模式（ReAct 闭环）：verify → feedback → revise → re-verify，限 N 轮。"""
@@ -110,9 +113,9 @@ def run_refine(
     from rex.pipeline import Pipeline
     pipe = Pipeline(cfg)
     pipe.refiner._max_rounds = max_rounds
-    out = cfg.outputs_dir / f"refine_{scene}.jsonl"
-    records = pipe.run_refine(picked, out, resume=resume)
-    typer.echo(f"修正运行完成 {len(records)} 题 → {out}")
+    out_path = cfg.outputs_dir / (out or "refine_selfbuilt_all.jsonl")
+    records = pipe.run_refine(picked, out_path, resume=resume)
+    typer.echo(f"修正运行完成 {len(records)} 题 → {out_path}")
     pipe.client.close()
 
 

@@ -47,7 +47,8 @@ app.add_middleware(
 
 def _load_questions() -> list[QuestionItem]:
     qs: list[QuestionItem] = []
-    for f in ("algorithm.jsonl", "abc_selfbuilt.jsonl", "cf_selfbuilt.jsonl"):
+    # 正式题集（algorithm.jsonl/TACO 已废弃为独立数据集命名，不在此列表）
+    for f in ("abc_selfbuilt.jsonl", "cf_selfbuilt.jsonl"):
         p = CFG.data_dir / "questions" / f
         if p.exists():
             qs += load_jsonl(p, QuestionItem)
@@ -60,7 +61,7 @@ def _load_evals() -> list[EvalRecord]:
 
 def _load_refines() -> list[RefineRecord]:
     out = []
-    for f in ("refine_algorithm.jsonl",):
+    for f in ("refine_selfbuilt_all.jsonl",):   # 正式 refine 主源（对应 ABC 全量）
         p = CFG.outputs_dir / f
         if p.exists():
             out += load_jsonl(p, RefineRecord)
@@ -77,8 +78,9 @@ def _dump(o):
 
 
 def _load_golden() -> list[GoldenSample]:
+    """合成陷阱库 + 真实评测检出库都纳入展示（来源以 sample 自带说明区分）。"""
     out = []
-    for name in ("golden_algorithm.jsonl",):
+    for name in ("golden_algorithm.jsonl", "golden_real_algorithm.jsonl"):
         p = CFG.data_dir / "golden" / name
         if p.exists():
             out += load_jsonl(p, GoldenSample)
@@ -89,7 +91,9 @@ def _load_golden() -> list[GoldenSample]:
 def summary() -> dict:
     evals = _load_evals()
     refines = _load_refines()
-    base = compute_metrics(evals) if evals else None
+    # formal_only：总览指标只统计正式 run-eval（交互演示不入统计口径）
+    formal = [r for r in evals if r.source == "run-eval"]
+    base = compute_metrics(evals, formal_only=True) if evals else None
     golden = _load_golden()
     return {
         "n": base.n if base else 0,
@@ -100,7 +104,7 @@ def summary() -> dict:
         "per_tier": {k: _dump(v) for k, v in (base.per_tier.items() if base else {})},
         "refine": _dump(refine_comparison(refines)) if refines else None,
         "golden_n": len(golden),
-        "last_run": evals[-1].created_at if evals else None,
+        "last_run": formal[-1].created_at if formal else None,
     }
 
 
