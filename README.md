@@ -6,11 +6,11 @@
 
 | 能力 | 说明 |
 |---|---|
-| 大规模分层题集 | 自建 AtCoder ABC 175 题（主推）+ TACO 350 题公开算法对照，按基础/中等/困难三档分层，附来源与可复现分层规则 |
+| 大规模分层题集 | 自建 AtCoder ABC 175 题（主推）+ Codeforces 自建抓取中，按基础/中等/困难三档分层，附来源与可复现分层规则 |
 | 分步求解 | 求解 Agent 产出结构化分步过程（每步含结论与前置依赖），自动提取可执行代码 |
 | 过程评估 | 逐步自含性检查 + 全局回溯两轮审查；两个独立验证视角交叉复核，不一致时仲裁 |
 | 错误定位归类 | 6 类基线（题意误读/概念错误/计算错误/条件遗漏/跳步推导/格式不符）+ 算法扩展（逻辑缺陷/边界条件/复杂度不达标） |
-| 沉默失败识别 | 人工构造 golden 样本库（算法 15 条，附构造说明），验证"答案对但过程错"的检出能力 |
+| 沉默失败识别 | golden 样本库（真实评测检出为主 + 合成展示样例，附构造/来源说明），验证"答案对但过程错"的检出能力 |
 | ReAct 自我修正 | eval 模式（一次性、反馈绝不回流，保证指标可信）+ refine 模式（反馈→修订→重验证，限 3 轮收敛） |
 | 可自动校验 | 算法沙盒执行公开+隐藏测试用例（Python/C++ 自动检测、SPJ 判题），复杂度/边界/死循环静态检查 |
 | 量化评估 | 答案准确率/过程正确率/定位命中率/误报率 + Wilson 置信区间 + 抽样稳定性验证 |
@@ -62,20 +62,22 @@ copy .env.example .env
 .\run.ps1 run-refine algorithm 5
 
 # 6. 答案校验 / 人工抽检 / 仪表盘
-.\run.ps1 exec -m src.cli check-answers --results data/outputs/eval_algorithm.jsonl
-.\run.ps1 exec -m src.cli audit --results data/outputs/eval_algorithm.jsonl --sample 30
+.\run.ps1 exec -m src.cli check-answers --results data/outputs/eval_selfbuilt_all.jsonl
+.\run.ps1 exec -m src.cli audit --results data/outputs/eval_selfbuilt_all.jsonl --sample 30
 .\run.ps1 serve        # 打开 http://127.0.0.1:8000
 
 # 7. 自建 AtCoder ABC 题集评测 / 全量展示 / 抽检（真实 Hy3 调用）
 .\run.ps1 exec -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --resume --concurrency 4
-& D:\ProgramData\anaconda3\python.exe scripts/make_selfbuilt_report_html.py --records data/outputs/eval_selfbuilt_bm.jsonl --questions data/questions/abc_selfbuilt.jsonl --out reports/selfbuilt_report.html
-.\run.ps1 exec -m src.cli audit --results data/outputs/eval_selfbuilt_bm.jsonl --questions data/questions/abc_selfbuilt.jsonl --sample 30
+& D:\ProgramData\anaconda3\python.exe scripts/make_selfbuilt_report_html.py --records data/outputs/eval_selfbuilt_all.jsonl --questions data/questions/abc_selfbuilt.jsonl --out reports/selfbuilt_report.html
+.\run.ps1 exec -m src.cli audit --results data/outputs/eval_selfbuilt_all.jsonl --questions data/questions/abc_selfbuilt.jsonl --sample 30
 
 # 8. 测试
 .\run.ps1 test
 ```
 
-`--sample` 支持 `5 / 10 / 50 / 100 / full`，抽样种子固定（默认 42）保证可复现；`--resume` 断点续跑。自建题评测结果追加写入 `data/outputs/eval_selfbuilt_*.jsonl`（与官方题集 `eval_{scene}.jsonl` 分离，互不污染）。
+`--sample` 支持 `5 / 10 / 50 / 100 / full`，抽样种子固定（默认 42）保证可复现；`--resume` 断点续跑。
+评测结果默认写 **正式主源 `data/outputs/eval_selfbuilt_all.jsonl`**（文件位置由数据源注册中心
+`src/rex/datasource.py` 统一声明，`--out` 可覆盖；映射与变更指南见 `docs/DATA_SOURCE_MAP.md`）。
 
 ## 双模式与数据纯净性
 
@@ -98,9 +100,11 @@ copy .env.example .env
 | 自建 AtCoder ABC（算法·主推） | AtCoder ABC 比赛原题 + AC 参考解 | 数据版权归 AtCoder，仅供研究 |
 
 题集（`data/questions/*.jsonl`）：
-- 公开集（`algorithm.jsonl` TACO/CodeContests）经 HuggingFace datasets 加载、字段归一化与三档分层后入库，含标准答案与分层依据，可复现（`scripts/build_questions.py`）；
-- **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题）**：由独立产线抓题面+AC 参考解+人工设计隐藏用例入库（`scripts/ingest_abc.py`，SOP 见 `docs/DATASET_BUILD_SOP.md`），难度按 ABC 分值映射三档，含 SPJ 多解构造题（checker 判题）；
-- Golden 沉默失败样本为人工构造，`data/golden/`。
+- **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题，主推）**：由独立产线抓题面+AC 参考解+人工设计隐藏用例入库（`scripts/ingest_abc.py`，SOP 见 `docs/DATASET_BUILD_SOP.md`），难度按 ABC 分值映射三档，含 SPJ 多解构造题（checker 判题）；
+- **自建集 `cf_selfbuilt.jsonl`（Codeforces 抓取中）**：同产线，参考解抓取与校验进行中；
+- TACO/CodeContests 公开镜像题集曾以 `algorithm.jsonl` 命名，2026-09 起废弃该命名（数据隔离，未来按独立数据集如 `taco` 注册），不再进入仪表盘/统计；
+- Golden 沉默失败样本库 `data/golden/`：`golden_real_algorithm.jsonl`（真实评测检出，主）+ `golden_algorithm.jsonl`（2 条合成展示样例）。
+- **数据文件位置统一见 `docs/DATA_SOURCE_MAP.md`（注册中心 `src/rex/datasource.py`）。**
 
 ## 目录结构
 
@@ -111,6 +115,7 @@ Hy3_APP2/
 ├── requirements.txt
 ├── .env.example             # Hy3 接入样例（真实密钥存 .env，不入库）
 ├── src/rex/
+│   ├── datasource.py  # 数据源注册中心（唯一权威，改数据源只动这里）
 │   ├── hy3_client.py  config.py  models.py  pipeline.py
 │   ├── datasets/  loader.py  sampling.py  schema.py
 │   ├── solver/    agent.py  prompts.py
@@ -120,15 +125,17 @@ Hy3_APP2/
 │   └── metrics/   compute.py  stats.py
 ├── src/web/  api.py  static/index.html      # FastAPI 仪表盘
 ├── src/cli.py                               # typer 入口
-├── data/questions/  algorithm.jsonl(350) abc_selfbuilt.jsonl(175)
-├── data/golden/     golden_algorithm.jsonl(15)
-├── data/outputs/    eval/refine 结果 + audit_records.jsonl（.gitignore 排除，可再生成）
-├── scripts/         build_questions.py build_golden.py audit_sample.py check_answers.py
-│                    ingest_abc.py fix_bad_cases.py make_exec_evidence.py make_audit_review_md.py
-├── reports/         分析报告 + demo 脚本 + 自建题全量展示页(selfbuilt_report.html)
+├── data/questions/  abc_selfbuilt.jsonl(175) cf_selfbuilt.jsonl(46)
+├── data/golden/     golden_real_algorithm.jsonl(2) golden_algorithm.jsonl(2)
+├── data/outputs/    eval_selfbuilt_all.jsonl(175, 正式主源) + audit_records.jsonl
+│                    （.gitignore 排除，可再生成；历史分片归档于 _archived/）
+├── scripts/         build_questions.py build_golden.py build_golden_real.py
+│                    audit_sample.py check_answers.py ingest_abc.py make_report.py
+├── reports/         分析报告 + 自建题展示页
 └── tests/           pytest（FakeHy3 + 沙盒隔离 + refine 闭环）
 ```
-方案文档见 `方案文档.md`；任务与设计文档 `DESIGN.md`；实现日志 `docs/IMPL_LOG.md`。
+方案文档见 `方案文档.md`；任务与设计文档 `DESIGN.md`；实现日志 `docs/IMPL_LOG.md`；
+**数据源映射与变更指南 `docs/DATA_SOURCE_MAP.md`**。
 ```
 
 ## 评估指标口径

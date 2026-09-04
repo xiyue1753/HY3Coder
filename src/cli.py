@@ -56,6 +56,38 @@ def _load_questions(scene: str, sample: str, difficulty: str | None, seed: int,
     return picked, pool
 
 
+def _default_eval_out(questions: str | None) -> str:
+    """按题集反查数据集注册中心，返回默认评测输出文件名。
+
+    - 指定 --questions：优先用该题集所属数据集的评测文件
+    - 未指定：用第一个「启用且带评测输出」的数据集（当前 = abc_selfbuilt）
+    """
+    from rex import datasource as ds
+    if questions:
+        d = ds.dataset_by_questions(questions)
+        if d and d.evals:
+            return d.evals
+        typer.secho(f"题集 {questions} 未注册到数据集（或无评测输出），"
+                    f"请用 --out 指定输出文件", fg=typer.colors.YELLOW)
+    for d in ds.active_datasets():
+        if d.evals:
+            return d.evals
+    typer.secho("无启用数据集带评测输出，请用 --out 指定", fg=typer.colors.YELLOW)
+    return "eval_selfbuilt_all.jsonl"
+
+
+def _default_refine_out(questions: str | None) -> str:
+    from rex import datasource as ds
+    if questions:
+        d = ds.dataset_by_questions(questions)
+        if d and d.refine:
+            return d.refine
+    for d in ds.active_datasets():
+        if d.refine:
+            return d.refine
+    return "refine_selfbuilt_all.jsonl"
+
+
 @app.command()
 def run_eval(
     scene: str = typer.Option("algorithm", help="algorithm（数学/MATH 已放弃）"),
@@ -82,8 +114,10 @@ def run_eval(
 
     from rex.runner import EvalRunner
     runner = EvalRunner(cfg, retries=retries, concurrency=concurrency)
-    # 正式评测默认写主数据源（ABC 自建全量记录文件），可用 --out 覆盖
-    out_path = cfg.outputs_dir / (out or "eval_selfbuilt_all.jsonl")
+    # 输出文件默认取「数据集注册中心」映射：题集 → 该数据集评测文件
+    # （未指定 --questions 时用第一个启用且带评测输出的数据集）。
+    from rex import datasource as ds
+    out_path = cfg.outputs_dir / (out or _default_eval_out(questions))
     records, costs = runner.run_eval(picked, out_path, resume=resume)
     typer.echo(f"评估完成 {len(records)} 题 → {out_path}（模型调用 {costs['calls']} 次）")
 
@@ -113,7 +147,9 @@ def run_refine(
     from rex.pipeline import Pipeline
     pipe = Pipeline(cfg)
     pipe.refiner._max_rounds = max_rounds
-    out_path = cfg.outputs_dir / (out or "refine_selfbuilt_all.jsonl")
+    # 输出文件默认取数据集注册中心映射（同 run_eval 规则，refine 用对应文件）
+    from rex import datasource as ds
+    out_path = cfg.outputs_dir / (out or _default_refine_out(questions))
     records = pipe.run_refine(picked, out_path, resume=resume)
     typer.echo(f"修正运行完成 {len(records)} 题 → {out_path}")
     pipe.client.close()
@@ -168,7 +204,9 @@ def audit(
         else:
             typer.secho(f"题目池不存在：{questions}", fg=typer.colors.YELLOW)
     template = build_template(records, qmap, sample, seed=seed)
-    out_path = out or (cfg.outputs_dir / "audit_records.jsonl")
+    # 抽检记录默认文件由注册中心声明（audit_records.jsonl）
+    from rex import datasource as ds
+    out_path = out or ds.audit_path(ROOT)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     import json as _json2
     with out_path.open("w", encoding="utf-8") as f:

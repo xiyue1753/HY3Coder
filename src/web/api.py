@@ -46,13 +46,9 @@ app.add_middleware(
 
 
 def _load_questions() -> list[QuestionItem]:
-    qs: list[QuestionItem] = []
-    # 正式题集（algorithm.jsonl/TACO 已废弃为独立数据集命名，不在此列表）
-    for f in ("abc_selfbuilt.jsonl", "cf_selfbuilt.jsonl"):
-        p = CFG.data_dir / "questions" / f
-        if p.exists():
-            qs += load_jsonl(p, QuestionItem)
-    return qs
+    """合并所有启用数据集的题集（路径由数据源注册中心统一声明）。"""
+    from rex.datasource import load_active_questions
+    return load_active_questions(ROOT)
 
 
 def _load_evals() -> list[EvalRecord]:
@@ -60,12 +56,9 @@ def _load_evals() -> list[EvalRecord]:
 
 
 def _load_refines() -> list[RefineRecord]:
-    out = []
-    for f in ("refine_selfbuilt_all.jsonl",):   # 正式 refine 主源（对应 ABC 全量）
-        p = CFG.outputs_dir / f
-        if p.exists():
-            out += load_jsonl(p, RefineRecord)
-    return out
+    """启用数据集的正式 refine 记录（无则返回空，展示『暂无 refine』）。"""
+    from rex.datasource import load_active_refines
+    return load_active_refines(ROOT)
 
 
 def _dump(o):
@@ -78,16 +71,9 @@ def _dump(o):
 
 
 def _load_golden() -> list[GoldenSample]:
-    """真实评测检出库置前 + 合成展示样例，两者都纳入展示。
-
-    合成库仅保留 2 条展示样例（GA001/GA002），主体以真实评测检出样本为主。
-    """
-    out = []
-    for name in ("golden_real_algorithm.jsonl", "golden_algorithm.jsonl"):
-        p = CFG.data_dir / "golden" / name
-        if p.exists():
-            out += load_jsonl(p, GoldenSample)
-    return out
+    """真实评测检出库置前 + 合成展示样例，路径由注册中心统一声明。"""
+    from rex.datasource import load_golden
+    return load_golden(ROOT)
 
 
 @app.get("/api/summary")
@@ -108,6 +94,28 @@ def summary() -> dict:
         "refine": _dump(refine_comparison(refines)) if refines else None,
         "golden_n": len(golden),
         "last_run": formal[-1].created_at if formal else None,
+    }
+
+
+@app.get("/api/meta")
+def meta() -> dict:
+    """数据源元信息：前端提示命令不再写死文件路径。"""
+    from rex import datasource
+    rel = lambda p: str(p.relative_to(ROOT)).replace("\\", "/")
+    dss = [
+        {"key": d.key, "label": d.label, "enabled": d.enabled,
+         "questions": rel(datasource.questions_path(ROOT, d)),
+         "evals": rel(datasource.evals_path(ROOT, d)) if d.evals else None,
+         "refine": rel(datasource.refine_path(ROOT, d)) if d.refine else None}
+        for d in datasource.DATASETS
+    ]
+    return {
+        "datasets": dss,
+        "audit_file": rel(datasource.audit_path(ROOT)),
+        "golden_files": [rel(p) for p in datasource.golden_paths(ROOT)],
+        "interactive_eval": rel(datasource.interactive_evals_path(ROOT)),
+        "audit_command": "python -m src.cli audit --results "
+                         + rel(datasource.evals_path(ROOT, next(d for d in datasource.active_datasets() if d.evals))),
     }
 
 
@@ -186,11 +194,8 @@ def golden() -> list[dict]:
 
 @app.get("/api/audit")
 def audit() -> list[dict]:
-    path = CFG.outputs_dir / "audit_records.jsonl"
-    if not path.exists():
-        return []
-    from rex.models import AuditRecord
-    return [a.model_dump() for a in load_jsonl(path, AuditRecord)]
+    from rex.datasource import load_audits
+    return [a.model_dump() for a in load_audits(ROOT)]
 
 
 class InteractSample(BaseModel):

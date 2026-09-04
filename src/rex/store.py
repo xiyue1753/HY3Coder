@@ -3,9 +3,10 @@
 Data purity: metrics must only come from run-eval records; interactive records
 are tagged ``source="interactive"`` and can be filtered out of metric runs.
 
-Storage layout (kept compatible with existing files):
-    data/outputs/eval_{scene}.jsonl        -- EvalRecord (run-eval + interactive)
-    data/outputs/refine_{scene}.jsonl      -- RefineRecord
+Storage layout — 文件位置由数据源注册中心 :mod:`rex.datasource` 声明
+(RecordStore 只接收 eval 文件白名单，不绑定文件名)：
+    启用数据集的正式评测文件（如 abc → eval_selfbuilt_all.jsonl）
+    eval_interactive.jsonl                     -- 交互演示记录
 
 Retention: records keep their ``created_at``; a manual ``cleanup(days)`` is
 provided (never auto-deletes). ``expired(days)`` lists stale records so the
@@ -46,23 +47,17 @@ class RecordStore:
     All record I/O goes through here so that a single implementation provides
     consistent timestamps, source tagging, retrieval and retention.
 
-    ``eval_files``: 正式评测记录文件白名单（默认 ``("eval_selfbuilt_all.jsonl",)``，
-    ABC 自建 175 题全量）。过去绑定 ``eval_algorithm.jsonl``（旧 TACO 评测）的
-    做法已废弃——数据集按来源隔离命名（abc/cf/taco 各自独立评测文件）。
+    ``eval_files``: 评测记录文件白名单。**默认从数据源注册中心派生**
+    （见 :mod:`rex.datasource`：当前 = abc_selfbuilt 正式评测文件 + 交互文件），
+    以后加/删数据集只改注册中心，此处自动跟随。
     """
-
-    #: 评测记录文件白名单。正式评测主数据源为 ABC 自建全量
-    #: `eval_selfbuilt_all.jsonl`（run-eval 记录）；交互演示记录
-    #: `eval_interactive.jsonl` 一并读取，供单题回放检索，但**指标口径
-    #: 由上层按 source="run-eval" 过滤**（见 metrics.compute）。过去绑定
-    #: `eval_algorithm.jsonl`（旧 TACO 评测）的做法已废弃——数据集按来源
-    #: 隔离命名（abc/cf/taco 各自独立评测文件）。
-    DEFAULT_EVAL_FILES = ("eval_selfbuilt_all.jsonl", "eval_interactive.jsonl")
 
     def __init__(self, outputs_dir: str | Path,
                  eval_files: tuple[str, ...] | None = None) -> None:
+        # 默认文件白名单从数据源注册中心派生：启用数据集的正式评测 + 交互文件
+        from rex.datasource import active_eval_filenames
         self.outputs_dir = Path(outputs_dir)
-        self._eval_files = tuple(eval_files) if eval_files else self.DEFAULT_EVAL_FILES
+        self._eval_files = tuple(eval_files) if eval_files else active_eval_filenames()
         self._eval_cache: list[EvalRecord] | None = None
         self._eval_mtime: float = 0.0
 
@@ -127,7 +122,8 @@ class RecordStore:
         if rec.created_at is None:
             rec.created_at = _now_iso()
         if rec.source == "interactive":
-            p = self.outputs_dir / "eval_interactive.jsonl"
+            from rex.datasource import INTERACTIVE_EVAL
+            p = self.outputs_dir / INTERACTIVE_EVAL
         else:
             p = self._formal_eval_paths()[0]
         p.parent.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,6 @@
 # HY3Coder 分析报告
 
-> 生成时间：2026-09-04 17:11 ｜ 数据：`data/outputs/`（eval/refine 严格分离）
+> 生成时间：2026-09-04 17:33 ｜ 数据：`data/outputs/`（eval/refine 严格分离）
 
 ## 1. 评估总览
 

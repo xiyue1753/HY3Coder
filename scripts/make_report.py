@@ -31,25 +31,18 @@ def pct(x: float | None) -> str:
 
 def build() -> str:
     cfg = Config.from_env(ROOT)
-    # 正式评测主数据源：ABC 自建全量 run-eval（旧 eval_algorithm/TACO 已废弃）
-    evals: list[EvalRecord] = []
-    for f in ("eval_selfbuilt_all.jsonl",):
-        p = cfg.outputs_dir / f
-        if p.exists():
-            evals += load_jsonl(p, EvalRecord)
-    # 正式 refine 记录（若存在；refine_{scene}.jsonl 已被正式命名替代）
-    refines: list[RefineRecord] = []
-    for f in ("refine_selfbuilt_all.jsonl",):
-        p = cfg.outputs_dir / f
-        if p.exists():
-            refines += load_jsonl(p, RefineRecord)
-    audits = load_jsonl(cfg.outputs_dir / "audit_records.jsonl", AuditRecord)
+    # 数据文件位置统一由数据源注册中心声明（见 src/rex/datasource.py）
+    from rex import datasource as ds
+    # 报告口径 = 正式评测（run-eval），排除交互演示记录
+    evals = [r for r in ds.load_active_evals(ROOT) if r.source == "run-eval"]
+    refines = ds.load_active_refines(ROOT)
+    audits = ds.load_audits(ROOT)
     qmap: dict[str, QuestionItem] = {}
-    for f in ("abc_selfbuilt.jsonl", "cf_selfbuilt.jsonl"):
-        p = cfg.data_dir / "questions" / f
-        if p.exists():
-            qmap.update({q.id: q for q in load_jsonl(p, QuestionItem)})
-    golden = load_jsonl(cfg.data_dir / "golden" / "golden_algorithm.jsonl", GoldenSample)
+    for q in ds.load_active_questions(ROOT):
+        qmap[q.id] = q
+    # 合成 golden（展示样例）与真实检出库分开读，路径由注册中心声明
+    golden = (load_jsonl(ds.golden_synthetic_path(ROOT), GoldenSample)
+              if ds.golden_synthetic_path(ROOT).exists() else [])
 
     L: list[str] = []
     w = L.append
@@ -152,11 +145,12 @@ def build() -> str:
         w("> 口径说明：定位准确率分母为「答案错误」样本（用标准答案判定），"
           "误报率分母为「答案正确」样本中被评估器判过程有错者（经人工抽检确认）。\n")
     else:
-        w("\n_暂无抽检标注，运行 `python -m src.cli audit --results data/outputs/eval_selfbuilt_all.jsonl` 生成模板。_\n")
+        w(f"\n_暂无抽检标注，运行 `python -m src.cli audit --results {ds.evals_path(ROOT, next(d for d in ds.active_datasets() if d.evals))}` 生成模板。_\n")
 
     # ---- 7. Golden ----
-    golden_real = (load_jsonl(cfg.data_dir / "golden" / "golden_real_algorithm.jsonl", GoldenSample)
-                   if (cfg.data_dir / "golden" / "golden_real_algorithm.jsonl").exists() else [])
+    # 真实评测检出库（独立文件，见注册中心 golden_real_path）
+    golden_real = (load_jsonl(ds.golden_real_path(ROOT), GoldenSample)
+                   if ds.golden_real_path(ROOT).exists() else [])
     w("## 7. Golden 沉默失败样本库")
     w("\n**样本分两类来源，口径独立统计：**\n")
     w(f"- 合成陷阱库 `golden_algorithm.jsonl`：{len(golden)} 条（人工构造「答案对但过程错」）")

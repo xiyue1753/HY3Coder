@@ -164,10 +164,12 @@ async function loadGolden(){
 // ---------- 抽检 ----------
 async function loadAudit(){
   const a=await j('/api/audit');
+  const meta=await j('/api/meta');
+  const cmd=meta.audit_command||'python -m src.cli audit --results <正式评测文件>';
   $('#auditTable').innerHTML=a.length?`<table class="dt"><thead><tr><th>题号</th><th>人工判定</th><th>错误步骤</th><th>误报</th><th>备注</th></tr></thead>
     <tbody>${a.map(x=>`<tr><td class="mono">${x.question_id}</td><td>${x.verdict_human||'待标注'}</td>
     <td class="mono">${x.error_step_id??'—'}</td><td>${x.is_false_positive?'是':'否'}</td><td class="muted">${x.note||''}</td></tr>`).join('')}</tbody></table>`
-    :'<div class="muted">暂无抽检记录，运行 <span class="mono">python -m src.cli audit --results data/outputs/eval_selfbuilt_all.jsonl</span> 生成标注模板</div>';
+    :`<div class="muted">暂无抽检记录，运行 <span class="mono">${cmd}</span> 生成标注模板</div>`;
 }
 
 // ---------- 交互式解题 ----------
