@@ -38,21 +38,31 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 REQUEST_DELAY = float(os.environ.get("CF_DELAY", "1.5"))  # CF 页间间隔（秒），CF_DELAY 可调低频率防风控
 
 
-def _load_cookies() -> list[dict]:
-    """优先读取人工验证导出的 cookie 文件；否则回退环境变量 JSESSIONID。"""
+def _load_cookies() -> tuple[list[dict], str]:
+    """读取 cookie + 绑定的 UA。
+
+    返回 (cookies, ua)。cf_clearance 绑定 IP+UA，因此必须用导出 cookie 时
+    浏览器的 UA。支持两种 cookie 文件格式：
+      - 推荐（路径 B 手动导出）：{"ua": "<浏览器UA>", "cookies": [...]}
+      - 兼容：纯数组（则 UA 用 UA 常量，可能因 UA 不匹配而失效）
+    未找到 cookie 文件时回退环境变量 CF_JSESSIONID（仅登录态，弱于 cf_clearance）。
+    """
     if COOKIE_FILE.exists():
         try:
-            cookies = json.loads(COOKIE_FILE.read_text(encoding="utf-8"))
-            if isinstance(cookies, list) and cookies:
-                return cookies
+            data = json.loads(COOKIE_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and "cookies" in data:
+                ua = str(data.get("ua") or UA).strip()
+                return list(data["cookies"]), ua
+            if isinstance(data, list) and data:
+                return data, UA
         except Exception as e:  # noqa: BLE001
             print(f"[warn] cf_cookies.json 解析失败: {e}，回退环境变量")
     env = os.environ.get("CF_JSESSIONID", "").strip()
     if env:
         return [{"name": "JSESSIONID", "value": env,
                  "domain": "codeforces.com", "path": "/",
-                 "httpOnly": True, "secure": True}]
-    return []
+                 "httpOnly": True, "secure": True}], UA
+    return [], UA
 
 
 def _is_challenge(page) -> bool:
@@ -91,8 +101,8 @@ class CFBatch:
       （cf_clearance 绑定会话指纹，同会话最可靠，无需导出/再导入）。
     """
 
-    def __init__(self, cookies: list[dict], headless: bool = True,
-                 human_wait: int = 240) -> None:
+    def __init__(self, cookies: list[dict], ua: str | None = None,
+                 headless: bool = True, human_wait: int = 240) -> None:
         self.cookies = cookies
         self.headless = headless
         self.human_wait = human_wait
@@ -100,7 +110,7 @@ class CFBatch:
         self.b = self.p.chromium.launch(
             channel="msedge", headless=headless,
             args=["--disable-blink-features=AutomationControlled"])
-        self.ctx = self.b.new_context(user_agent=UA,
+        self.ctx = self.b.new_context(user_agent=ua or UA,
                                       viewport={"width": 1400, "height": 900})
         if cookies:
             self.ctx.add_cookies(cookies)
@@ -525,12 +535,34 @@ def main() -> None:
                     help="交互模式：真实 Edge 窗口，遇 Cloudflare 验证框时人工点击后同会话继续")
     ap.add_argument("--human-wait", type=int, default=240,
                     help="交互模式下等待人工验证的最长秒数（默认 240）")
+    ap.add_argument("--probe", action="store_true",
+                    help="单次探测：打开 codeforces.com 1 页验证 cookie 放行后即退出（不抓题）")
+    ap.add_argument("--ua", default=None, help="覆盖 cookie 绑定的 UA（cf_clearance 绑定 UA）")
     args = ap.parse_args()
-    cookies = _load_cookies()
+    cookies, cookie_ua = _load_cookies()
+    ua = args.ua or cookie_ua
     if not cookies and not args.headed:
-        print("[fatal] 未找到可用的 CF cookie：请先运行 "
+        print("[fatal] 未找到可用的 CF cookie：请把浏览器导出的 cookie 放入 "
+              "data/cases/cf_cookies.json（格式见 README/脚本注释），或运行 "
               "scripts/cf_cookie_session.py 人工验证一次，或设置 CF_JSESSIONID")
         sys.exit(2)
+    batch = CFBatch(cookies, ua=ua, headless=not args.headed,
+                    human_wait=args.human_wait)
+    if args.probe:
+        try:
+            print(f"[probe] UA={ua[:70]}…")
+            print(f"[probe] cookie {len(cookies)} 个："
+                  + ", ".join(sorted(c["name"] for c in cookies)))
+            batch._goto_ready("https://codeforces.com/")
+            title = batch.pg.title()
+            print(f"[probe] 首页放行 ✓ title={title}")
+            print("cookie 有效，可开始抓取。")
+        except CFChallengeError as e:
+            print(f"[probe] 仍被 Cloudflare 拦截: {e}")
+            sys.exit(3)
+        finally:
+            batch.close()
+        return
     if args.only:
         plan = plan_from_ids(args.only)
     elif args.auto:
@@ -539,7 +571,6 @@ def main() -> None:
         plan = PLAN
     plan = plan[:args.limit] if args.limit else plan
     only = set(args.only) if args.only else None
-    batch = CFBatch(cookies, headless=not args.headed, human_wait=args.human_wait)
     done = 0
     failed: list[str] = []
     blocked = False
