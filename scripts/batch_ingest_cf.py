@@ -529,6 +529,109 @@ class CFChallengeError(RuntimeError):
     """Cloudflare 安全验证拦截（需人工过验证一次后重跑）。"""
 
 
+# ---------------------------------------------------------------------------
+# SPJ（多解/构造题）入库支持
+# ---------------------------------------------------------------------------
+def _load_special_checker(task: str) -> tuple[str | None, str]:
+    """加载 data/scripts/checkers/{task}_checker.py 作为 checker 源码。
+
+    Returns (checker_code, language)；无对应 checker 文件返回 (None, "python")。
+    """
+    p = Path(__file__).resolve().parent / "checkers" / f"{task}_checker.py"
+    if not p.exists():
+        return None, "python"
+    return p.read_text(encoding="utf-8"), "python"
+
+
+def ingest_special_one(batch: CFBatch, contest: str, index: str, title: str,
+                       typ: str, diff: str) -> str | None:
+    """SPJ 题入库：用 checker 验证参考解（而非样例文本比对）。
+
+    - 题面样例的期望输出只是"其中一个合法解"，不能作唯一比对。
+    - 流程：抓题面 → 找 C++ AC 提交 → 跑该代码 → 用 checker 判定输出是否
+      满足题目谓词 → 取该合法输出作为测试用例期望（exact 回放时也通过）。
+    - 入库：judge=special + checker_code，test_cases.output = checker 验证过
+      的参考解输出。
+    """
+    from rex.executor.judge import run_checker
+
+    task = _task(contest, index)
+    if task in existing_source_ids():
+        print(f"[skip] {task}: 已入库")
+        return None
+    checker_code, ck_lang = _load_special_checker(task)
+    if not checker_code:
+        print(f"[skip] {task}: 缺 checker（scripts/checkers/{task}_checker.py）")
+        return None
+    statement, samples = batch.fetch_statement_and_samples(contest, index)
+    if not samples:
+        print(f"[skip] {task}: 题面未提取到样例")
+        return None
+    print(f"[special-ac] {task}: {len(samples)} 组样例，找 C++ AC 并用 checker 验证…")
+    href, code, valid_out = _find_special_ac(batch, contest, index, samples,
+                                             checker_code, ck_lang)
+    # 测试用例：题面样例输入 + 该参考解 checker 验证过的合法输出
+    tcs = []
+    for i, (inp, _exp) in enumerate(samples):
+        out_for = valid_out if len(samples) == 1 else None
+        # 多样例 SPJ 极少见；单样例时用参考解输出，多样例时仍存官方样例输出
+        tcs.append(TestCase(input=inp, output=out_for if out_for is not None else _exp,
+                            hidden=False))
+    q = QuestionItem(
+        id=next_id(), scene="algorithm", title=title, prompt=statement,
+        difficulty=Difficulty(diff), source="Codeforces-自建",
+        source_id=task,
+        layer_basis=f"官方 rating 题，{typ} → {diff}（rating 分层；SPJ 构造题）",
+        standard_answer="", reference_solution=code, test_cases=tcs,
+        judge="special", checker_code=checker_code, checker_language=ck_lang,
+        metadata={"contest": contest, "problem": task, "type": typ,
+                  "submission_href": href, "round": "cf-round1", "special": True},
+    )
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    with OUT.open("a", encoding="utf-8") as f:
+        f.write(q.model_dump_json() + "\n")
+    print(f"written {q.id} ({task}) [special/{diff}] code={len(code)} chars, "
+          f"{len(tcs)} 样例用例 (checker 验证过)")
+    return q.id
+
+
+def _find_special_ac(batch: CFBatch, contest: str, index: str,
+                     samples: list[tuple[str, str]], checker_code: str,
+                     ck_lang: str, max_try: int = 6):
+    """按时间正序试 C++ AC，用 checker 判定输出满足题目谓词。
+
+    Returns (href, code, validated_output)。validated_output 是被 checker
+    接受的那次运行的 stdout（作为该测试用例的合法期望，仅单样例时使用）。
+    """
+    from rex.executor.judge import run_checker
+    from rex.executor.sandbox import run_code
+
+    cands = batch.fetch_cpp_ac_candidates(contest, index)
+    tried = 0
+    for cand in cands:
+        if tried >= max_try:
+            break
+        href = cand.split("|")[0]
+        code = batch.fetch_source(href)
+        msg = batch._prescreen(code)
+        if msg:
+            print(f"  [skip] {href}: {msg}")
+            continue
+        tried += 1
+        # 用第一条样例输入跑参考解，再让 checker 判定输出合法
+        inp = samples[0][0]
+        res = run_code(code, stdin=inp, timeout=20, language="cpp")
+        if res.error or res.timed_out:
+            print(f"  [skip] {href}: 运行失败 {(res.error or 'timeout')[:80]}")
+            continue
+        ok, msg = run_checker(checker_code, ck_lang, inp, res.stdout)
+        if ok:
+            print(f"  [ac] {href}: checker 验证通过")
+            return href, code, res.stdout.strip()
+        print(f"  [skip] {href}: checker 拒绝 {msg[:100]}")
+    raise RuntimeError(f"{contest}{index}: 前 {max_try} 条 C++ AC 未通过 checker")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", nargs="*", default=None)
@@ -544,6 +647,9 @@ def main() -> None:
                     help="交互模式下等待人工验证的最长秒数（默认 240）")
     ap.add_argument("--probe", action="store_true",
                     help="单次探测：打开 codeforces.com 1 页验证 cookie 放行后即退出（不抓题）")
+    ap.add_argument("--special", action="store_true",
+                    help="SPJ 入库模式：配合 --only <source_id>，用 scripts/checkers/"
+                         "{task}_checker.py 验证参考解（用于多解/构造题）")
     ap.add_argument("--ua", default=None, help="覆盖 cookie 绑定的 UA（cf_clearance 绑定 UA）")
     args = ap.parse_args()
     cookies, cookie_ua = _load_cookies()
@@ -585,6 +691,22 @@ def main() -> None:
         for contest, index, title, typ, diff in plan:
             task = _task(contest, index)
             if only and task not in only:
+                continue
+            # SPJ 模式：多解/构造题走 checker 验证入库
+            if args.special:
+                try:
+                    if ingest_special_one(batch, contest, index, title, typ, diff):
+                        done += 1
+                    ok = True
+                except CFChallengeError as e:
+                    print(f"[blocked] {task}: {e}")
+                    blocked = True
+                    break
+                except Exception as e:  # noqa: BLE001
+                    print(f"[error] {task}: {e}")
+                    ok = False
+                if not ok:
+                    failed.append(task)
                 continue
             ok = False
             for attempt in range(args.retry + 1):
