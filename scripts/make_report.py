@@ -165,7 +165,8 @@ def build() -> str:
       "flaw_answer 即当时模型真实输出）\n")
 
     if golden:
-        w(f"### 7.1 合成陷阱库（{len(golden)} 条）\n")
+        w(f"### 7.1 合成展示样例（{len(golden)} 条）\n")
+        w("> 合成库已精简为 2 条展示样例（GA001/GA002），样本主体以真实评测检出库为主。\n")
         for g in golden:
             w(f"- `{g.question.id}` [{g.question.scene}] {g.question.title} — 真实缺陷："
               f"{TYPE_CN.get(g.flaw_type.value, g.flaw_type.value)}（{g.construction_note[:80]}…）")

@@ -78,9 +78,12 @@ def _dump(o):
 
 
 def _load_golden() -> list[GoldenSample]:
-    """合成陷阱库 + 真实评测检出库都纳入展示（来源以 sample 自带说明区分）。"""
+    """真实评测检出库置前 + 合成展示样例，两者都纳入展示。
+
+    合成库仅保留 2 条展示样例（GA001/GA002），主体以真实评测检出样本为主。
+    """
     out = []
-    for name in ("golden_algorithm.jsonl", "golden_real_algorithm.jsonl"):
+    for name in ("golden_real_algorithm.jsonl", "golden_algorithm.jsonl"):
         p = CFG.data_dir / "golden" / name
         if p.exists():
             out += load_jsonl(p, GoldenSample)
