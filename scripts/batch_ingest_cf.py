@@ -356,8 +356,14 @@ def looks_multi_solution(statement: str) -> bool:
 
 
 def _find_ac(batch: CFBatch, contest: str, index: str,
-             samples: list[tuple[str, str]], max_try: int = 6) -> tuple[str, str]:
-    """按时间正序试前 max_try 条 C++ AC，用样例验证；返回 (submission_href, code)。"""
+             samples: list[tuple[str, str]], is_multi: bool = False,
+             max_try: int = 6) -> tuple[str, str]:
+    """按时间正序试前 max_try 条 C++ AC，用样例验证；返回 (submission_href, code)。
+
+    全部失败时：
+      - is_multi=True（题面提示多解/构造）→ 抛 MultiSolutionError（需 checker 专项）
+      - 否则抛 RuntimeError（可能是运行/格式问题）
+    """
     cands = batch.fetch_cpp_ac_candidates(contest, index)
     tried = 0
     for cand in cands:
@@ -374,6 +380,10 @@ def _find_ac(batch: CFBatch, contest: str, index: str,
         if ok:
             return href, code
         print(f"  [skip] {href}: {err[:120]}")
+    if is_multi:
+        raise MultiSolutionError(
+            f"{contest}{index}: 疑似多解/构造题，C++ AC 输出与样例不一致"
+            "（样例是众多合法解之一，需 SPJ checker 专项入库）")
     raise RuntimeError(f"{contest}{index}: 前 {max_try} 条 C++ AC 未通过样例")
 
 
@@ -558,11 +568,12 @@ def ingest_one(batch: CFBatch, contest: str, index: str, title: str,
     if not samples:
         print(f"[skip] {task}: 题面未提取到样例")
         return None
-    if looks_multi_solution(statement):
-        print(f"[skip] {task}: 多解构造题（需 SPJ checker，自动收录跳过）")
-        return None
+    # 不预判跳过：照常尝试样例比对找 AC（普通题样例是唯一解，会匹配成功）。
+    # 只有全部 AC 输出都与样例不一致时，才由 _find_ac 根据题面是否提示多解
+    # 分类为 MultiSolutionError（需 checker）或 RuntimeError。
     print(f"[auto-ac] {task}: {len(samples)} 组样例，翻找 C++ AC…")
-    href, code = _find_ac(batch, contest, index, samples)
+    href, code = _find_ac(batch, contest, index, samples,
+                          is_multi=looks_multi_solution(statement))
     tcs = [TestCase(input=i, output=o, hidden=False) for i, o in samples]
     q = QuestionItem(
         id=next_id(), scene="algorithm", title=title, prompt=statement,
@@ -583,6 +594,34 @@ def ingest_one(batch: CFBatch, contest: str, index: str, title: str,
 
 class CFChallengeError(RuntimeError):
     """Cloudflare 安全验证拦截（需人工过验证一次后重跑）。"""
+
+
+class MultiSolutionError(RuntimeError):
+    """多解/构造题：样例只是众多合法解之一，需 SPJ checker 专项入库。"""
+
+
+def record_pending(task: str, title: str, typ: str, diff: str) -> None:
+    """把多解/构造题记入待补 checker 清单（data/cases/multi_pending.json）。
+
+    用途：不阻塞常规抓取，攒一批后做 checker 专项（每题人工写反向验证）。
+    去重：task 已存在则更新字段。
+    """
+    p = Path(__file__).resolve().parents[1] / "data" / "cases" / "multi_pending.json"
+    items: list[dict] = []
+    if p.exists():
+        try:
+            items = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            items = []
+    items = [x for x in items if x.get("task") != task]
+    items.append({
+        "task": task, "title": title, "type": typ, "difficulty": diff,
+        "recorded_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "pending",   # pending | checker_written | ingested
+    })
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"  → 已记入待补 checker 清单 {p.name}（累计 {len(items)} 题）")
 
 
 # ---------------------------------------------------------------------------
@@ -775,6 +814,12 @@ def main() -> None:
                     # 会话被 Cloudflare 拦截：重试无意义，整批止损
                     print(f"[blocked] {task}: {e}")
                     blocked = True
+                    break
+                except MultiSolutionError as e:
+                    # 多解/构造题：样例比对必然失败，重试无意义 → 记入待补清单
+                    print(f"[multi] {task}: {e}")
+                    record_pending(task, title, typ, diff)
+                    ok = True
                     break
                 except Exception as e:  # noqa: BLE001
                     print(f"[error] {task} (attempt {attempt + 1}/{args.retry + 1}): {e}")
