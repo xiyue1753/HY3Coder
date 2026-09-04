@@ -11,6 +11,8 @@
 
 stdin 协议见 rex/executor/judge.py（输入 + @@REX_USER_OUTPUT@@ + 选手输出）。
 """
+from __future__ import annotations
+
 import re
 import sys
 
