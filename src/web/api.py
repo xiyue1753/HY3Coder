@@ -6,17 +6,23 @@ Endpoints (all data under Hy3_APP2/data/):
   GET  /api/questions/{qid}— 单题详情（步骤 + findings + refine 轮次）
   GET  /api/golden         — 沉默失败 golden 样本库
   GET  /api/audit          — 人工抽检记录
-  POST /api/interact       — 交互式解题（eval/refine 实时演示，需 Hy3 key）
+  POST /api/interact       — 交互式解题（同步，保留兼容）
+  POST /api/interact/job   — 交互式解题（异步 job：后台线程 + 阶段进度）
+  GET  /api/interact/job/{job_id}      — 查询 job 状态/中间结果
+  GET  /api/interact/job/{job_id}/events — SSE 阶段事件流（可选）
   GET  /                   — 静态 SPA
 """
 from __future__ import annotations
 
+import json
+import threading
 import time
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -197,16 +203,19 @@ class InteractRequest(BaseModel):
 
 @app.post("/api/interact")
 def interact(req: InteractRequest) -> dict:
-    """交互式解题：自定义题目 → 求解 → 执行/比对 → 验证 →（可选）修正。
+    """交互式解题（同步版，保留兼容）：阻塞到全部完成才返回。"""
+    job = _start_interact_job(req)
+    job["event"].wait()   # 同步等待完成（线程安全）
+    return _job_payload(job)
 
-    返回含：elapsed（总耗时秒）、cost_calls（模型调用次数）、以及 eval/refine 记录。
-    前端据此展示沙盒执行结果、错误定位 findings、耗时与调用成本。
-    """
+
+# ===========================================================================
+# 异步交互 job：后台线程分阶段执行，前端轮询 / SSE 实时展示进度
+# ===========================================================================
+def _build_question(req: InteractRequest):
+    """把请求体构造成 QuestionItem（算法场景样例拼入 prompt + 作为沙盒用例）。"""
     from rex.models import Difficulty, QuestionItem, TestCase
-    from rex.pipeline import Pipeline
-    from rex.store import RecordStore
 
-    # 构造题目：算法场景把输入输出样例既拼入 prompt，又作为沙盒测试用例
     prompt = req.prompt
     test_cases: list[TestCase] = []
     if req.scene == "algorithm" and req.samples:
@@ -215,42 +224,191 @@ def interact(req: InteractRequest) -> dict:
             f"样例{i}：\n输入：\n{s.input}\n输出：\n{s.output}" for i, s in enumerate(req.samples, 1)
         )
         prompt = f"{req.prompt}\n\n【输入输出样例】\n{sample_block}"
-
-    # 唯一记录 id：I + 时间戳，便于检索与区分多次交互
     qid = "I" + time.strftime("%Y%m%d_%H%M%S")
-    q = QuestionItem(
+    return QuestionItem(
         id=qid, scene=req.scene, title=req.prompt[:50], prompt=prompt,
         difficulty=Difficulty.BASIC, source="interactive",
         standard_answer=req.answer, test_cases=test_cases,
     )
-    store = STORE
-    pipe = Pipeline(CFG)
-    t0 = time.time()
-    try:
-        if not req.refine:
-            rec = pipe._eval_one(q)
-            rec.source = "interactive"
-            store.append_eval(rec)   # 落盘，进入集中记录库
-            # 单独重跑一次沙盒执行，拿到 exec 细节（错误信息）供前端展示
-            _, pass_rate, exec_error = pipe._execute(q, rec.answer)
-            payload = {
-                "mode": "eval", "eval": rec.model_dump(),
-                "elapsed": round(time.time() - t0, 2),
-                "cost_calls": pipe.client.call_count,
-                "exec": {"test_pass_rate": pass_rate, "error": exec_error},
-            }
-            return payload
-        rrec = pipe.refiner.refine(q)
-        rrec.source = "interactive"
-        store.append_refine(rrec)   # 落盘
-        payload = {
-            "mode": "refine", "refine": rrec.model_dump(),
-            "elapsed": round(time.time() - t0, 2),
-            "cost_calls": pipe.client.call_count,
-        }
-        return payload
-    finally:
-        pipe.client.close()
+
+
+# job 存储：{job_id: dict(phase, mode, answer, payload, event, queue, ...)}
+JOBS: dict[str, dict] = {}
+_JOBS_LOCK = threading.Lock()
+
+
+def _start_interact_job(req: InteractRequest) -> dict:
+    """启动后台交互 job，返回 job 状态字典。"""
+    job_id = "IJ" + time.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:4]
+    job = {
+        "id": job_id,
+        "mode": "refine" if req.refine else "eval",
+        "phase": "queued",          # queued/solve/answer/execute/static/verify/revise-N/verify-N/done/failed
+        "message": "排队中…",
+        "answer": None,             # solve 完成后的中间答案（供先展示过程）
+        "payload": None,            # 完成后的最终返回体（与同步版一致）
+        "error": None,
+        "elapsed": 0.0,
+        "cost_calls": 0,
+        "event": threading.Event(),  # 完成信号（同步版 wait 用）
+        "queue": [],                # SSE 阶段事件缓冲（list + 游标）
+        "req": req,
+        "t0": time.time(),
+    }
+    with _JOBS_LOCK:
+        JOBS[job_id] = job
+        # 简单上限：只保留最近 50 个 job，避免无限增长
+        if len(JOBS) > 50:
+            for old_id in sorted(JOBS, key=lambda k: JOBS[k]["t0"])[: len(JOBS) - 50]:
+                JOBS.pop(old_id, None)
+
+    def _run() -> None:
+        from rex.pipeline import Pipeline
+
+        pipe = Pipeline(CFG)
+        job["phase"] = "solve"
+        job["message"] = "正在生成分步解答…"
+        t0 = job["t0"]
+
+        def _report(phase: str, payload=None, message: str | None = None) -> None:
+            job["phase"] = phase
+            if message:
+                job["message"] = message
+            if payload is not None and getattr(payload, "model_dump", None):
+                job["answer"] = payload.model_dump()
+            elif isinstance(payload, dict):
+                job["answer"] = payload
+            # SSE 事件缓冲（无订阅者也缓存，便于轮询端点直接读最终态）
+            job["queue"].append({
+                "phase": phase,
+                "message": job["message"],
+                "elapsed": round(time.time() - job["t0"], 1),
+                "answer": job["answer"],
+            })
+
+        try:
+            q = _build_question(job["req"])
+            store = STORE
+            if job["mode"] == "eval":
+                rec = pipe._eval_one(q, progress=lambda p, payload=None: (
+                    _report(p, payload, _PHASE_MSG.get(p) or _phase_default_msg(p))))
+                rec.source = "interactive"
+                store.append_eval(rec)
+                # 单独重跑一次沙盒执行，拿到 exec 细节（错误信息）供前端展示
+                _, pass_rate, exec_error = pipe._execute(q, rec.answer)
+                job["payload"] = {
+                    "mode": "eval", "eval": rec.model_dump(),
+                    "elapsed": round(time.time() - t0, 2),
+                    "cost_calls": pipe.client.call_count,
+                    "exec": {"test_pass_rate": pass_rate, "error": exec_error},
+                }
+            else:
+                rrec = pipe.refiner.refine(q, progress=lambda p, payload=None: (
+                    _report(p, payload, _PHASE_MSG.get(p) or _phase_default_msg(p))))
+                rrec.source = "interactive"
+                store.append_refine(rrec)
+                job["payload"] = {
+                    "mode": "refine", "refine": rrec.model_dump(),
+                    "elapsed": round(time.time() - t0, 2),
+                    "cost_calls": pipe.client.call_count,
+                }
+            job["phase"] = "done"
+            job["message"] = "评估完成"
+            job["elapsed"] = round(time.time() - t0, 2)
+            job["queue"].append({"phase": "done", "message": "评估完成",
+                                 "elapsed": job["elapsed"], "answer": None})
+        except Exception as e:  # noqa: BLE001
+            job["phase"] = "failed"
+            job["error"] = str(e)
+            job["message"] = f"运行失败：{e}"
+            job["queue"].append({"phase": "failed", "message": job["message"],
+                                 "elapsed": round(time.time() - job["t0"], 1)})
+        finally:
+            pipe.client.close()
+            job["event"].set()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return job
+
+
+_PHASE_MSG = {
+    "solve": "正在生成分步解答…",
+    "answer": "解答完成，执行测试中…",
+    "execute": "沙盒执行测试用例…",
+    "static": "静态规则校验…",
+    "verify": "过程交叉审查（V1/V2）…",
+    "revise-1": "第 1 轮修正…", "answer-1": "第 1 轮修订完成…", "verify-1": "第 1 轮复核…",
+    "revise-2": "第 2 轮修正…", "answer-2": "第 2 轮修订完成…", "verify-2": "第 2 轮复核…",
+    "revise-3": "第 3 轮修正…", "answer-3": "第 3 轮修订完成…", "verify-3": "第 3 轮复核…",
+}
+
+
+def _phase_default_msg(phase: str) -> str:
+    """未注册阶段的兜底中文提示。"""
+    if phase.startswith("answer-"):
+        n = phase.split("-")[-1]
+        return f"第 {n} 轮修订完成…"
+    return "处理中…"
+
+
+def _job_payload(job: dict) -> dict:
+    """把 job 状态转成前端可读快照。"""
+    return {
+        "job_id": job["id"],
+        "mode": job["mode"],
+        "phase": job["phase"],
+        "message": job["message"],
+        "answer": job["answer"],
+        "result": job["payload"],
+        "error": job["error"],
+        "elapsed": job["elapsed"],
+        "cost_calls": job["cost_calls"],
+        "status": "done" if job["phase"] == "done" else
+                  ("failed" if job["phase"] == "failed" else "running"),
+    }
+
+
+def _get_job_or_404(job_id: str) -> dict:
+    with _JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(404, f"job {job_id} not found")
+    return job
+
+
+@app.post("/api/interact/job")
+def interact_job(req: InteractRequest) -> dict:
+    """异步交互：立即返回 job_id，前端轮询 /events 展示实时进度。"""
+    job = _start_interact_job(req)
+    return {"job_id": job["id"], "mode": job["mode"]}
+
+
+@app.get("/api/interact/job/{job_id}")
+def interact_job_status(job_id: str) -> dict:
+    """查询交互 job 的当前阶段与中间结果（轮询端点）。"""
+    return _job_payload(_get_job_or_404(job_id))
+
+
+@app.get("/api/interact/job/{job_id}/events")
+def interact_job_events(job_id: str):
+    """SSE 阶段事件流：实时推送 phase/answer，客户端可用 EventSource 订阅。"""
+    job = _get_job_or_404(job_id)
+
+    def gen():
+        sent = 0
+        while True:
+            q = job["queue"]
+            while sent < len(q):
+                ev = q[sent]
+                sent += 1
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+            if job["phase"] in ("done", "failed"):
+                break
+            time.sleep(0.6)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache",
+                                      "X-Accel-Buffering": "no"})
 
 
 @app.get("/")

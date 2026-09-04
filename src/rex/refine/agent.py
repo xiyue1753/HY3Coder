@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Callable
 
 from rex.models import (
     QuestionItem,
@@ -40,10 +41,18 @@ class Refiner:
         # （不可用 solver+verifier 相加，否则会双倍计数）
         self._client = solver._client  # noqa: SLF001
 
-    def refine(self, question: QuestionItem) -> RefineRecord:
+    def refine(self, question: QuestionItem,
+               progress: Callable[[str, object | None], None] | None = None) -> RefineRecord:
+        """ReAct 修正闭环。``progress(phase, payload)`` 报告阶段与中间解答。"""
         t0 = time.time()
         # 首轮：独立求解 + 验证（与 eval 模式同路径，保证 initial 可比）
+        if progress:
+            progress("solve", None)
         answer = self._solver.solve(question)
+        if progress:
+            progress("answer", answer)
+        if progress:
+            progress("verify", None)
         initial = self._verifier.verify(question, answer)
         rounds: list[RefineRound] = []
         current_answer = answer
@@ -55,7 +64,13 @@ class Refiner:
                 feedbacks = findings_to_feedback(initial if round_no == 1 else current_v)
                 if not feedbacks:
                     break  # 无反馈可生成（理论上 CORRECT 才出现）
+                if progress:
+                    progress(f"revise-{round_no}", None)
                 revised = self._solver.revise(question, current_answer, feedbacks)
+                if progress:
+                    progress(f"answer-{round_no}", revised)
+                if progress:
+                    progress(f"verify-{round_no}", None)
                 current_v = self._verifier.verify(question, revised)
                 cost_now = self._client.call_count
                 rounds.append(RefineRound(

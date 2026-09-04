@@ -225,51 +225,139 @@ document.addEventListener('input', e=>{
   if(e.target && e.target.id==='iSamples') previewSamples();
 });
 
+// 阶段到前端展示文案/顺序（eval 与 refine 共用前缀）
+const PHASE_PILLS_EVAL=['solve','answer','execute','static','verify'];
+const PHASE_PILLS_REFINE=['solve','answer','verify','revise','verify'];
+const PHASE_CN={
+  solve:'求解', answer:'已生成过程', execute:'沙盒执行', static:'静态校验',
+  verify:'过程评估', revise:'修正', done:'完成'
+};
+function renderInterimAnswer(ans){
+  const body=$('#iResultBody');
+  if(!ans)return;
+  const steps=(ans.steps)||[];
+  body.style.alignItems='stretch';body.style.justifyContent='flex-start';body.style.display='block';
+  body.innerHTML=`<div class="flex items-center gap-2 mb-2"><span class="tag" style="color:var(--pri)">解答过程已生成</span>
+    <span class="muted text-sm">等待过程评估完成，最终判定将更新于此</span></div>
+    ${steps.map(s=>`<div class="step-card" title="依赖：${(s.deps||[]).join(',')||'无'}">
+      <div class="k">${KIND_CN[s.kind]||s.kind} · STEP ${s.id}</div>
+      <div class="mt-1">${renderMath(s.content)}</div>
+      <div class="mt-1 text-sm" style="color:var(--pri2)">→ ${renderMath(s.conclusion)}</div></div>`).join('')||'<div class="muted">无步骤</div>'}`;
+  if(ans.code){
+    const el=document.createElement('details');
+    el.style.marginTop='10px';
+    el.innerHTML=`<summary class="text-sm muted cursor-pointer">查看模型生成代码</summary>
+      <pre class="mono" style="background:var(--input-bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12px;white-space:pre-wrap">${escapeHtml(ans.code)}</pre>`;
+    body.appendChild(el);
+  }
+}
+function renderFinalResult(d){
+  const body=$('#iResultBody');
+  body.style.alignItems='stretch';body.style.justifyContent='flex-start';body.style.display='block';
+  // 统一视图模型：eval 与 refine 返回结构不同，按模式分派
+  let verdict, findings, answer, initialVerdict=null, roundCount=0;
+  if(d.mode==='refine'){
+    const rf=d.refine;
+    if(!rf)throw new Error('refine 响应缺失');
+    verdict=rf.final; findings=(rf.final&&rf.final.findings)||[];
+    initialVerdict=(rf.initial&&rf.initial.verdict)||null;
+    roundCount=(rf.rounds||[]).length;
+    const last=rf.rounds&&rf.rounds.length?rf.rounds[rf.rounds.length-1]:null;
+    answer=last?last.revised_answer:(rf.error?null:null);
+    if(!answer&&rf.error)throw new Error('修正失败：'+rf.error);
+  }else{
+    const ev=d.eval;
+    if(!ev)throw new Error('eval 响应缺失');
+    verdict=ev.verification; findings=(verdict&&verdict.findings)||[];
+    answer=ev.answer;
+  }
+  const steps=(answer&&answer.steps)||[];
+  const errIds=new Set(findings.map(f=>f.step_id).filter(x=>x!=null));
+  let html=`<div class="flex items-center gap-2 mb-2"><span class="tag v-${verdict.verdict}">${VERDICT_CN[verdict.verdict]}</span>
+    <span class="muted">${d.mode==='refine'?'修正闭环':'一次性评估'}</span>
+    <span class="text-sm muted">耗时 ${d.elapsed??'—'}s · 调用 ${d.cost_calls??'—'} 次</span></div>`;
+  if(d.mode==='refine'){html+=`<div class="text-sm muted mb-2">初始判定：${VERDICT_CN[initialVerdict]||'—'} → 最终：${VERDICT_CN[verdict.verdict]}（${roundCount} 轮修正）</div>`;}
+  if(d.exec){const ex=d.exec;
+    html+=`<div class="mt-2 mb-2 text-sm">沙盒执行：
+      <span style="color:${ex.test_pass_rate>=1?'var(--ok)':'var(--warn)'}">${ex.test_pass_rate==null?'—':Math.round(ex.test_pass_rate*100)+'% 通过'}</span>
+      ${ex.error?`<span class="finding" style="margin-left:6px">${ex.error}</span>`:''}</div>`;}
+  html+=steps.map(s=>`<div class="step-card ${errIds.has(s.id)?'err':verdict.verdict==='CORRECT'?'ok':''}" title="依赖：${(s.deps||[]).join(',')||'无'}">
+    <div class="k">${KIND_CN[s.kind]||s.kind} · STEP ${s.id}${errIds.has(s.id)?' · 检出错误':''}</div>
+    <div class="mt-1">${renderMath(s.content)}</div><div class="mt-1 text-sm" style="color:var(--pri2)">→ ${renderMath(s.conclusion)}</div></div>`).join('')
+    || '<div class="muted">无步骤</div>';
+  if(answer && answer.code){
+    html+=`<div class="mt-3"><details><summary class="text-sm muted cursor-pointer">查看模型生成代码</summary>
+      <pre class="mono" style="background:var(--input-bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12px;white-space:pre-wrap">${escapeHtml(answer.code)}</pre></details></div>`;
+  }
+  html+=`<div class="mt-2 text-sm muted">最终答案：<span class="mono">${(answer&&answer.final_answer)||'—'}</span></div>`;
+  html+=`<div id="iFindings"></div>`;
+  body.innerHTML=html;
+  const fEl=body.querySelector('#iFindings');
+  if(fEl)fEl.innerHTML=findings.length
+    ? findings.map(f=>`<div class="finding"><b>${TYPE_CN[f.error_type]||f.error_type}</b> · 第${f.step_id??'—'}步：${f.detail}</div>`).join('')
+    : `<div class="text-sm muted mt-2">未检出过程错误 · 置信度 ${(verdict.confidence??0).toFixed(2)}</div>`;
+}
+function resetResultArea(){
+  const body=$('#iResultBody');
+  body.style.alignItems='center';body.style.justifyContent='center';
+  body.innerHTML='结果将显示在这里';
+  $('#iProgress').style.display='none';
+  $('#iProgressSteps').innerHTML='';
+  $('#iProgressElapsed').textContent='';
+}
+function setPhaseUI(phase, mode, elapsed){
+  $('#iProgress').style.display='block';
+  $('#iProgressMsg').textContent=PHASE_CN[phase]?('阶段：'+PHASE_CN[phase]):('阶段：'+phase);
+  if(elapsed)$('#iProgressElapsed').textContent=elapsed+'s';
+  const pills=mode==='refine'?PHASE_PILLS_REFINE:PHASE_PILLS_EVAL;
+  const idx=pills.indexOf(phase);
+  const doneIdx=idx>=0?idx:-1;
+  $('#iProgressSteps').innerHTML=pills.map((p,i)=>{
+    const cls=i<doneIdx?'phase-pill done':(i===doneIdx?'phase-pill active':'phase-pill');
+    let label=PHASE_CN[p]||p;
+    if(p==='revise')label='修正';
+    return `<span class="${cls}">${label}</span>`;
+  }).join('');
+}
 async function interact(){
   const btn=$('#iGo');btn.disabled=true;btn.textContent='求解中…';
-  $('#iResult').innerHTML='<div class="muted">正在调用 Hy3…</div>';
+  resetResultArea();
+  const scene='algorithm';
   try{
-    const scene='algorithm';
-    // 算法场景入参：题目 + 解析样例 + 期望输出（无样例时文本比对兜底）
     const prompt = $('#iPrompt2').value;
     const body = { scene, prompt, refine:$('#iRefine').checked };
     const samples=parseSamples($('#iSamples').value);
     body.samples = samples;
     if($('#iAnswer').value) body.answer = $('#iAnswer').value;
-    const r=await fetch('/api/interact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    // 异步 job：提交后轮询阶段，过程先渲染（answer 阶段即展示步骤）
+    const r=await fetch('/api/interact/job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'failed');
-    const rec=d.eval||d.refine;const v=rec.verification;
-    const findings=v.findings||[];
-    const errIds=new Set(findings.map(f=>f.step_id).filter(x=>x!=null));
-    // 头部：判定 + 模式 + 耗时/调用次数
-    let html=`<div class="flex items-center gap-2 mb-2"><span class="tag v-${v.verdict}">${VERDICT_CN[v.verdict]}</span>
-      <span class="muted">${d.mode==='refine'?'修正闭环':'一次性评估'}</span>
-      <span class="text-sm muted">耗时 ${d.elapsed??'—'}s · 调用 ${d.cost_calls??'—'} 次</span></div>`;
-    if(d.mode==='refine'){html+=`<div class="text-sm muted mb-2">初始判定：${VERDICT_CN[d.refine.initial.verdict]} → 最终：${VERDICT_CN[v.verdict]}（${d.refine.rounds.length} 轮修正）</div>`;}
-    // 沙盒执行结果（算法场景测试通过率 / 错误）
-    if(d.exec){const ex=d.exec;
-      html+=`<div class="mt-2 mb-2 text-sm">沙盒执行：
-        <span style="color:${ex.test_pass_rate>=1?'var(--ok)':'var(--warn)'}">${ex.test_pass_rate==null?'—':Math.round(ex.test_pass_rate*100)+'% 通过'}</span>
-        ${ex.error?`<span class="finding" style="margin-left:6px">${ex.error}</span>`:''}</div>`;}
-    // 步骤卡片：按 findings 高亮错误步骤，Markdown/LaTeX 渲染
-    html+=(rec.answer.steps||[]).map(s=>`<div class="step-card ${errIds.has(s.id)?'err':v.verdict==='CORRECT'?'ok':''}" title="依赖：${(s.deps||[]).join(',')||'无'}">
-      <div class="k">${s.kind} · STEP ${s.id}${errIds.has(s.id)?' · 检出错误':''}</div>
-      <div class="mt-1">${renderMath(s.content)}</div><div class="mt-1 text-sm" style="color:var(--pri2)">→ ${renderMath(s.conclusion)}</div></div>`).join('')
-      || '<div class="muted">无步骤</div>';
-    // 算法场景：展示模型生成的代码
-    if(scene==='algorithm' && rec.answer.code){
-      html+=`<div class="mt-3"><details><summary class="text-sm muted cursor-pointer">查看模型生成代码</summary>
-        <pre class="mono" style="background:var(--input-bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12px;white-space:pre-wrap">${escapeHtml(rec.answer.code)}</pre></details></div>`;
+    const jobId=d.job_id;
+    setPhaseUI('solve', d.mode, '');
+    // 轮询状态（SSE 端点存在但轮询更简单稳定；两个端点可任选）
+    let finalPayload=null, phaseSeen=new Set();
+    for(let tries=0; tries<600; tries++){
+      await new Promise(res=>setTimeout(res,800));
+      let st;
+      try{ st=await (await fetch('/api/interact/job/'+jobId)).json(); }
+      catch(e){ continue; }
+      if(st.phase && !phaseSeen.has(st.phase)){
+        phaseSeen.add(st.phase);
+        setPhaseUI(st.phase, d.mode, st.elapsed);
+      }
+      if(st.answer && !finalPayload) renderInterimAnswer(st.answer);   // B：先展示过程
+      if(st.result){ finalPayload=st.result; break; }
+      if(st.status==='failed'){ throw new Error(st.error||'运行失败'); }
     }
-    html+=`<div class="mt-2 text-sm muted">最终答案：<span class="mono">${rec.answer.final_answer}</span></div>`;
-    // 错误定位 findings
-    html+=`<div id="iFindings"></div>`;
-    $('#iResult').innerHTML=html;
-    $('#iFindings').innerHTML=findings.length
-      ? findings.map(f=>`<div class="finding"><b>${TYPE_CN[f.error_type]||f.error_type}</b> · 第${f.step_id??'—'}步：${f.detail}</div>`).join('')
-      : `<div class="text-sm muted mt-2">未检出过程错误 · 置信度 ${(v.confidence??0).toFixed(2)}</div>`;
-  }catch(e){$('#iResult').innerHTML=`<div class="finding"><b>出错：</b>${e.message}</div>`}
+    if(!finalPayload) throw new Error('等待超时：求解未在预期时间内完成');
+    setPhaseUI('done', d.mode, finalPayload.elapsed);
+    renderFinalResult(finalPayload);
+  }catch(e){
+    const body=$('#iResultBody');
+    body.style.alignItems='center';body.style.justifyContent='center';
+    body.innerHTML=`<div class="finding"><b>出错：</b>${escapeHtml(e.message||String(e))}</div>`;
+  }
   finally{btn.disabled=false;btn.textContent='开始求解'}
 }
 

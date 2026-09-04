@@ -17,6 +17,7 @@ import logging
 import re
 import time
 from pathlib import Path
+from typing import Callable
 
 from rex.config import Config
 from rex.executor.tests import run_test_cases
@@ -219,17 +220,35 @@ class Pipeline:
                 done[q.id] = rec
         return list(done.values())
 
-    def _eval_one(self, q: QuestionItem) -> EvalRecord:
+    def _eval_one(self, q: QuestionItem,
+                  progress: Callable[[str, object | None], None] | None = None) -> EvalRecord:
+        """Evaluate one question.
+
+        ``progress(phase, payload)``：可选阶段回调。phase 取值：
+        "solve"(开始求解) → "answer"(完成，payload=Answer 可先展示) →
+        "execute"(沙盒执行) → "static"(静态校验) → "verify"(过程评估)。
+        供交互式界面实时展示进度（api 层 job 轮询/SSE 复用）。
+        """
         from rex.executor.static_check import check_static, static_evidence_block, static_result_to_dict
 
         t0 = time.time()
+        if progress:
+            progress("solve", None)
         answer = self.solver.solve(q)
+        if progress:
+            progress("answer", answer)
+        if progress:
+            progress("execute", None)
         answer_correct, pass_rate, exec_err = self._execute(q, answer)
         # 静态规则校验：作为独立验证维度喂给 verifier（补充诊断，不改主判定）
+        if progress:
+            progress("static", None)
         static = check_static(q, answer)
         evidence = static_evidence_block(static)
         # 客观执行反馈：沙盒/比对结果是事实性证据，喂给 verifier 防止"答案错却判 CORRECT"
         exec_fb = _execution_feedback(q, answer_correct, pass_rate, exec_err)
+        if progress:
+            progress("verify", None)
         verification = self.verifier.verify(q, answer, static_evidence=evidence,
                                             execution_feedback=exec_fb)
         # 客观优先兜底：沙盒证明答案错时，verdict 绝不可能是 CORRECT（防止 LLM 漏检）

@@ -137,9 +137,17 @@
           </div>
         </div>
         <!-- 右：结果区 -->
-        <div id="iResult" class="muted text-sm" style="min-height:240px;align-self:start;position:sticky;top:20px">
-          <div class="panel" style="background:var(--panel2);min-height:240px;display:flex;align-items:center;justify-content:center;color:var(--sub)">
-            结果将显示在这里
+        <div id="iResult" class="muted text-sm" style="min-height:300px;align-self:start;position:sticky;top:20px">
+          <div class="panel" style="background:var(--panel2);min-height:300px;display:flex;flex-direction:column;color:var(--sub)">
+            <div id="iProgress" style="display:none;padding:2px 4px 12px;border-bottom:1px dashed var(--line);margin-bottom:12px">
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+                <span class="spin" style="width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--pri);border-radius:50%;display:inline-block;animation:rot .8s linear infinite"></span>
+                <span id="iProgressMsg" style="color:var(--txt)">准备中…</span>
+                <span id="iProgressElapsed" class="muted" style="margin-left:auto;font-size:12px"></span>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px" id="iProgressSteps"></div>
+            </div>
+            <div id="iResultBody" style="flex:1;display:flex;align-items:center;justify-content:center">结果将显示在这里</div>
           </div>
         </div>
       </div>
