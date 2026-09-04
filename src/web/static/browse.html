@@ -1,62 +1,99 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>评测题集浏览器（临时）</title>
+<title>HY3Coder · 评测题集浏览器</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@9.1.2/marked.min.js"></script>
+<link rel="stylesheet" href="/static/styles.css">
 <style>
-  :root{--bg:#f5f7fa;--panel:#fff;--line:#e4e8ee;--ink:#1f2328;--sub:#6b7280;--pri:#0d9488}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px}
-  .top{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;z-index:10}
-  .top h1{font-size:17px;margin:0}
-  select,input,button{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
-  button{cursor:pointer;color:var(--pri)}
-  .wrap{padding:20px;max-width:1100px;margin:0 auto}
-  .q{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
-  .q .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-  .tag{display:inline-block;padding:1px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;color:var(--sub)}
-  .tag.src{color:var(--pri);border-color:var(--pri)}
-  .sec{margin-top:10px}
-  .sec .lb{font-weight:600;font-size:12px;color:var(--sub);margin-bottom:4px}
-  .body{background:#fafbfc;border:1px solid var(--line);border-radius:8px;padding:10px 12px;white-space:pre-wrap}
-  pre.code{background:#0d1117;color:#e6edf3;border-radius:8px;padding:12px;overflow:auto;font-size:12.5px;white-space:pre-wrap}
-  .meta{font-size:12px;color:var(--sub);margin-top:8px;word-break:break-word}
-  .tc{border:1px solid var(--line);border-radius:6px;margin:4px 0;padding:6px 10px;font-size:12px}
-  .nav{display:flex;align-items:center;gap:12px;margin:12px 0}
-  .muted{color:var(--sub)}
+  /* 浏览页专属：题集卡片列表 */
+  .qtoolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+  .qtoolbar .stat{margin-left:auto;color:var(--sub);font-size:12px}
+  .qcard{background:linear-gradient(180deg,var(--panel-tint),rgba(255,255,255,0)),var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:14px}
+  .qcard .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .qcard .body{background:var(--bg2);border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;white-space:pre-wrap;word-break:break-word;font-size:13px}
+  .qcard .code{background:#0d1117;color:#e6edf3;border-radius:8px;padding:12px;
+    overflow:auto;font-size:12.5px;white-space:pre-wrap}
+  .qcard .sec{margin-top:10px}
+  .qcard .lb{font-weight:600;font-size:12px;color:var(--sub);margin-bottom:4px;
+    text-transform:uppercase;letter-spacing:.5px}
+  .qcard .meta{font-size:12px;color:var(--sub);margin-top:8px;word-break:break-word}
+  .qcard .tc{border:1px solid var(--line);border-radius:6px;margin:4px 0;padding:8px 10px;font-size:12px}
+  .qcard .tc pre.body{margin:4px 0 0;max-height:180px;overflow:auto}
+  .pager{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:8px;color:var(--sub);font-size:12px}
+  .empty-state{padding:60px 20px;text-align:center;color:var(--sub)}
 </style>
 </head>
-<body>
-<div class="top">
-  <h1>评测题集浏览器（临时）</h1>
-  <select id="source">
-    <option value="">全部来源</option>
-    <option value="AtCoder">AtCoder 自建</option>
-    <option value="Codeforces">Codeforces 自建</option>
-    <option value="TACO">TACO</option>
-    <option value="自编">自编</option>
-  </select>
-  <button onclick="load(0)">加载</button>
-  <span class="muted" id="totalInfo"></span>
-</div>
-<div class="wrap" id="list">加载中…</div>
-<div class="wrap nav">
-  <button id="prev" onclick="load(cur-100)">上一页</button>
-  <span class="muted" id="pageInfo"></span>
-  <button id="next" onclick="load(cur+100)">下一页</button>
-</div>
+<body class="bg-grad">
+
+<aside class="sidebar">
+  <div class="px-5 py-5 logo" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+    <div>
+      <div style="font-size:20px;line-height:1.1">Re<b>Agents</b></div>
+      <div class="muted" style="font-size:11px;font-weight:400;margin-top:3px;letter-spacing:.3px">v2 · 过程评估中心</div>
+    </div>
+    <button id="themeBtn" title="切换亮/暗主题" style="background:none;border:1px solid var(--line);border-radius:8px;color:var(--sub);cursor:pointer;padding:7px 9px;line-height:0;transition:.18s;flex-shrink:0">
+      <svg id="icoSun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      <svg id="icoMoon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+  <div class="mt-2">
+    <a class="nav-item" href="/"><span class="dot"></span>评估总览</a>
+    <a class="nav-item" href="/"><span class="dot"></span>单题回放</a>
+    <a class="nav-item" href="/"><span class="dot"></span>Golden 库</a>
+    <a class="nav-item" href="/"><span class="dot"></span>人工抽检</a>
+    <a class="nav-item" href="/"><span class="dot"></span>交互式解题</a>
+    <a class="nav-item active" href="/browse"><span class="dot"></span>题集浏览器</a>
+  </div>
+  <div style="position:absolute;bottom:18px;left:0;right:0;text-align:center;color:var(--sub);font-size:11px">
+    过程评估 · 错误定位 · 自我修正
+  </div>
+</aside>
+
+<main>
+  <div class="flex items-center justify-between mb-5">
+    <div>
+      <div class="text-sm muted">HY3CODER · QUESTION SET EXPLORER</div>
+      <h1 class="text-xl font-semibold mt-1">题集浏览器</h1>
+    </div>
+  </div>
+
+  <div class="panel mb-4">
+    <div class="qtoolbar">
+      <span class="muted text-sm">来源</span>
+      <select id="source" class="fbtn" style="font-size:12px;padding:4px 8px">
+        <option value="">全部来源</option>
+        <option value="AtCoder">AtCoder 自建</option>
+        <option value="Codeforces">Codeforces 自建</option>
+        <option value="TACO">TACO</option>
+        <option value="自编">自编</option>
+      </select>
+      <select id="size" class="fbtn" style="font-size:12px;padding:4px 8px">
+        <option value="50">每页 50</option>
+        <option value="100" selected>每页 100</option>
+        <option value="200">每页 200</option>
+      </select>
+      <button class="btn" style="font-size:12px;padding:6px 14px" onclick="load(0)">加载</button>
+      <span class="stat" id="totalInfo"></span>
+    </div>
+  </div>
+
+  <div id="list" class="muted text-sm">加载中…</div>
+  <div class="pager" id="pager"></div>
+</main>
+
 <script>
-let cur=0, total=0;
+let cur=0, total=0, pageSize=100;
 const $=s=>document.querySelector(s);
 function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function renderMath(text){
   if(!text)return'';
-  // 先提取公式（KaTeX）用占位符保护，再对剩余文本做 marked ——
-  // 若先 marked 会把公式里的 < > 转义成 &lt; &gt; 导致 KaTeX 渲染乱码。
   const katexHtml = [];
   let safe = text;
   if (window.katex) {
@@ -71,45 +108,77 @@ function renderMath(text){
     });
   }
   let html;
-  try{html=window.marked?marked.parse(safe):safe.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}catch(e){html=safe;}
-  // 恢复公式占位符
+  try{html=window.marked?marked.parse(safe):escapeHtml(safe);}catch(e){html=escapeHtml(safe);}
   html = html.replace(/\u0000K(\d+)\u0000/g, (m, i) => katexHtml[+i] || '');
   return html;
 }
 async function load(offset){
   cur=Math.max(0,offset);
+  pageSize=parseInt($('#size').value,10)||100;
   const source=$('#source').value;
-  const q=new URLSearchParams({limit:'100',offset:String(cur)});
+  const q=new URLSearchParams({limit:String(pageSize),offset:String(cur)});
   if(source)q.set('source',source);
   const d=await (await fetch('/api/browse?'+q)).json();
   total=d.total;
-  $('#totalInfo').textContent='共 '+total+' 题';
-  $('#pageInfo').textContent='第 '+Math.floor(cur/100+1)+' 页 / 显示 '+(cur+1)+'-'+Math.min(cur+100,total);
-  $('#prev').disabled=cur<=0;
-  $('#next').disabled=cur+100>=total;
-  $('#list').innerHTML=d.items.map(q=>{
+  $('#totalInfo').textContent='共 '+total+' 题 · 第 '+(cur+1)+'-'+Math.min(cur+pageSize,total)+' 条';
+  $('#pager').innerHTML=`<button class="fbtn" onclick="load(cur-${pageSize})" ${cur<=0?'disabled':''}>‹ 上一页</button>
+    <span>第 ${Math.floor(cur/pageSize)+1} 页 / 共 ${Math.ceil(total/pageSize)} 页</span>
+    <button class="fbtn" onclick="load(cur+${pageSize})" ${cur+pageSize>=total?'disabled':''}>下一页 ›</button>`;
+  $('#list').innerHTML=d.items.length?d.items.map(q=>{
     const hasRef=!!q.reference_solution;
     const tcs=q.test_cases||[];
-    return `<div class="q">
+    const pub=tcs.filter(t=>!t.hidden).length;
+    const hid=tcs.filter(t=>t.hidden).length;
+    return `<div class="qcard">
       <div class="hd">
-        <b>${q.id}</b>
-        <span class="tag src">${q.source}</span>
-        <span class="tag">${q.scene}</span>
-        <span class="tag">${q.difficulty}</span>
-        <span class="tag">${q.metadata&&q.metadata.type?'类型:'+q.metadata.type:''}</span>
-        ${q.metadata&&q.metadata.level?'<span class="tag">level '+q.metadata.level+'</span>':''}
+        <b style="font-family:var(--mono);font-size:14px">${escapeHtml(q.id)}</b>
+        <span class="tag" style="color:var(--pri);border-color:var(--pri)">${escapeHtml(q.source||'—')}</span>
+        <span class="tag">${escapeHtml(q.scene||'—')}</span>
+        <span class="tag">难度:${escapeHtml(q.difficulty||'—')}</span>
+        ${q.metadata&&q.metadata.type?`<span class="tag">${escapeHtml(q.metadata.type)}</span>`:''}
+        ${q.metadata&&q.metadata.contest?`<span class="tag">#${escapeHtml(q.metadata.contest)}</span>`:''}
+        <span class="tag" style="margin-left:auto">用例 ${pub}·${hid} hidden</span>
       </div>
-      <div class="sec"><div class="lb">题目</div><div class="body">${renderMath(q.prompt)}</div></div>
+      <div class="sec"><div class="lb">题目</div><div class="body">${renderMath(q.prompt||'—')}</div></div>
       <div class="sec"><div class="lb">标准答案</div><div class="body">${renderMath(q.standard_answer||'—')}</div></div>
-      <div class="sec"><div class="lb">参考解 ${hasRef?'':'（缺失）'}</div>${hasRef?`<pre class="code">${escapeHtml(q.reference_solution)}</pre>`:'<div class="muted">无参考解</div>'}</div>
-      <div class="sec"><div class="lb">测试用例（${tcs.length}）</div>
-        ${tcs.map((tc,i)=>`<div class="tc"><b>#${i+1}</b>${tc.hidden?' [hidden]':''}<br>输入：<pre class="body">${escapeHtml(tc.input)}</pre>输出：<pre class="body">${escapeHtml(tc.output)}</pre></div>`).join('')||'<div class="muted">无测试用例</div>'}
+      <div class="sec"><div class="lb">参考解${hasRef?'':' <span class="muted">（缺失）</span>'}</div>
+        ${hasRef?`<pre class="code">${escapeHtml(q.reference_solution)}</pre>`:'<div class="muted">无参考解</div>'}
       </div>
-      <div class="meta"><b>分层依据：</b>${q.layer_basis||'—'}<br><b>source_id：</b>${q.source_id||'—'}<br><b>metadata：</b>${JSON.stringify(q.metadata||{})}</div>
+      <div class="sec"><div class="lb">测试用例（公开 ${pub} + 隐藏 ${hid}）</div>
+        ${tcs.length?tcs.map((tc,i)=>`<div class="tc"><b>#${i+1}${tc.hidden?' <span class="tag" style="color:var(--warn);border-color:var(--warn)">hidden</span>':''}</b>
+          <pre class="body">输入：\n${escapeHtml(tc.input)}</pre>
+          <pre class="body">输出：\n${escapeHtml(tc.output)}</pre>
+        </div>`).join(''):'<div class="muted">无测试用例</div>'}
+      </div>
+      <div class="meta"><b>分层依据：</b>${escapeHtml(q.layer_basis||'—')}<br>
+        <b>source_id：</b><span class="mono">${escapeHtml(q.source_id||'—')}</span><br>
+        ${q.metadata?`<b>metadata：</b><span class="mono">${escapeHtml(JSON.stringify(q.metadata))}</span>`:''}
+      </div>
     </div>`;
-  }).join('')||'<div class="muted">无匹配题</div>';
+  }).join(''):'<div class="empty-state">无匹配题</div>';
 }
-load(0);
+
+// ---- 主题切换（与主仪表盘一致） ----
+function applyTheme(t){
+  document.documentElement.dataset.theme = t;
+  const sun = document.getElementById("icoSun");
+  const moon = document.getElementById("icoMoon");
+  if (sun) sun.style.display = t === "dark" ? "inline" : "none";
+  if (moon) moon.style.display = t === "light" ? "inline" : "none";
+  try { localStorage.setItem("rex_theme", t); } catch(e){}
+}
+function toggleTheme(){
+  applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+}
+document.addEventListener("DOMContentLoaded", ()=>{
+  const btn = document.getElementById("themeBtn");
+  if (btn) btn.addEventListener("click", toggleTheme);
+  try {
+    const saved = localStorage.getItem("rex_theme");
+    applyTheme(saved || "dark");
+  } catch(e){applyTheme("dark");}
+  load(0);
+});
 </script>
 </body>
 </html>

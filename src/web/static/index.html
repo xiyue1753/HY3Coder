@@ -31,6 +31,7 @@
     <div class="nav-item" data-view="golden"><span class="dot"></span>Golden 库</div>
     <div class="nav-item" data-view="audit"><span class="dot"></span>人工抽检</div>
     <div class="nav-item" data-view="interact"><span class="dot"></span>交互式解题</div>
+    <a class="nav-item" href="/browse"><span class="dot"></span>题集浏览器</a>
   </div>
   <div style="position:absolute;bottom:18px;left:0;right:0;text-align:center;color:var(--sub);font-size:11px">
     过程评估 · 错误定位 · 自我修正
@@ -83,13 +84,13 @@
       <div id="dList" class="muted text-sm">加载中…</div>
     </div>
     <!-- 下：题目详情（全宽） -->
-    <div class="panel mb-4">
+    <div class="panel mb-4" id="dEmpty" style="min-height:80px">
       <h3 class="text-base font-medium mb-3">题目</h3>
-      <div id="dQuestion" class="muted">从上方列表选择一题</div>
+      <div id="dQuestion" class="muted text-sm">从上方列表选择一题</div>
       <div class="mt-4" id="dMeta"></div>
     </div>
     <!-- 下：过程回放（全宽） -->
-    <div class="panel">
+    <div class="panel" id="dStepsEmpty" style="min-height:80px">
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-base font-medium">过程回放</h3>
         <div class="round-tabs" id="roundTabs"></div>
@@ -121,7 +122,7 @@
   <section id="view-interact" class="fade" style="display:none">
     <div class="panel">
       <h3 class="text-base font-medium mb-3">交互式解题（实时演示）</h3>
-      <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px">
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:20px;align-items:start">
         <!-- 左：输入区（算法竞赛场景） -->
         <div>
           <div class="muted text-sm mb-1">题目描述</div>
@@ -130,15 +131,17 @@
           <div class="muted text-sm mb-1 mt-3">输入输出样例（多组用空行分隔，格式：输入\n…\n输出\n…）</div>
           <textarea id="iSamples" rows="6" class="w-full" placeholder="输入：&#10;3&#10;5&#10;输出：&#10;8&#10;&#10;输入：&#10;1 2&#10;输出：&#10;3"></textarea>
           <input type="text" id="iAnswer" class="w-full mt-3" placeholder="期望输出/标准答案（可选，无样例时用于文本比对）">
-        </div>
-
           <div class="flex items-center gap-4 mt-3">
             <label class="flex items-center gap-2 text-sm muted"><input type="checkbox" id="iRefine" class="accent-[#2dd4bf]"> 演示修正闭环</label>
             <button class="btn" id="iGo" onclick="interact()">开始求解</button>
           </div>
         </div>
         <!-- 右：结果区 -->
-        <div id="iResult" class="muted text-sm">结果将显示在这里</div>
+        <div id="iResult" class="muted text-sm" style="min-height:240px;align-self:start;position:sticky;top:20px">
+          <div class="panel" style="background:var(--panel2);min-height:240px;display:flex;align-items:center;justify-content:center;color:var(--sub)">
+            结果将显示在这里
+          </div>
+        </div>
       </div>
     </div>
   </section>

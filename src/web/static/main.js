@@ -2,22 +2,25 @@ const $=s=>document.querySelector(s);
 let CHARTS={}, STATE={questions:[],detail:null,round:0,rounds:[]};
 const VERDICT_CN={CORRECT:'正确',PROCESS_INCORRECT:'过程错误',ANSWER_INCORRECT:'答案错误',SILENT_FAILURE:'沉默失败'};
 const KIND_CN={understand:'题意',approach:'思路',complexity:'复杂度',implement:'实现',selftest:'自测'};
-const TYPE_CN={concept:'概念',calculation:'计算',condition:'条件',jump:'跳步',format:'格式',logic:'逻辑',boundary:'边界',complexity:'复杂度',misread:'题意误读'};
+const TYPE_CN={misread:'题意误读',concept:'概念',calculation:'计算',missing_condition:'条件遗漏',jump:'跳步',format:'格式',logic:'逻辑',boundary:'边界',complexity:'复杂度',other:'其他'};
 
 async function j(url){const r=await fetch(url);if(!r.ok)throw new Error(await r.text());return r.json()}
 
 // ---------- 导航 ----------
-document.querySelectorAll('.nav-item').forEach(el=>el.onclick=()=>{
-  document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
-  el.classList.add('active');
-  const v=el.dataset.view;
-  document.querySelectorAll('main section').forEach(s=>s.style.display='none');
-  $('#view-'+v).style.display='block';$('#view-'+v).classList.add('fade');
-  const titles={overview:'评估总览',detail:'单题过程回放',golden:'Golden 样本库',audit:'人工抽检',interact:'交互式解题'};
-  $('#pageTitle').textContent=titles[v];
-  if(v==='detail'&&!STATE.questions.length)loadQuestions();
-  if(v==='golden')loadGolden();
-  if(v==='audit')loadAudit();
+document.querySelectorAll('.nav-item').forEach(el=>{
+  if(el.tagName==='A')return;   // 外链（如 /browse）交给浏览器默认跳转
+  el.onclick=()=>{
+    document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+    el.classList.add('active');
+    const v=el.dataset.view;
+    document.querySelectorAll('main section').forEach(s=>s.style.display='none');
+    $('#view-'+v).style.display='block';$('#view-'+v).classList.add('fade');
+    const titles={overview:'评估总览',detail:'单题过程回放',golden:'Golden 样本库',audit:'人工抽检',interact:'交互式解题'};
+    $('#pageTitle').textContent=titles[v];
+    if(v==='detail'&&!STATE.questions.length)loadQuestions();
+    if(v==='golden')loadGolden();
+    if(v==='audit')loadAudit();
+  };
 });
 
 // ---------- 总览 ----------
