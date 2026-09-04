@@ -69,3 +69,21 @@ def test_cpp_compile_error() -> None:
     r = run_code(code, language="cpp")
     assert r.error is not None
     assert "compile failed" in (r.error or "")
+
+
+def test_text_match_multi_float_same_line() -> None:
+    """回归：一行含多个空格分隔浮点数（如坐标输出）须按 token 容差比对，
+    而非把整行当单个 float 解析（曾致 cf106e 等几何题全部误判失败）。"""
+    from rex.executor.tests import _text_match
+
+    # 数值相等、精度不同 → 应匹配
+    assert _text_match("0.0000000 0.0000000 0.0000000", "0.000 0.000 0.000")
+    assert _text_match("1.000000 2.5000000 3.00000", "1.0 2.5 3.0")
+    # token 数不一致 → 不匹配
+    assert not _text_match("0.000 1.000", "0.000 1.000 2.000")
+    # 数值超出容差 → 不匹配
+    assert not _text_match("0.0000000 10.0000000 0.0000000", "0.000 1.000 0.000")
+    # 纯文本仍逐 token 精确
+    assert _text_match("hello world", "hello world")
+    assert not _text_match("hello world", "hello  world!")
+

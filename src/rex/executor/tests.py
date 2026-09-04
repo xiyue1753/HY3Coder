@@ -25,20 +25,30 @@ _FLOAT_TOL = 1e-5
 
 
 def _text_match(got: str, expected: str) -> bool:
-    """宽松文本比较：去尾空白逐行精确比对；两侧同行皆浮点数时按误差容忍。"""
+    """宽松文本比较：逐行、逐空白 token 精确比对；两侧 token 皆浮点数时按误差容忍。
+
+    支持一行含多个空格分隔数值（如坐标输出 `0.000 1.000 2.000`）：整行解析
+    为单个 float 会失败，故按 token 比较。token 数不一致视为不匹配。
+    """
     g = [ln.strip() for ln in got.rstrip().split("\n")]
     e = [ln.strip() for ln in expected.rstrip().split("\n")]
     if len(g) != len(e):
         return False
     for gl, el in zip(g, e):
-        if gl == el:
+        gt, et = gl.split(), el.split()
+        if gt == et:
             continue
-        try:
-            fg, fe = float(gl), float(el)
-        except ValueError:
+        if len(gt) != len(et):
             return False
-        if abs(fg - fe) > _FLOAT_TOL * max(1.0, abs(fe), abs(fg)):
-            return False
+        for a, b in zip(gt, et):
+            if a == b:
+                continue
+            try:
+                fa, fb = float(a), float(b)
+            except ValueError:
+                return False
+            if abs(fa - fb) > _FLOAT_TOL * max(1.0, abs(fb), abs(fa)):
+                return False
     return True
 
 

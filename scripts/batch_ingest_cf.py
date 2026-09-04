@@ -248,20 +248,33 @@ class CFBatch:
 
 
 def _outputs_match(got: str, expected: str, float_tol: float = 1e-5) -> bool:
+    """按行 + 空白 token 级容差比较输出。
+
+    支持每行多个空格分隔数值（如坐标 `0.000 1.000 2.000`）——整行解析为
+    单个 float 会失败。逐 token 比较：两侧 token 数一致、逐 token 字符串相等
+    或浮点容差内相等。
+    """
     got_lines = [ln.strip() for ln in got.replace("\r\n", "\n").split("\n")]
     exp_lines = [ln.strip() for ln in expected.replace("\r\n", "\n").split("\n")]
     if len(got_lines) != len(exp_lines):
         return False
     for g, e in zip(got_lines, exp_lines):
-        if g == e:
+        gt = g.split()
+        et = e.split()
+        if gt == et:
             continue
-        try:
-            fg, fe = float(g), float(e)
-        except ValueError:
+        if len(gt) != len(et):
             return False
-        if abs(fg - fe) <= float_tol * max(1.0, abs(fe), abs(fg)):
-            continue
-        return False
+        for a, b in zip(gt, et):
+            if a == b:
+                continue
+            try:
+                fa, fb = float(a), float(b)
+            except ValueError:
+                return False
+            if abs(fa - fb) <= float_tol * max(1.0, abs(fb), abs(fa)):
+                continue
+            return False
     return True
 
 
@@ -282,12 +295,28 @@ def looks_multi_solution(statement: str) -> bool:
     """检测多解构造题提示（CF 用 checker 判题，样例只是合法解之一）。
 
     命中后不能用样例文本比对验证 AC 解，自动收录阶段跳过（需 SPJ checker）。
+
+    排除误判：数值/几何题（输出浮点坐标、半径等）同样带 CF 标准宽容声明
+    "if there are several solutions, you are allowed to print any of them"，
+    但那是浮点精度允许多个等价解，不是构造多解。此类题含 real numbers /
+    coordinates / absolute error 等强信号时**不**判多解（仍可用样例文本比对，
+    因为输出的是数值，AC 解会打印同值坐标）。
     """
     import re
 
     if not statement:
         return False
     s = statement.lower()
+    # 数值输出题（浮点坐标/实数/容差声明）→ several solutions 指精度等价解，非多解
+    numeric_ok = (
+        r"print\s+three\s+space[-\s]separated\s+real\s+numbers"
+        r"|real\s+numbers"
+        r"|space[-\s]separated\s+real"
+        r"|absolute\s+(or\s+relative\s+)?error"
+        r"|within\s+[0-9.e-]+\s+(absolute|relative)"
+    )
+    if re.search(numeric_ok, s):
+        return False
     patterns = [
         r"(print|output|return|submit)\s+any\b",
         r"any\s+valid",
