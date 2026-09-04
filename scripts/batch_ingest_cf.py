@@ -54,6 +54,15 @@ class CFBatch:
                                    "domain": "codeforces.com", "path": "/",
                                    "httpOnly": True, "secure": True}])
         self.pg = self.ctx.new_page()
+        # 关键：先访问首页完成会话初始化（含 CF 会话 cookie/防爬放行），
+        # 否则直接访问提交源码页可能拿不到登录态。
+        try:
+            self.pg.goto("https://codeforces.com/", timeout=30000,
+                         wait_until="domcontentloaded")
+            _wait(self.pg, lambda: "Just a moment" not in self.pg.content())
+            time.sleep(REQUEST_DELAY)
+        except Exception:  # noqa: BLE001
+            pass
 
     def close(self) -> None:
         self.b.close()
@@ -105,17 +114,22 @@ class CFBatch:
         return [r for r in rows if "C++" in r and "Accepted" in r]
 
     def fetch_source(self, href: str) -> str:
-        self.pg.goto("https://codeforces.com" + href, timeout=30000)
-        self.pg.wait_for_load_state("networkidle")
-        self.pg.wait_for_timeout(3000)
-        time.sleep(REQUEST_DELAY)
-        code = (self.pg.eval_on_selector("#program-source-text", "e => e.innerText")
-                if self.pg.query_selector("#program-source-text") else "")
-        if not code:
-            raise RuntimeError(f"{href}: source not found")
-        for ch in ("\xa0", "\u3000", "\u2009", "\u200b"):
-            code = code.replace(ch, " ")
-        return code
+        url = "https://codeforces.com" + href
+        last_err = "source not found"
+        for attempt in range(3):
+            self.pg.goto(url, timeout=30000)
+            # 轮询等源码块出现（页面 JS 加载 + 登录态恢复可能较慢）
+            found = _wait(self.pg, lambda: self.pg.query_selector("#program-source-text") is not None,
+                          tries=12, delay=1.5)
+            time.sleep(REQUEST_DELAY)
+            if found:
+                code = self.pg.eval_on_selector("#program-source-text", "e => e.innerText")
+                if code.strip():
+                    for ch in ("\xa0", "\u3000", "\u2009", "\u200b"):
+                        code = code.replace(ch, " ")
+                    return code
+            last_err = f"{href}: source not loaded (attempt {attempt + 1}/3)"
+        raise RuntimeError(last_err)
 
     @staticmethod
     def _prescreen(code: str) -> str | None:
@@ -163,6 +177,27 @@ def _verify_with_samples(code: str, samples: list[tuple[str, str]]) -> tuple[boo
     return True, ""
 
 
+def looks_multi_solution(statement: str) -> bool:
+    """检测多解构造题提示（CF 用 checker 判题，样例只是合法解之一）。
+
+    命中后不能用样例文本比对验证 AC 解，自动收录阶段跳过（需 SPJ checker）。
+    """
+    import re
+
+    if not statement:
+        return False
+    s = statement.lower()
+    patterns = [
+        r"(print|output|return|submit)\s+any\b",
+        r"any\s+valid",
+        r"any\s+(of|one|answer|solution|way|sequence|permutation|order)\b",
+        r"(not\s+unique|multiple\s+(valid\s+)?(answers|solutions))",
+        r"if there are (several|multiple)",
+        r"(several|multiple)\s+(possible|valid)\s+",
+    ]
+    return any(re.search(p, s) for p in patterns)
+
+
 def _find_ac(batch: CFBatch, contest: str, index: str,
              samples: list[tuple[str, str]], max_try: int = 6) -> tuple[str, str]:
     """按时间正序试前 max_try 条 C++ AC，用样例验证；返回 (submission_href, code)。"""
@@ -186,8 +221,136 @@ def _find_ac(batch: CFBatch, contest: str, index: str,
 
 
 # ---------------------------------------------------------------- 题单
-# 第一轮（对齐 ABC 首轮 ~17 题规模；rating 分层 basic<=1100/medium1200-1700/hard>=1800）
+# 长程轮次：PLAN 为固定精选题（第一轮）；--auto 从 CF problemset 缓存自动选题。
 # (contest, index, title, type, difficulty)
+TAG_TYPE = {
+    "implementation": "模拟", "greedy": "贪心", "math": "数学", "dp": "DP",
+    "graphs": "图", "data structures": "数据结构", "strings": "字符串",
+    "binary search": "二分", "sortings": "排序", "number theory": "数论",
+    "dfs and similar": "DFS", "brute force": "暴力", "combinatorics": "组合",
+    "constructive algorithms": "构造", "two pointers": "双指针", "bitmasks": "位运算",
+    "trees": "树", "shortest paths": "最短路", "divide and conquer": "分治",
+    "geometry": "几何", "games": "博弈", "probabilities": "概率",
+}
+BAD_TAGS = {"interactive", "*special", "fft", "chinese remainder theorem"}
+# 每档 hard 上限：>2400 的题样例少且 AC 解模板化严重，沙盒验证不稳定，不自动收录
+HARD_RATING_MAX = 2400
+
+
+def type_of(tags: list[str]) -> str:
+    for t in tags:
+        if t in TAG_TYPE:
+            return TAG_TYPE[t]
+    return "综合"
+
+
+def _load_cache() -> list[dict]:
+    cache = ROOT / "data" / "cache" / "cf_problemset.json"
+    if not cache.exists():
+        print("[fatal] 缺少 data/cache/cf_problemset.json")
+        sys.exit(2)
+    return json.loads(cache.read_text(encoding="utf-8"))
+
+
+def plan_from_ids(ids: list[str]) -> list[tuple[str, str, str, str, str]]:
+    """根据 source_id 列表（cf{contest}{index}）从缓存构造 PLAN。"""
+    probs = _load_cache()
+    by_sid: dict[str, dict] = {}
+    for p in probs:
+        c = p.get("contestId")
+        i = p.get("index")
+        if c is None or i is None:
+            continue
+        by_sid[f"cf{c}{i.lower()}"] = p
+    out = []
+    for sid in ids:
+        p = by_sid.get(sid)
+        if not p:
+            print(f"[skip] {sid}: 缓存中无此题")
+            continue
+        r = int(p["rating"])
+        d = "basic" if r <= 1100 else ("medium" if r <= 1700 else "hard")
+        out.append((str(p["contestId"]), p["index"], p.get("name", ""),
+                    type_of(p.get("tags", [])), d))
+    return out
+
+
+def auto_plan(round_size: int = 17, seed: int = 1) -> list[tuple[str, str, str, str, str]]:
+    """从 data/cache/cf_problemset.json 选下一轮题（未收录、按分层缺口+类型均匀）。"""
+    import random
+
+    cache = ROOT / "data" / "cache" / "cf_problemset.json"
+    if not cache.exists():
+        print("[fatal] 缺少 data/cache/cf_problemset.json（先跑 API 拉题单）")
+        sys.exit(2)
+    probs = json.loads(cache.read_text(encoding="utf-8"))
+    existing = existing_source_ids()
+
+    def sid(c: str, i: str) -> str:
+        return f"cf{c}{i.lower()}"
+
+    # 当前分层缺口（目标对齐 ABC：basic33/medium82/hard60）
+    counts = {"basic": 0, "medium": 0, "hard": 0}
+    for l in OUT.open(encoding="utf-8"):
+        if l.strip():
+            counts[json.loads(l)["difficulty"]] += 1
+    target = {"basic": 33, "medium": 82, "hard": 60}
+    need = {k: max(0, target[k] - counts[k]) for k in target}
+    tiers: dict[str, list[dict]] = {"basic": [], "medium": [], "hard": []}
+    for p in probs:
+        if p.get("type") != "PROGRAMMING" or "rating" not in p:
+            continue
+        if sid(str(p.get("contestId")), p.get("index")) in existing:
+            continue
+        if any(t in BAD_TAGS for t in p.get("tags", [])):
+            continue
+        r = int(p["rating"])
+        if r <= 1100:
+            tiers["basic"].append(p)
+        elif 1200 <= r <= 1700:
+            tiers["medium"].append(p)
+        elif 1800 <= r <= HARD_RATING_MAX:
+            tiers["hard"].append(p)
+    rnd = random.Random(seed)
+    plan: list[tuple[str, str, str, str, str]] = []
+    # 类型去重池（打散后按类型尽量不重复）
+    for tier in ("basic", "medium", "hard"):
+        alloc = round(round_size * need[tier] / max(1, sum(need.values())))
+        rnd.shuffle(tiers[tier])
+        used_types: set[str] = set()
+        picked = []
+        for p in tiers[tier]:
+            t = type_of(p.get("tags", []))
+            if len(picked) >= alloc:
+                break
+            if t in used_types and len(picked) < alloc:
+                continue  # 仍有档位空缺时允许重复类型
+            used_types.add(t)
+            picked.append(p)
+        for p in picked:
+            plan.append((str(p["contestId"]), p["index"], p.get("name", ""),
+                         type_of(p.get("tags", [])),
+                         "basic" if int(p["rating"]) <= 1100
+                         else ("medium" if int(p["rating"]) <= 1700 else "hard")))
+    # 补齐到 round_size（优先未用档）
+    pool = [p for p in tiers["basic"] + tiers["medium"] + tiers["hard"]]
+    rnd.shuffle(pool)
+    have = {sid(c, i) for c, i, *_ in plan}
+    for p in pool:
+        if len(plan) >= round_size:
+            break
+        if sid(str(p["contestId"]), p["index"]) in have:
+            continue
+        r = int(p["rating"])
+        d = "basic" if r <= 1100 else ("medium" if r <= 1700 else "hard")
+        plan.append((str(p["contestId"]), p["index"], p.get("name", ""),
+                     type_of(p.get("tags", [])), d))
+    plan.sort(key=lambda x: x[4])
+    print(f"[auto] 下一轮 {len(plan)} 题："
+          + ", ".join(f"{sid(c, i)}({d})" for c, i, _, _, d in plan))
+    return plan
+
+
 PLAN: list[tuple[str, str, str, str, str]] = [
     # ---- basic (rating <=1100) ----
     ("486", "A", "Calculating Function", "模拟/数学", "basic"),
@@ -238,6 +401,9 @@ def ingest_one(batch: CFBatch, contest: str, index: str, title: str,
     if not samples:
         print(f"[skip] {task}: 题面未提取到样例")
         return None
+    if looks_multi_solution(statement):
+        print(f"[skip] {task}: 多解构造题（需 SPJ checker，自动收录跳过）")
+        return None
     print(f"[auto-ac] {task}: {len(samples)} 组样例，翻找 C++ AC…")
     href, code = _find_ac(batch, contest, index, samples)
     tcs = [TestCase(input=i, output=o, hidden=False) for i, o in samples]
@@ -263,12 +429,22 @@ def main() -> None:
     ap.add_argument("--only", nargs="*", default=None)
     ap.add_argument("--retry", type=int, default=2)
     ap.add_argument("--limit", type=int, default=None, help="最多处理前 N 题（调试用）")
+    ap.add_argument("--auto", action="store_true",
+                    help="从 CF problemset 缓存自动选题（未收录、按分层缺口+类型均匀）")
+    ap.add_argument("--round-size", type=int, default=17)
+    ap.add_argument("--seed", type=int, default=1)
     args = ap.parse_args()
     cookie = os.environ.get("CF_JSESSIONID", "").strip()
     if not cookie:
         print("[fatal] 请设置 CF_JSESSIONID 环境变量（隔离使用，不落盘）")
         sys.exit(2)
-    plan = PLAN[:args.limit] if args.limit else PLAN
+    if args.only:
+        plan = plan_from_ids(args.only)
+    elif args.auto:
+        plan = auto_plan(args.round_size, args.seed)
+    else:
+        plan = PLAN
+    plan = plan[:args.limit] if args.limit else plan
     only = set(args.only) if args.only else None
     batch = CFBatch(cookie)
     done = 0
