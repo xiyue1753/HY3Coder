@@ -317,6 +317,10 @@ def _verify_with_samples(code: str, samples: list[tuple[str, str]]) -> tuple[boo
         if res.error or res.timed_out:
             return False, f"sample{i + 1} 运行失败: {(res.error or 'timeout')[:100]}"
         got = res.stdout.strip()
+        if not got and exp.strip():
+            # 期望非空但输出为空 → 本地运行异常（文件 IO 老题 freopen input.txt、
+            # 读错流等），stdin 评测不可用，须跳过该候选而非当多解接受。
+            return False, f"sample{i + 1} 空输出（疑似文件IO/输入流不兼容）: 期望={exp.strip()[:60]!r}"
         if not _outputs_match(got, exp):
             return False, f"sample{i + 1} 输出不符: 期望={exp.strip()[:60]!r} 实际={got[:60]!r}"
     return True, ""
@@ -460,8 +464,9 @@ def _find_ac(batch: CFBatch, contest: str, index: str,
         if ok:
             print(f"  [ac] {href}: 本地可编译且样例通过")
             return href, code
-        # 运行失败（编译错等）→ 跳过；输出不一致不再视为失败（多解/顺序）
-        if "运行失败" in err:
+        # 运行失败 / 空输出（编译错、文件 IO 老题读 input.txt 等）→ 本地 stdin
+        # 评测不可用，跳过该候选；仅"非空但输出不一致"视为多解/顺序可接受。
+        if "运行失败" in err or "空输出" in err:
             print(f"  [skip] {href}: {err[:100]}")
             continue
         print(f"  [note] {href}: {err[:100]}（多解/顺序差异，可接受）")
