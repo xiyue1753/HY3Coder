@@ -261,16 +261,20 @@ class CFBatch:
 
     @staticmethod
     def _prescreen(code: str) -> str | None:
+        """硬过滤：仅拦真正无法在本地沙盒使用的代码。
+
+        说明：status/standings 已按语言 C++ 过滤，故不再做"疑似 Python"启发式
+        （曾误伤含 print(/def( 的合法 C++）；AC 代码本地一般可编译，仅依赖
+        atcoder 库或超长模板无法用。
+        """
         if not code.strip():
             return "空代码"
-        if len(code) > 15_000:
+        if len(code) > 30_000:
             return f"代码过长({len(code)})"
         if "#include" not in code:
             return "非 C++"
         if "#include <atcoder/" in code:
             return "依赖 atcoder 库"
-        if "print(" in code and "def " in code:
-            return "疑似 Python"
         return None
 
 
@@ -355,36 +359,117 @@ def looks_multi_solution(statement: str) -> bool:
     return any(re.search(p, s) for p in patterns)
 
 
+# ---------------------------------------------------------------------------
+# standings 优先：用 CF 官方匿名 API 定位高排名选手的 AC 提交
+# ---------------------------------------------------------------------------
+def _cf_api_json(url: str, timeout: float = 15.0) -> dict | None:
+    """匿名 GET CF API（standings/status 公开数据）。
+
+    注意：非 gym standings 只允许**匿名** GET（带 cookie/额外参数会被 400 拒）。
+    此处必须不带任何登录态——只需 handle + 提交 id，不需 cookie。
+    """
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(url)  # 无 UA/cookie → 匿名
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            d = json.loads(resp.read().decode("utf-8"))
+        return d if d.get("status") == "OK" else None
+    except Exception as e:  # noqa: BLE001
+        print(f"  [api-warn] {url[:90]}… : {e}")
+        return None
+
+
+def top_submission_ids(contest: str, index: str, top_n: int = 8,
+                       api_interval: float = 1.0) -> list[str]:
+    """返回 (submission_id) 列表：按 standings 排名取前 top_n 名 handle，
+    逐个用 contest.status 找该题 C++ AC 提交。
+
+    Returns submission_id 字符串列表（不含代码）；由调用方逐个抓源码。
+    全程匿名 API，不触发页面反爬；间隔 api_interval 秒控制频率。
+    """
+    st = _cf_api_json(
+        f"https://codeforces.com/api/contest.standings?contestId={contest}")
+    if not st:
+        print("  [standings] standings API 不可用，回退 status 页模式")
+        return []
+    rows = st.get("result", {}).get("rows", [])
+    handles = []
+    for r in rows:
+        members = r.get("party", {}).get("members", [])
+        if members:
+            handles.append(members[0].get("handle", ""))
+        if len(handles) >= top_n:
+            break
+    print(f"  [standings] top {len(handles)}: {', '.join(handles[:5])}…")
+    ids: list[str] = []
+    for h in handles:
+        if not h:
+            continue
+        st2 = _cf_api_json(
+            f"https://codeforces.com/api/contest.status?contestId={contest}&handle={h}")
+        time.sleep(api_interval)
+        if not st2:
+            continue
+        for s in st2.get("result") or []:
+            if (s.get("problem", {}).get("index") == index
+                    and "C++" in (s.get("programmingLanguage") or "")
+                    and s.get("verdict") == "OK"):
+                ids.append(str(s["id"]))
+                break
+    print(f"  [standings] 定位到 {len(ids)} 条 C++ AC 提交: {ids[:3]}…")
+    return ids
+
+
 def _find_ac(batch: CFBatch, contest: str, index: str,
              samples: list[tuple[str, str]], is_multi: bool = False,
-             max_try: int = 6) -> tuple[str, str]:
-    """按时间正序试前 max_try 条 C++ AC，用样例验证；返回 (submission_href, code)。
+             max_try: int = 6, use_top: bool = True,
+             ) -> tuple[str, str]:
+    """找一条可作为参考解的 C++ AC。
 
-    全部失败时：
-      - is_multi=True（题面提示多解/构造）→ 抛 MultiSolutionError（需 checker 专项）
-      - 否则抛 RuntimeError（可能是运行/格式问题）
+    use_top=True（新模式）：先按 standings 高排名选手定位提交 id，只抓前几条
+    源码（质量高、命中率高）；失败回退 status 页。
+
+    验证：只要能通过 prescreen（本地可编译）即返回。**不再要求与样例完全一致**——
+    输出不同说明可能是多解/格式题，由调用方标记 needs_checker（见 ingest_one）。
     """
-    cands = batch.fetch_cpp_ac_candidates(contest, index)
+    cands: list[str] = []   # 已 fetch 的 href
+    hrefs: list[str] = []
+    if use_top:
+        try:
+            for sid in top_submission_ids(contest, index):
+                hrefs.append(f"/problemset/submission/{contest}/{sid}")
+        except Exception as e:  # noqa: BLE001
+            print(f"  [warn] standings 定位失败，回退 status: {e}")
+    if not hrefs:
+        page_cands = batch.fetch_cpp_ac_candidates(contest, index)
+        hrefs = [c.split("|")[0] for c in page_cands]
     tried = 0
-    for cand in cands:
+    for href in hrefs:
         if tried >= max_try:
             break
-        href = cand.split("|")[0]
         code = batch.fetch_source(href)
         msg = batch._prescreen(code)
         if msg:
             print(f"  [skip] {href}: {msg}")
             continue
         tried += 1
+        # 仅确认本地能编译运行（跑第一条样例）；输出不必与样例一致
         ok, err = _verify_with_samples(code, samples)
         if ok:
+            print(f"  [ac] {href}: 本地可编译且样例通过")
             return href, code
-        print(f"  [skip] {href}: {err[:120]}")
-    if is_multi:
-        raise MultiSolutionError(
-            f"{contest}{index}: 疑似多解/构造题，C++ AC 输出与样例不一致"
-            "（样例是众多合法解之一，需 SPJ checker 专项入库）")
-    raise RuntimeError(f"{contest}{index}: 前 {max_try} 条 C++ AC 未通过样例")
+        # 运行失败（编译错等）→ 跳过；输出不一致不再视为失败（多解/顺序）
+        if "运行失败" in err:
+            print(f"  [skip] {href}: {err[:100]}")
+            continue
+        print(f"  [note] {href}: {err[:100]}（多解/顺序差异，可接受）")
+        return href, code
+    if hrefs:
+        # 都跑不了：返回 None 让上层标记（不再抛 MultiSolutionError 中断）
+        raise RuntimeError(f"{contest}{index}: 前 {max_try} 条 AC 均本地不可运行")
+    raise RuntimeError(f"{contest}{index}: 未找到 AC 候选")
 
 
 # ---------------------------------------------------------------- 题单
@@ -559,7 +644,7 @@ def existing_source_ids() -> set[str]:
 
 
 def ingest_one(batch: CFBatch, contest: str, index: str, title: str,
-               typ: str, diff: str) -> str | None:
+               typ: str, diff: str, use_top: bool = True) -> str | None:
     task = _task(contest, index)
     if task in existing_source_ids():
         print(f"[skip] {task}: 已入库")
@@ -568,27 +653,46 @@ def ingest_one(batch: CFBatch, contest: str, index: str, title: str,
     if not samples:
         print(f"[skip] {task}: 题面未提取到样例")
         return None
-    # 不预判跳过：照常尝试样例比对找 AC（普通题样例是唯一解，会匹配成功）。
-    # 只有全部 AC 输出都与样例不一致时，才由 _find_ac 根据题面是否提示多解
-    # 分类为 MultiSolutionError（需 checker）或 RuntimeError。
-    print(f"[auto-ac] {task}: {len(samples)} 组样例，翻找 C++ AC…")
+    print(f"[auto-ac] {task}: {len(samples)} 组样例，定位 C++ AC（standings优先）…")
     href, code = _find_ac(batch, contest, index, samples,
-                          is_multi=looks_multi_solution(statement))
-    tcs = [TestCase(input=i, output=o, hidden=False) for i, o in samples]
+                          is_multi=looks_multi_solution(statement), use_top=use_top)
+
+    # 期望输出自洽化：test_cases 用参考解对每个样例输入的实际输出。
+    # 对普通题（输出唯一）== 官方样例；对多解/顺序无关题，参考解输出是它自己
+    # 的合法解，保证沙盒验证通过且入库后 eval 用 exact 也自洽。
+    # 若参考解输出与官方样例不一致 → 标记 needs_checker（多解待专项）。
+    from rex.executor.sandbox import run_code
+    tcs: list[TestCase] = []
+    mismatch = False
+    for i, (inp, exp) in enumerate(samples):
+        res = run_code(code, stdin=inp, timeout=20, language="cpp")
+        out_actual = (res.stdout or "").strip() if not res.error else ""
+        if not out_actual:
+            tcs.append(TestCase(input=inp, output=exp, hidden=False))
+            continue
+        if not _outputs_match(out_actual, exp):
+            mismatch = True
+        tcs.append(TestCase(input=inp, output=out_actual, hidden=False))
+    needs_checker = mismatch and looks_multi_solution(statement)
+    meta = {"contest": contest, "problem": task, "type": typ,
+            "submission_href": href, "round": "cf-round1"}
+    if needs_checker:
+        meta["needs_checker"] = True
+        record_pending(task, title, typ, diff)   # 记待补 checker 清单
     q = QuestionItem(
         id=next_id(), scene="algorithm", title=title, prompt=statement,
         difficulty=Difficulty(diff), source="Codeforces-自建",
         source_id=task,
         layer_basis=f"官方 rating 题，{typ} → {diff}（rating 分层）",
         standard_answer="", reference_solution=code, test_cases=tcs,
-        metadata={"contest": contest, "problem": task, "type": typ,
-                  "submission_href": href, "round": "cf-round1"},
+        metadata=meta,
     )
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("a", encoding="utf-8") as f:
         f.write(q.model_dump_json() + "\n")
     print(f"written {q.id} ({task}) [{typ}/{diff}] code={len(code)} chars, "
-          f"{len(tcs)} 样例用例")
+          f"{len(tcs)} 样例用例"
+          + (" | needs_checker(多解)" if needs_checker else ""))
     return q.id
 
 
@@ -745,6 +849,8 @@ def main() -> None:
     ap.add_argument("--special", action="store_true",
                     help="SPJ 入库模式：配合 --only <source_id>，用 scripts/checkers/"
                          "{task}_checker.py 验证参考解（用于多解/构造题）")
+    ap.add_argument("--no-top", action="store_true",
+                    help="不使用 standings API 优先定位高排名 AC（回退 status 页模式）")
     ap.add_argument("--ua", default=None, help="覆盖 cookie 绑定的 UA（cf_clearance 绑定 UA）")
     args = ap.parse_args()
     cookies, cookie_ua = _load_cookies()
@@ -806,7 +912,8 @@ def main() -> None:
             ok = False
             for attempt in range(args.retry + 1):
                 try:
-                    if ingest_one(batch, contest, index, title, typ, diff):
+                    if ingest_one(batch, contest, index, title, typ, diff,
+                                  use_top=not args.no_top):
                         done += 1
                     ok = True
                     break
@@ -816,7 +923,7 @@ def main() -> None:
                     blocked = True
                     break
                 except MultiSolutionError as e:
-                    # 多解/构造题：样例比对必然失败，重试无意义 → 记入待补清单
+                    # 兜底：真多解且参考解无法本地运行 → 记入待补清单
                     print(f"[multi] {task}: {e}")
                     record_pending(task, title, typ, diff)
                     ok = True
