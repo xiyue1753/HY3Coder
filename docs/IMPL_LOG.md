@@ -1190,6 +1190,34 @@ brute 暴力/枚举 · construct 构造 · twoptr 双指针 · game 博弈
 - `src/rex/metrics/compute.py`（compute_facets）
 - `src/web/api.py` + `src/web/static/index.html` + `main.js`（总览多维图）
 
+## 任务 dim-scale：数据规模维度验证结论与弃用
+
+**状态**：✅ 已收敛（用户决策：规模维度弃用，回归"难度 + 知识点"两维）
+
+### 验证过程
+1. **v1 scale 提取缺陷**：`extract_max_bound` 取"题面所有约束数值最大者"，但竞赛题
+   最大数值几乎总是**值域/答案边界**（a_i≤1e9、目标值≤1e18）而非输入规模 → ABC
+   63 题误标 S4，含大量 basic/medium 值域题。
+2. **v2 语义修复**：约束段按行解析 + 带下标变量（A_i→值域）排除，识别主规模变量
+   （scale_var）。ABC 覆盖 90%、S4 从 63 降至 26；CF 61%（HTML 拆行/数学字体污染
+   的天花板）。
+3. **结论性验证**：即使语义修复到位，per-scale 过程率仍不单调（ABC S4=89% 反而
+   最高、CF S3=50%）——**同一规模档内 O(log) 简单题与 O(n log n) 难题并存**，
+   纯规模维度天生无法与表现单调。数据证实用户判断"该指标建立不起来"。
+
+### 弃用决策（用户确认）
+- 规模（数据规模压力图）不是有效画像轴——难度（官方 rating / AtCoder difficulty
+  ELO 锚点）本身即"所需效率"的合理度量，无需自建指标交叉验证
+- Dashboard 撤"数据规模压力"图；`/api/summary` 的 per_scale 字段保留（未动后端）
+- 从两题集 metadata **删除 scale_max/scale_var/scale_tier**（回归难度+知识点两维）
+- 删除 scripts/dim_scale.py（提取器逻辑保留于 git 历史可追溯）
+- 新维度设计由用户另行思考
+
+### 调用文件
+- `src/web/static/index.html`、`main.js`（撤 scale 图）
+- `data/questions/abc_selfbuilt.jsonl`、`cf_selfbuilt.jsonl`（删 scale_* 字段）
+- `scripts/dim_scale.py`（已删）
+
 ---
 
 <!-- 后续任务按此格式追加 -->

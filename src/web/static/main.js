@@ -4,7 +4,6 @@ const VERDICT_CN={CORRECT:'正确',PROCESS_INCORRECT:'过程错误',ANSWER_INCOR
 const KIND_CN={understand:'题意',approach:'思路',complexity:'复杂度',implement:'实现',selftest:'自测'};
 const TYPE_CN={misread:'题意误读',concept:'概念',calculation:'计算',missing_condition:'条件遗漏',jump:'跳步',format:'格式',logic:'逻辑',boundary:'边界',complexity:'复杂度',other:'其他'};
 const ALG_CN={sim:'实现/模拟',greedy:'贪心',dp:'动态规划',graph:'图论',ds:'数据结构',math:'数学',string:'字符串',sort:'排序',binary:'二分/搜索',brute:'暴力/枚举',construct:'构造',twoptr:'双指针',game:'博弈'};
-const SCALE_CN={S1:'S1 ≤1e3',S2:'S2 ≤1e5',S3:'S3 ≤1e7',S4:'S4 超大'};
 
 async function j(url){const r=await fetch(url);if(!r.ok)throw new Error(await r.text());return r.json()}
 
@@ -42,7 +41,6 @@ async function loadOverview(){
       {label:'答案准确率',data:tiers.map(t=>t.answer_accuracy),backgroundColor:'#3DD68C',borderRadius:6}]},
     options:{responsive:true,plugins:{legend:{labels:{color:'#9AA0B4'}}},scales:{y:{min:0,max:1,ticks:{color:'#9AA0B4'}},x:{ticks:{color:'#9AA0B4'}}}}});
   renderFacetChart('chartType', s.per_type||{}, ALG_CN);
-  renderFacetChart('chartScale', s.per_scale||{}, SCALE_CN);
   const vd=Object.entries(s.verdict_dist||{});
   if(CHARTS.verdict)CHARTS.verdict.destroy();
   CHARTS.verdict=new Chart($('#chartVerdict'),{type:'doughnut',data:{labels:vd.map(x=>VERDICT_CN[x[0]]||x[0]),datasets:[{data:vd.map(x=>x[1]),backgroundColor:['#3DD68C','#FF5D5D','#FFB020','#FF7A9C']}]},
@@ -65,16 +63,14 @@ async function loadOverview(){
 function renderFacetChart(canvasId, buckets, labelMap){
   const sorted=Object.entries(buckets||{}).sort((a,b)=>b[1].n-a[1].n);
   if(CHARTS[canvasId])CHARTS[canvasId].destroy();
-  const isScale = canvasId==='chartScale';
   CHARTS[canvasId]=new Chart($('#'+canvasId),{type:'bar',
     data:{labels:sorted.map(([k])=>labelMap[k]||k),
       datasets:[
         {label:'过程正确率',data:sorted.map(([,m])=>m.process_correctness),backgroundColor:'#4F6DF5',borderRadius:4},
         {label:'答案准确率',data:sorted.map(([,m])=>m.answer_accuracy),backgroundColor:'#3DD68C',borderRadius:4}]},
-    options:{responsive:true,indexAxis:isScale?'y':'x',
+    options:{responsive:true,
       plugins:{legend:{labels:{color:'#9AA0B4'}}},
-      scales:isScale?{x:{min:0,max:1,ticks:{color:'#9AA0B4'}},y:{ticks:{color:'#9AA0B4'}}}
-                   :{y:{min:0,max:1,ticks:{color:'#9AA0B4'}},x:{ticks:{color:'#9AA0B4',maxRotation:45}}}}});
+      scales:{y:{min:0,max:1,ticks:{color:'#9AA0B4'}},x:{ticks:{color:'#9AA0B4',maxRotation:45}}}}});
 }
 
 // ---------- 单题回放 ----------
