@@ -1020,4 +1020,57 @@ CF 官网，改从其它网站获取题目与 AC 解。
 
 ---
 
+## 任务 multi-checker：14 题多解 checker 编写与 SPJ 落地
+
+**状态**：✅ 已完成
+
+### 背景
+用户指出"参考解实际输出自洽化"在真实评测中不可行——多解题 AI 若给出
+另一个合法解，exact 比对会误判 WA。需为多解题编写 SPJ checker（本质：
+把解题过程逆过来——丢弃标准答案，只校验选手输出相对题目谓词的合法性），
+评测走 checker 判定。用户确认范围：14 题离散构造/输出任意类真多解。
+
+### 多解梳理（74 关键词候选逐题人工判定）
+- ABC 19 候选 → 真多解 6：5 题此前已转 SPJ（abc271_d/abc315_e/abc299_e/
+  abc216_c/abc251_d）+ **新发现 abc392_e**（Cables and Servers 构造操作序列）
+- CF 47 候选 → 真多解 13：cf549g/cf1305e/cf1054c/cf1327c/cf1253b/cf1991c/
+  cf20c/cf53c/cf437b/cf384a/cf1717b/cf71d/cf27b（已标 needs_checker 5 +
+  关键词高置信复核 8）
+- 其余误报（输出唯一/计数/最值/判断，如 "any order" 实为固定排序、
+  "print any" 实为大小写提示等）
+- 研究结论：TACO 类数据集对多解仅打 SPJ 标记文件（宽松启发式），不写
+  每题 checker；我们为每题写独立谓词 checker，判定质量高于业界惯例。
+
+### checker 实现（每个=独立谓词判定，读取 输入+@@REX_USER_OUTPUT@@+输出）
+| 题 | 判定谓词 |
+|---|---|
+| cf384a Coder | 最大数 ceil(n²/2)+棋盘无相邻 C |
+| cf53c Little Frog | 1..n 排列+相邻差互异 |
+| cf437b Child and Set | 互异元素+Σlowbit==sum+(-1)可达性(bitset DP) |
+| cf1717b Madoka | 窗口含 X+最小数+(r,c) 为 X |
+| cf27b Tournament | 唯一缺失对 |
+| cf20c Dijkstra | 独立 Dijkstra+路径合法总权==最短 |
+| cf1991c Absolute Zero | ≤40 步归零+(-1)奇偶判据 |
+| cf1253b Silly Mistake | 逐段合法日+(-1)贪心判据 |
+| cf1327c Game with Chips | 同步模拟移动+目标访问 |
+| cf1054c Candies | 重算 l/r 匹配输入 |
+| cf1305e Kuroni | O(n²)双指针独立计数三元组==m |
+| cf549g Happy Line | 价值守恒 sorted(a_i+i)==sorted(b_q+q)+非递减 |
+| cf71d Solitaire | 重建棋盘验证方块条件+替换牌合法性+No solution 独立搜索 |
+| abc392_e Cables | 模拟重连+K==连通块-1 |
+
+### 验证
+- 每题 checker：题集参考解输出全 AC（共 45 case）；9+ 构造非法输出全部正确拒
+- 14 题 C++ 参考解端到端 `run_test_cases(judge=special)` 全 PASS
+- multi_pending.json：5 题标记 ingested；cf1907a（未入库）保留 pending
+
+### 调用文件
+- `scripts/checkers/{source_id}_checker.py`（14 个新 checker）
+- `scripts/checkers/_apply_checkers.py`（checker 内嵌题集工具）
+- `scripts/checkers/_batch_selftest.py`（批量自测工具）
+- `data/questions/cf_selfbuilt.jsonl`（13 题转 special）
+- `data/questions/abc_selfbuilt.jsonl`（abc392_e 转 special）
+
+---
+
 <!-- 后续任务按此格式追加 -->
