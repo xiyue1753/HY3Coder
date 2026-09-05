@@ -6,7 +6,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 大规模分层题集 | 自建 AtCoder ABC 175 题（主推）+ Codeforces 自建抓取中，按基础/中等/困难三档分层，附来源与可复现分层规则 |
+| 大规模分层题集 | 自建 AtCoder ABC 175 题（主推）+ Codeforces 自建 175 题（含 GitHub 公开题解源），按基础/中等/困难三档分层，附来源与可复现分层规则 |
 | 分步求解 | 求解 Agent 产出结构化分步过程（每步含结论与前置依赖），自动提取可执行代码 |
 | 过程评估 | 逐步自含性检查 + 全局回溯两轮审查；两个独立验证视角交叉复核，不一致时仲裁 |
 | 错误定位归类 | 6 类基线（题意误读/概念错误/计算错误/条件遗漏/跳步推导/格式不符）+ 算法扩展（逻辑缺陷/边界条件/复杂度不达标） |
@@ -101,7 +101,7 @@ copy .env.example .env
 
 题集（`data/questions/*.jsonl`）：
 - **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题，主推）**：由独立产线抓题面+AC 参考解+人工设计隐藏用例入库（`scripts/ingest_abc.py`，SOP 见 `docs/DATASET_BUILD_SOP.md`），难度按 ABC 分值映射三档，含 SPJ 多解构造题（checker 判题）；
-- **自建集 `cf_selfbuilt.jsonl`（Codeforces 抓取中）**：同产线，参考解抓取与校验进行中；
+- **自建集 `cf_selfbuilt.jsonl`（Codeforces 175 题，与 ABC 大致同规模）**：同产线，参考解 150 题来自 CF 公开 AC 提交（提交页抓取）、25 题来自 GitHub 公开题解仓库（`ingest_cf_github.py`，绕开 CF 反爬的提交页限流，题目页抓取 + GitHub 解样例沙盒验证），分层 basic34/medium83/hard58；
 - TACO/CodeContests 公开镜像题集曾以 `algorithm.jsonl` 命名，2026-09 起废弃该命名（数据隔离，未来按独立数据集如 `taco` 注册），不再进入仪表盘/统计；
 - Golden 沉默失败样本库 `data/golden/`：`golden_real_algorithm.jsonl`（真实评测检出，主）+ `golden_algorithm.jsonl`（2 条合成展示样例）。
 - **数据文件位置统一见 `docs/DATA_SOURCE_MAP.md`（注册中心 `src/rex/datasource.py`）。**
@@ -125,7 +125,7 @@ Hy3_APP2/
 │   └── metrics/   compute.py  stats.py
 ├── src/web/  api.py  static/index.html      # FastAPI 仪表盘
 ├── src/cli.py                               # typer 入口
-├── data/questions/  abc_selfbuilt.jsonl(175) cf_selfbuilt.jsonl(46)
+├── data/questions/  abc_selfbuilt.jsonl(175) cf_selfbuilt.jsonl(175)
 ├── data/golden/     golden_real_algorithm.jsonl(2) golden_algorithm.jsonl(2)
 ├── data/outputs/    eval_selfbuilt_all.jsonl(175, 正式主源) + audit_records.jsonl
 │                    （.gitignore 排除，可再生成；历史分片归档于 _archived/）

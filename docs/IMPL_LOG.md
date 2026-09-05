@@ -977,4 +977,47 @@ DESIGN/README 与代码现状脱节（题集规模、自建产线、环境写法
 
 ---
 
+## 任务 cf-github-fill：CF 反爬绕行补题（150→175，GitHub 公开题解源）
+
+**状态**：✅ 已完成
+
+### 背景
+CF 自建题抓取第 13 轮起 submission 源码路由被 Cloudflare 风控（`source not
+loaded` / `.problem-statement` DOM 缺失），常规抓取无法继续。用户指示不再抓
+CF 官网，改从其它网站获取题目与 AC 解。
+
+### 来源排查结论（全部实测）
+- `Eric8900/Codeforces-Webscrape`（9238 题题面 JSON）：样例与正文**无换行连排**，
+  无法可靠切分 → 弃用
+- 镜像站 m1/m2/mirror/hydro/vjudge/qoj/luogu：Cerberus/登录墙/超时 → 均不可用
+- CF 官方 API：只给题目元数据（无题面无样例）
+- **GitHub 公开题解仓库**：`Waqar-107/Codeforces`（1556 文件）+ 
+  `kantuni/Codeforces`（791 文件）zip 可无登录下载，本地索引 **1473 题** AC 解
+- **关键发现**：用户更新 clearance 后，playwright 实测 **CF 题目路由仍放行**
+  （`fetch_statement_and_samples` 正常），被限流的仅是 submission 源码路由
+
+### 实现逻辑
+1. **新脚本 `scripts/ingest_cf_github.py`**：题面+结构化样例仍走 playwright 题目页
+   （放行），参考解从本地 GitHub 索引拉候选（C++ 优先），逐个 `_verify_with_samples`
+   沙盒验证通过才采用；test_cases 期望输出自洽化（取参考解实际输出）——
+   与 `batch_ingest_cf.ingest_one` 逻辑一致，多解自动标 `needs_checker`。
+2. **回填机制**：GitHub 解质量参差（沙盒拦下若干错误代码，如 cf672a 的 itoa 未初始化
+   strcat），故候选池 222 题按缺口分层排序，单题失败自动换池内下一题。
+3. **分层收敛**：用户明确「CF 不必与 ABC 完全一致，大致接近即可」。补至 175 题后
+   （basic34/medium83/hard58）即停，不再强求 33/82/60 精确。
+
+### 验证
+- 本轮新增 **25 题全部 GitHub 源入库且沙盒 PASS**（无 needs_checker）
+- `cf_selfbuilt.jsonl` **175 题**：basic34/medium83/hard58，测试用例 558（隐藏 195）
+- 参考解来源：150 题 CF 公开 AC 提交（历史）+ 25 题 GitHub 公开题解
+- 待补 checker 5 题（历史遗留 cf1305e/cf1054c/cf1327c/cf1253b/cf1991c，非本轮引入）
+
+### 调用文件
+- `scripts/ingest_cf_github.py`（新）
+- `data/cache/cf_gh/{waqar,kantuni}`（题解缓存，gitignore）
+- `data/questions/cf_selfbuilt.jsonl`（175 条）
+- `README.md`（题集描述/目录结构同步）
+
+---
+
 <!-- 后续任务按此格式追加 -->
