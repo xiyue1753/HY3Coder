@@ -1105,4 +1105,47 @@ CF 官网，改从其它网站获取题目与 AC 解。
 
 ---
 
+## 任务 dim-A-tags：知识点主类标签标准化（ABC/CF 350 题一次做对）
+
+**状态**：✅ 已完成
+
+### 背景
+任务书要求"难度为主轴 + 辅助维度（算法知识点/复杂度档/数据规模）用于能力
+画像与退化分析"。现状只落了难度主轴；知识点标签残缺且不一致（CF 只取官方
+tags 第一个；ABC 人工中文串 31+ 种写法、11 题无 type），会造成"标签舞蹈"。
+用户确认先做 A：**知识点标签一次扩充到位**（允许一题多标签，覆盖多解法），
+B/C 留作辅助视角后续再做。
+
+### 标准主类体系（13 类，互斥可判）
+sim 实现/模拟 · greedy 贪心 · dp 动态规划 · graph 图论 · ds 数据结构 ·
+math 数学/数论 · string 字符串 · sort 排序 · binary 二分/搜索 ·
+brute 暴力/枚举 · construct 构造 · twoptr 双指针 · game 博弈
+
+### 实现逻辑
+1. **CF（官方权威多标签）**：从 `data/cache/cf_problemset.json` 取官方完整
+   tags（每题 1~8 个），`CF_TAG_MAP` 映射为标准主类列表写入
+   `metadata.alg_classes`；官方 tags 原样存 `metadata.official_tags`。
+   → 解决"一题可能有多种标签方法"（如 cf910a 官方 tags=dfs+dp+greedy+impl
+   完整保留，不丢多解法）。
+2. **ABC（无官方 tags，人工标注为主）**：现有 `metadata.type` 中文复合串按
+   关键词拆主类；**11 题无 type 由人工读题面判定**（`ABC_MANUAL` 表）；
+   关键词易歧义题（字符画/区间合并/第K小/状压/记忆化/倍增 等 7 题）补
+   关键词规则后正确归类。
+3. `scripts/normalize_tags.py`：一次性标准化脚本（`--dry-run` 预览），可复现。
+
+### 验证
+- CF 175/175 覆盖（官方 tag 缺失 0），ABC 175/175 覆盖（unmapped 0）
+- 多标签占比：CF 137/175、ABC 68/175（正确反映一题多解法）
+- 抽样核对：CF 官方标签忠实；ABC 人工表 18 题逐一复核标签与题面核心相符
+- 题集 JSON 完整性校验通过
+
+### 调用文件
+- `scripts/normalize_tags.py`（新）
+- `data/questions/cf_selfbuilt.jsonl` / `abc_selfbuilt.jsonl`（metadata 增补
+  alg_classes / official_tags）
+- 下一步（dim-B/C）：per_type 指标画像（按 alg_classes 聚合）、规模×复杂度
+  耦合档，作为难度主轴的辅助视角。
+
+---
+
 <!-- 后续任务按此格式追加 -->
