@@ -665,7 +665,9 @@ def ingest_one(batch: CFBatch, contest: str, index: str, title: str,
     # 期望输出自洽化：test_cases 用参考解对每个样例输入的实际输出。
     # 对普通题（输出唯一）== 官方样例；对多解/顺序无关题，参考解输出是它自己
     # 的合法解，保证沙盒验证通过且入库后 eval 用 exact 也自洽。
-    # 若参考解输出与官方样例不一致 → 标记 needs_checker（多解待专项）。
+    # **只要参考解输出与官方样例不一致即标记 needs_checker**（多解/顺序无关
+    # 判据），不依赖题面关键词——顺序无关题（输出集合同但次序不同）题面未必
+    # 含 "any" 提示词，但 AC 输出必然与样例文本不同。
     from rex.executor.sandbox import run_code
     tcs: list[TestCase] = []
     mismatch = False
@@ -678,7 +680,7 @@ def ingest_one(batch: CFBatch, contest: str, index: str, title: str,
         if not _outputs_match(out_actual, exp):
             mismatch = True
         tcs.append(TestCase(input=inp, output=out_actual, hidden=False))
-    needs_checker = mismatch and looks_multi_solution(statement)
+    needs_checker = mismatch
     meta = {"contest": contest, "problem": task, "type": typ,
             "submission_href": href, "round": "cf-round1"}
     if needs_checker:
