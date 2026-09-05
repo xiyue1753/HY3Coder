@@ -48,6 +48,14 @@
 
   <!-- ===== 屏 1：评估总览 ===== -->
   <section id="view-overview" class="fade">
+    <div class="flex items-center gap-3 mb-3 text-sm">
+      <span class="muted">数据集：</span>
+      <select class="fbtn" id="dsSel" onchange="SDS=this.value;loadOverview()">
+        <option value="">ABC + Codeforces（合并）</option>
+        <option value="abc_selfbuilt">ABC 自建（175）</option>
+        <option value="cf_selfbuilt">Codeforces 自建（175）</option>
+      </select>
+    </div>
     <div class="grid-tiles mb-5">
       <div class="kpi" id="kpiN"></div>
       <div class="kpi good" id="kpiAns"></div>

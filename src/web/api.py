@@ -77,9 +77,14 @@ def _load_golden() -> list[GoldenSample]:
 
 
 @app.get("/api/summary")
-def summary() -> dict:
+def summary(ds: str | None = None) -> dict:
     evals = _load_evals()
     refines = _load_refines()
+    # 数据集过滤（按题号前缀 A*/C*），便于分别看 ABC / Codeforces 总览
+    prefix = {"abc_selfbuilt": "A", "cf_selfbuilt": "C"}.get(ds or "")
+    if prefix:
+        evals = [r for r in evals if r.question_id.startswith(prefix)]
+        refines = [r for r in refines if r.question_id.startswith(prefix)]
     # formal_only：总览指标只统计正式 run-eval（交互演示不入统计口径）
     formal = [r for r in evals if r.source == "run-eval"]
     base = compute_metrics(evals, formal_only=True) if evals else None
@@ -122,17 +127,29 @@ def meta() -> dict:
 @app.get("/api/questions")
 def questions(scene: str | None = None, verdict: str | None = None,
               tier: str | None = None, source: str | None = None,
+              ds: str | None = None,
               qid: str | None = None, keyword: str | None = None,
               since: str | None = None, until: str | None = None,
               sort: str = "created_at", order: str = "desc",
               limit: int = 100, offset: int = 0) -> dict:
-    """评估记录列表：支持筛选（场景/难度/判定/来源/题号/关键词/时间）+ 分页 + 排序。"""
+    """评估记录列表：支持筛选（场景/难度/判定/来源/数据集/题号/关键词/时间）+ 分页 + 排序。
+
+    ``ds`` 按题号前缀区分数据集：abc_selfbuilt(A*) / cf_selfbuilt(C*)。
+    """
     store = STORE
+    prefix = {"abc_selfbuilt": "A", "cf_selfbuilt": "C"}.get(ds or "")
+    # 数据集过滤需在分页前生效：带 ds 时先查全量再本地过滤+分页
+    eff_limit = limit if not prefix else 10_000
+    eff_offset = offset if not prefix else 0
     records, total = store.query_evals(
         scene=scene, difficulty=tier, verdict=verdict, source=source,
         qid=qid, keyword=keyword, since=since, until=until,
-        sort=sort, order=order, limit=limit, offset=offset,
+        sort=sort, order=order, limit=eff_limit, offset=eff_offset,
     )
+    if prefix:
+        records = [r for r in records if r.question_id.startswith(prefix)]
+        total = len(records)
+        records = records[offset:offset + limit]
     qmap = {q.id: q for q in _load_questions()}
     items = []
     for r in records:

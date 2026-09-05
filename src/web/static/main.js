@@ -24,8 +24,9 @@ document.querySelectorAll('.nav-item').forEach(el=>{
 });
 
 // ---------- 总览 ----------
+let SDS='';  // ''=合并 | abc_selfbuilt | cf_selfbuilt
 async function loadOverview(){
-  const s=await j('/api/summary');
+  const s=await j('/api/summary'+(SDS?'?ds='+SDS:''));
   $('#kpiN').innerHTML=`<div class="v">${s.n}</div><div class="l">已评估题目</div>`;
   $('#kpiAns').innerHTML=`<div class="v">${s.answer_accuracy==null?'—':(s.answer_accuracy*100).toFixed(1)+'%'}</div><div class="l">答案准确率</div>`;
   $('#kpiProc').innerHTML=`<div class="v">${s.process_correctness==null?'—':(s.process_correctness*100).toFixed(1)+'%'}</div><div class="l">过程正确率</div>`;
@@ -57,13 +58,14 @@ async function loadOverview(){
 }
 
 // ---------- 单题回放 ----------
-let QUIERY_STATE={offset:0, limit:100, scene:'', verdict:'', tier:'', source:'', keyword:''};
+let QUIERY_STATE={offset:0, limit:100, scene:'', verdict:'', tier:'', source:'', ds:'', keyword:''};
 function buildQueryParams(){
   const p=new URLSearchParams({limit:String(QUIERY_STATE.limit), offset:String(QUIERY_STATE.offset)});
   if(QUIERY_STATE.scene)p.set('scene',QUIERY_STATE.scene);
   if(QUIERY_STATE.verdict)p.set('verdict',QUIERY_STATE.verdict);
   if(QUIERY_STATE.tier)p.set('tier',QUIERY_STATE.tier);
   if(QUIERY_STATE.source)p.set('source',QUIERY_STATE.source);
+  if(QUIERY_STATE.ds)p.set('ds',QUIERY_STATE.ds);
   if(QUIERY_STATE.keyword)p.set('keyword',QUIERY_STATE.keyword);
   return p.toString();
 }
@@ -79,6 +81,7 @@ async function loadQuestions(){
     <div class="flex flex-wrap items-center gap-2 mb-2 text-sm">
       <span class="muted">共 ${total} 条</span>
       <select onchange="QUIERY_STATE.scene=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['algorithm'].map(s=>`<option value="${s}" ${QUIERY_STATE.scene===s?'selected':''}>${s}</option>`).join(''))}</select>
+      <select onchange="QUIERY_STATE.ds=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts([['abc_selfbuilt','ABC 自建'],['cf_selfbuilt','Codeforces 自建']].map(([v,l])=>`<option value="${v}" ${QUIERY_STATE.ds===v?'selected':''}>${l}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.tier=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['basic','medium','hard'].map(t=>`<option value="${t}" ${QUIERY_STATE.tier===t?'selected':''}>${t}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.verdict=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['CORRECT','PROCESS_INCORRECT','SILENT_FAILURE','ANSWER_INCORRECT','FAILED'].map(v=>`<option value="${v}" ${QUIERY_STATE.verdict===v?'selected':''}>${VERDICT_CN[v]||v}</option>`).join(''))}</select>
       <select onchange="QUIERY_STATE.source=this.value;QUIERY_STATE.offset=0;loadQuestions()" class="fbtn">${opts(['run-eval','interactive'].map(s=>`<option value="${s}" ${QUIERY_STATE.source===s?'selected':''}>${s}</option>`).join(''))}</select>
