@@ -74,12 +74,12 @@ DATASETS: tuple[Dataset, ...] = (
     ),
     Dataset(
         key="cf_selfbuilt",
-        label="Codeforces 自建（抓取中）",
+        label="Codeforces 自建（175 题）",
         enabled=True,
         questions="cf_selfbuilt.jsonl",
-        evals=None,                            # 尚未做正式评测
+        evals="eval_cf_all.jsonl",             # 正式评测输出（run-eval --questions cf_selfbuilt）
         refine=None,
-        note="Codeforces 公开题自建转化，参考解抓取校验中。",
+        note="Codeforces 公开题自建转化，含题面/参考解/测试用例/分层依据与 SPJ checker。",
     ),
     # demo：非正式数据集，仅供交互演示/示例，不进指标统计
     Dataset(

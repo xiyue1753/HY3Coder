@@ -127,7 +127,7 @@ Hy3_APP2/
 ├── src/cli.py                               # typer 入口
 ├── data/questions/  abc_selfbuilt.jsonl(175) cf_selfbuilt.jsonl(175)
 ├── data/golden/     golden_real_algorithm.jsonl(2) golden_algorithm.jsonl(2)
-├── data/outputs/    eval_selfbuilt_all.jsonl(175, 正式主源) + audit_records.jsonl
+├── data/outputs/    eval_selfbuilt_all.jsonl(175, ABC 主源) + eval_cf_all.jsonl(175, CF) + audit_records.jsonl
 │                    （.gitignore 排除，可再生成；历史分片归档于 _archived/）
 ├── scripts/         build_questions.py build_golden.py build_golden_real.py
 │                    audit_sample.py check_answers.py ingest_abc.py make_report.py

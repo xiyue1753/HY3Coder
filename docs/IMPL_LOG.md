@@ -1073,4 +1073,36 @@ CF 官网，改从其它网站获取题目与 AC 解。
 
 ---
 
+## 任务 cf-full-eval：CF 175 题全量 Hy3 评测（含 SPJ 题）
+
+**状态**：✅ 已完成
+
+### 背景
+多解 checker 落地后用户要求先小样本实测 SPJ 判题链路，通过后对 CF 自建
+175 题全量跑 Hy3 求解。
+
+### 实现
+1. **SPJ 链路小样本实测**：抽 basic/medium/hard 各 1 个 SPJ 多解题
+   （cf1717b/cf1054c/cf549g）真实调用 Hy3 run-eval → 全部
+   `verdict=CORRECT + ans=True pass=1.0`，证明 checker 在真实评测链路生效。
+2. **数据源注册**：`src/rex/datasource.py` 给 cf_selfbuilt 填正式评测输出
+   `eval_cf_all.jsonl`（此前 evals=None），仪表盘/报告自动纳入。
+3. **全量评测**：`run-eval --questions cf_selfbuilt.jsonl --sample full
+   --concurrency 4`（后台运行 ~94 分钟，175 题全部完成，无 error）。
+
+### 结果（cf_selfbuilt 175 题，basic34/medium83/hard58）
+- **答案准确率 86.9%（152/175）**：basic 94.1% / medium 91.6% / hard 75.9%
+- **过程正确率 74.3%（130/175）**：basic 82.4% / medium 79.5% / hard 62.1%
+- verdict 分布：CORRECT 130 / PROCESS_INCORRECT 23 / ANSWER_INCORRECT 15 /
+  SILENT_FAILURE 7
+- SPJ 多解题 15 题：答案正确 13/15
+- 难度退化明显（hard 答案率/过程率显著低于 basic/medium），符合分层预期
+
+### 调用文件
+- `data/outputs/eval_cf_all.jsonl`（175 条，正式 CF 评测源）
+- `src/rex/datasource.py`（cf_selfbuilt evals 注册）
+- `README.md`（目录结构同步）
+
+---
+
 <!-- 后续任务按此格式追加 -->
