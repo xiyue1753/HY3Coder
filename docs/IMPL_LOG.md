@@ -1148,4 +1148,48 @@ brute 暴力/枚举 · construct 构造 · twoptr 双指针 · game 博弈
 
 ---
 
+## 任务 dim-B/C：数据规模档 + 多维画像接入总览
+
+**状态**：✅ 已完成
+
+### 背景
+完成 A（知识点标签）后，用户要求实现 B（数据规模约束 + 复杂度档辅助维度）、
+评估 C（边界/陷阱密度）成本、并把多维展示接入评估总览。核心方法论结论：
+**规模不能脱离复杂度谈难度**，因此不做独立"复杂度档"，而是以 scale 档
+（规模压力）+ difficulty 档耦合表达"需要何种复杂度"。
+
+### B：数据规模档提取（scripts/dim_scale.py）
+- 从题面约束自动提取主输入规模上限（scale_max），归一为档：
+  S1 ≤1e3 / S2 ≤1e5 / S3 ≤1e7 / S4 >1e7
+- 两套解析器：ABC 干净 LaTeX（`$1\le N\le 2\times 10^5$`，兼容单/双反斜杠）、
+  CF HTML 上标坍缩（`≤ 105` → 10^5）
+- 覆盖率：ABC 150/175 (86%)、CF 151/175 (86%)，抽样核对正确率可信
+- 未提取题多为：纯小规模题（n<100 无压力分析意义）、CF 题面 LaTeX 拆行损坏
+  （上标/数学字体被题解页二次处理打散，结构性限制）
+
+### C：边界/陷阱密度评估结论
+**不新增题级标注**——它本质是结果变量（须事后审计），且自动标注主观/易错。
+边界检查已作为 static_check 的规则校验维度存在（启发式边界诊断喂 verifier），
+抽检阶段（audit）人工标注陷阱步骤。故 C 维持审计维度，不作题集分层轴。
+
+### 多维画像（metrics 层 + 总览）
+- `compute_facets`：按 alg_classes 聚 per_type（一题多标签计多桶，n<3 不报）、
+  按 scale_tier 聚 per_scale、difficulty×scale 耦合 per_tier_scale
+- `/api/summary` 返回 per_type/per_scale/per_tier_scale（可随 ds 数据集切换）
+- 前端总览新增两图：知识点能力画像（算法类别×答案/过程率）、数据规模压力
+  （S1→S4 退化）
+
+### 画像发现（验证维度有效）
+- CF：S1 过程率 94% → S3 58%/S4 63%，**规模越大过程退化越显著**
+- CF：math/greedy/brute 过程率 68-70% < dp/graph 76%
+- ABC：graph 71% < 其它；S3(2e5 级) 75% 低谷
+- 合并 350：graph 过程率 73%（偏弱），S3 过程率 70%
+
+### 调用文件
+- `scripts/dim_scale.py`（新，可复现规模档提取）
+- `src/rex/metrics/compute.py`（compute_facets）
+- `src/web/api.py` + `src/web/static/index.html` + `main.js`（总览多维图）
+
+---
+
 <!-- 后续任务按此格式追加 -->

@@ -109,6 +109,73 @@ def compute_metrics(records: list[EvalRecord],
 
 
 # ---------------------------------------------------------------------------
+# Facet profiles (多维画像：知识点 / 规模 / 规模×难度耦合)
+# ---------------------------------------------------------------------------
+@dataclass
+class FacetMetrics:
+    n: int
+    answer_accuracy: float
+    process_correctness: float
+
+
+def _facet_metrics(items: list[EvalRecord]) -> FacetMetrics:
+    valid = [r for r in items if r.verification.verdict != Verdict.FAILED]
+    nv = len(valid)
+    if not nv:
+        return FacetMetrics(n=len(items), answer_accuracy=0.0, process_correctness=0.0)
+    return FacetMetrics(
+        n=len(items),
+        answer_accuracy=sum(_is_answer_correct(r) for r in valid) / nv,
+        process_correctness=sum(r.verification.verdict == Verdict.CORRECT for r in valid) / nv,
+    )
+
+
+def compute_facets(records: list[EvalRecord], qmap: dict[str, dict]) -> dict:
+    """多维画像（能力画像输入，join 题集元数据）：
+
+    - per_type：按知识点主类（metadata.alg_classes）聚合——一题可入多桶
+      （多标签），各桶独立报告；桶样本 <3 不计（统计不稳）。
+    - per_scale：按数据规模档（metadata.scale_tier, S1..S4）聚合。
+    - per_tier_scale：难度 × 规模 耦合（同难度下规模压力退化观察）。
+
+    qmap: {question_id: question_row}（row 含 metadata.alg_classes/scale_tier）。
+    返回 None 桶对应 eval 记录找不到题目元数据的（不计入画像）。
+    """
+    def meta_of(rid: str) -> dict:
+        q = qmap.get(rid) or {}
+        return (q.get("metadata") or {})
+
+    type_buckets: dict[str, list] = {}
+    for r in records:
+        m = meta_of(r.question_id)
+        for cls in m.get("alg_classes") or []:
+            type_buckets.setdefault(cls, []).append(r)
+    per_type = {k: _facet_metrics(v).__dict__ for k, v in type_buckets.items()
+                if len(v) >= 3}
+
+    scale_buckets: dict[str, list] = {}
+    for r in records:
+        t = meta_of(r.question_id).get("scale_tier")
+        if t:
+            scale_buckets.setdefault(t, []).append(r)
+    per_scale = {k: _facet_metrics(v).__dict__ for k, v in scale_buckets.items()
+                 if len(v) >= 3}
+
+    cross: dict[tuple, list] = {}
+    for r in records:
+        t = meta_of(r.question_id).get("scale_tier")
+        if not t:
+            continue
+        cross.setdefault((r.difficulty.value, t), []).append(r)
+    per_tier_scale = {
+        f"{d}|{t}": _facet_metrics(v).__dict__
+        for (d, t), v in cross.items() if len(v) >= 3}
+
+    return {"per_type": per_type, "per_scale": per_scale,
+            "per_tier_scale": per_tier_scale}
+
+
+# ---------------------------------------------------------------------------
 # Audit-based metrics (需要人工抽检标注)
 # ---------------------------------------------------------------------------
 @dataclass

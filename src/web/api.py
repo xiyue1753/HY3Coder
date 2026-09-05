@@ -89,6 +89,12 @@ def summary(ds: str | None = None) -> dict:
     formal = [r for r in evals if r.source == "run-eval"]
     base = compute_metrics(evals, formal_only=True) if evals else None
     golden = _load_golden()
+    # 多维画像（join 题集元数据：alg_classes / scale_tier）
+    from rex.metrics.compute import compute_facets
+    qmap = {q.id: q.model_dump() for q in _load_questions()}
+    if prefix:
+        qmap = {k: v for k, v in qmap.items() if k.startswith(prefix)}
+    facets = compute_facets(evals, qmap)
     return {
         "n": base.n if base else 0,
         "answer_accuracy": base.answer_accuracy if base else None,
@@ -96,6 +102,9 @@ def summary(ds: str | None = None) -> dict:
         "verdict_dist": base.verdict_dist if base else {},
         "error_type_dist": base.error_type_dist if base else {},
         "per_tier": {k: _dump(v) for k, v in (base.per_tier.items() if base else {})},
+        "per_type": facets["per_type"],
+        "per_scale": facets["per_scale"],
+        "per_tier_scale": facets["per_tier_scale"],
         "refine": _dump(refine_comparison(refines)) if refines else None,
         "golden_n": len(golden),
         "last_run": formal[-1].created_at if formal else None,
