@@ -1218,6 +1218,38 @@ brute 暴力/枚举 · construct 构造 · twoptr 双指针 · game 博弈
 - `data/questions/abc_selfbuilt.jsonl`、`cf_selfbuilt.jsonl`（删 scale_* 字段）
 - `scripts/dim_scale.py`（已删）
 
+## 任务 diff-score：Hy3 多专家评审统一难度分层（评测集构建方法）
+
+**状态**：✅ 已完成并定稿（用户确认为项目书"构建评测集"的回答）
+
+### 背景与动机
+项目书要求题集"按难度分层、说明分层依据"。论证结论：
+- 数据规模/复杂度档/知识点等题面自动特征无法分层（同档难度方差大、值域≠规模、
+  硬编码不泛化，见 reports/DIFFICULTY_SCORING_METHOD.md §2）
+- 平台官方 rating 可信但两平台准则不同，不能直接合并切同三档
+- 方案：把难度迁移到模型评审能力——Hy3 多专家盲打 0-100 + LLM 仲裁
+
+### 工作流（scripts/score_difficulty.py）
+每题 4 次 Hy3 调用：3 专家（实战选手/算法理论/反例猎手）盲打（只看题面+参考解，
+屏蔽平台/官方 rating）→ 仲裁官综合 → final_score。参考解 = 平台 AC 提交。
+0-100 连续分不设硬编码档，报告层按分位切档。
+
+### 执行
+- ABC 175 + CF 175 全量打分完成（data/outputs/diff_scores.jsonl，逐题串行 ~1.5h/集）
+- 回填 metadata.diff_score（apply_diff_score.py）
+
+### 验证
+- 相关性：ABC final vs difficulty_ap Spearman 0.706；CF vs rating 0.816
+- 人工抽检（用户设计）：20 题（15 大分歧+5 一致）隔离盲打对照，以官方 ELO 为真值：
+  仲裁 final 0.848/0.704 > 独立盲打 0.798/0.650 > 专家中位 0.767/0.511
+  → 大分歧上仲裁仍最优，流程合格定稿
+- 证据留档 reports/blind_material|key|result + blind_audit_report.md
+
+### 产出
+- scripts/score_difficulty.py / analyze_diff_scores.py / apply_diff_score.py
+- reports/DIFFICULTY_SCORING_METHOD.md（论文式方法论）
+- 方案文档 4.1 重写（评测集构成+统一难度分层+完成度表同步）
+
 ---
 
 <!-- 后续任务按此格式追加 -->
