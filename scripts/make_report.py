@@ -44,9 +44,23 @@ def _platform_of(rid: str, qmap: dict) -> str:
     return "ABC" if sid.startswith("abc") else "CF"
 
 
-def unified_tier_table(evals: list[EvalRecord], qmap: dict,
-                       n_tiers: int = 5) -> list[dict]:
-    """按 diff_score（0-100 统一难度分）分位切档，逐档统计答案率/过程率/Wilson。"""
+# 语义档位：diff_score 0-100 绝对刻度（与打分 prompt 的语义锚一致）。
+# 每档是固定分数区间（非样本均分），保证跨数据集可比、分数语义不丢失。
+SEMANTIC_TIERS = [
+    ("入门~一眼题", 0, 20),   # 5-15: 直接模拟/公式
+    ("基础~套路", 20, 40),    # 20-35: 常见套路（前缀和/二分/简单DP）
+    ("中等", 40, 60),          # 40-55: 综合思维中难题
+    ("难", 60, 80),            # 60-75: 复杂思维/构造/深实现
+    ("极高难", 80, 100),       # 80+: 罕见思维模型
+]
+
+
+def unified_tier_table(evals: list[EvalRecord], qmap: dict) -> list[dict]:
+    """按 diff_score 的 0-100 绝对语义刻度切档，逐档统计答案率/过程率/Wilson。
+
+    切档区间固定（0-20/20-40/40-60/60-80/80-100），不做样本均分——
+    保持与打分 prompt 语义锚一致，跨数据集可比。
+    """
     scored = []
     for r in evals:
         if r.source != "run-eval":
@@ -56,24 +70,21 @@ def unified_tier_table(evals: list[EvalRecord], qmap: dict,
             scored.append((ds_, r))
     if not scored:
         return []
-    scored.sort(key=lambda x: x[0])
-    n = len(scored)
     rows = []
-    for i in range(n_tiers):
-        seg = scored[i * n // n_tiers:(i + 1) * n // n_tiers]
-        if not seg:
+    for name, lo, hi in SEMANTIC_TIERS:
+        recs = [r for d, r in scored if lo <= d < hi]
+        if not recs:
+            rows.append({"name": name, "ds_lo": lo, "ds_hi": hi,
+                         "n": 0, "answer": None, "process": None,
+                         "ci_low": None, "ci_high": None})
             continue
-        recs = [r for _, r in seg]
         ans = sum(1 for r in recs if r.answer_correct is True)
         proc = sum(1 for r in recs
                    if r.verification.verdict.value == "CORRECT")
         lo_w, hi_w = wilson_interval(proc, len(recs))
         rows.append({
-            "tier": i + 1,
-            "ds_lo": seg[0][0], "ds_hi": seg[-1][0],
-            "n": len(recs),
-            "answer": ans / len(recs),
-            "process": proc / len(recs),
+            "name": name, "ds_lo": lo, "ds_hi": hi, "n": len(recs),
+            "answer": ans / len(recs), "process": proc / len(recs),
             "ci_low": lo_w, "ci_high": hi_w,
         })
     return rows
@@ -161,32 +172,46 @@ def build() -> str:
     w("")
 
     # ---- 2b. 统一难度轴（diff_score 五分位，跨平台可比）----
-    w("\n### 2.2 统一难度轴（Hy3 多专家评审 diff_score，五分位跨平台可比）\n")
+    w("\n### 2.2 统一难度轴（Hy3 多专家评审 diff_score，0-100 语义档跨平台可比）\n")
     ut = unified_tier_table(evals, qmap)
     if ut:
         w("\n> 难度分 `diff_score` 由 Hy3 三专家盲打+仲裁给出（0-100，与平台无关），"
-          "见 §A 方法与验证。档 1 最易 → 档 5 最难。\n")
-        w("\n| 档 | diff_score 区间 | 样本 | 答案准确率 | 过程正确率 | 95% CI |")
+          "见 §A 方法与验证。切档按**绝对语义刻度**（0-20 入门/20-40 基础套路/"
+          "40-60 中等/60-80 难/80-100 极高难），与打分语义锚一致——"
+          "不做样本均分，保证档位含义跨数据集稳定。\n")
+        w("\n| 语义档 | diff_score 区间 | 样本 | 答案准确率 | 过程正确率 | 95% CI |")
         w("|---|---|---|---|---|---|")
         for row in ut:
-            w(f"| 档{row['tier']} | [{row['ds_lo']},{row['ds_hi']}] | {row['n']} | "
+            w(f"| {row['name']} | [{row['ds_lo']},{row['ds_hi']}) | {row['n']} | "
               f"{pct(row['answer'])} | {pct(row['process'])} | "
-              f"[{row['ci_low'] * 100:.1f}%, {row['ci_high'] * 100:.1f}%] |")
-        # 临界点判定：过程正确率首次显著下降处
-        procs = [r["process"] for r in ut]
+              f"{'[' + f'{row['ci_low'] * 100:.1f}%, {row['ci_high'] * 100:.1f}%]' if row['ci_low'] is not None else '—'} |")
+        # 临界点判定：过程正确率首次显著下降处（跳过空档）
+        filled = [r for r in ut if r["n"] > 0]
+        procs = [r["process"] for r in filled]
         drop = None
         for i in range(1, len(procs)):
             if procs[i - 1] - procs[i] >= 0.08:
-                drop = i + 1
+                drop = i
                 break
-        w("\n**临界点判定**：过程正确率随统一难度单调下降"
-          f"（档1 {pct(procs[0])} → 档{len(procs)} {pct(procs[-1])}）。")
-        if drop:
-            w(f"首次显著跌落（≥8pp）出现在**档 {drop}**"
-              f"（diff_score ≥ {ut[drop - 1]['ds_lo']}）——"
-              "模型过程能力在统一难度轴的该区间开始明显失守。")
-        else:
-            w("未观察到 ≥8pp 的显著单档跌落，能力随难度平缓退化。")
+        if procs:
+            first, last = filled[0], filled[-1]
+            w("\n**临界点判定**：过程正确率随统一难度语义档下降"
+              f"（{first['name']} {pct(first['process'])} → "
+              f"{last['name']} {pct(last['process'])}）。")
+            if drop:
+                w(f"首次显著跌落（≥8pp）出现在**{filled[drop]['name']}**"
+                  f"（diff_score ≥ {filled[drop]['ds_lo']}）——"
+                  "模型过程能力在该难度区间开始明显失守。")
+            else:
+                w("未观察到 ≥8pp 的显著单档跌落，能力随难度平缓退化。")
+        # 高端样本不足声明
+        hi_lo = ut[3]["n"] if len(ut) > 3 else 0   # [60,80)
+        hi_hi = ut[4]["n"] if len(ut) > 4 else 0   # [80,100)
+        if hi_lo + hi_hi < 60:
+            w(f"\n> **局限声明**：当前自建 350 题难度天花板偏低——「难」档"
+              f"（[60,80)）仅 {hi_lo} 题、「极高难」（[80,100]）仅 {hi_hi} 题，"
+              "高端结论置信度有限；临界点分析结论限定在入门~中等区间，"
+              "后续可补入高 rating 题扩充。")
         w("")
     else:
         w("\n_暂无 diff_score（先运行 score_difficulty.py）。_\n")
