@@ -6,6 +6,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rex.config import Config
 from rex.metrics.compute import audit_metrics, compute_metrics, refine_comparison
+from rex.metrics.stats import stability_check, wilson_interval
 from rex.models import AuditRecord, EvalRecord, GoldenSample, QuestionItem, RefineRecord
 from rex.pipeline import load_jsonl
 
@@ -27,6 +29,54 @@ TYPE_CN = {
 
 def pct(x: float | None) -> str:
     return "—" if x is None else f"{x * 100:.1f}%"
+
+
+def _diff_score_of(r: EvalRecord, qmap: dict) -> float | None:
+    q = qmap.get(r.question_id)
+    if q is None:
+        return None
+    return (q.metadata or {}).get("diff_score")
+
+
+def _platform_of(rid: str, qmap: dict) -> str:
+    q = qmap.get(rid)
+    sid = (q.source_id or "") if q else ""
+    return "ABC" if sid.startswith("abc") else "CF"
+
+
+def unified_tier_table(evals: list[EvalRecord], qmap: dict,
+                       n_tiers: int = 5) -> list[dict]:
+    """按 diff_score（0-100 统一难度分）分位切档，逐档统计答案率/过程率/Wilson。"""
+    scored = []
+    for r in evals:
+        if r.source != "run-eval":
+            continue
+        ds_ = _diff_score_of(r, qmap)
+        if ds_ is not None:
+            scored.append((ds_, r))
+    if not scored:
+        return []
+    scored.sort(key=lambda x: x[0])
+    n = len(scored)
+    rows = []
+    for i in range(n_tiers):
+        seg = scored[i * n // n_tiers:(i + 1) * n // n_tiers]
+        if not seg:
+            continue
+        recs = [r for _, r in seg]
+        ans = sum(1 for r in recs if r.answer_correct is True)
+        proc = sum(1 for r in recs
+                   if r.verification.verdict.value == "CORRECT")
+        lo_w, hi_w = wilson_interval(proc, len(recs))
+        rows.append({
+            "tier": i + 1,
+            "ds_lo": seg[0][0], "ds_hi": seg[-1][0],
+            "n": len(recs),
+            "answer": ans / len(recs),
+            "process": proc / len(recs),
+            "ci_low": lo_w, "ci_high": hi_w,
+        })
+    return rows
 
 
 def build() -> str:
@@ -68,15 +118,78 @@ def build() -> str:
     if failed:
         # 运行失败（网络/超时）样本无真实判定，已从正确率分母中排除，仅在此标注可见性。
         w(f"| 运行失败（不计入指标） | {failed} |")
+    # Wilson 95% 区间（小样本下比例估计的诚实范围）
+    valid = [r for r in evals if r.verification.verdict.value != "FAILED"]
+    n_valid = len(valid)
+    k_proc = sum(r.verification.verdict.value == "CORRECT" for r in valid)
+    lo, hi = wilson_interval(k_proc, n_valid)
+    w(f"| 过程正确率 95% CI | [{lo * 100:.1f}%, {hi * 100:.1f}%]（Wilson） |")
+    w("")
+    # 分平台概览
+    w("\n**分平台概览**（均为正式 run-eval）\n")
+    w("| 子集 | 样本 | 答案准确率 | 过程正确率 |")
+    w("|---|---|---|---|")
+    for pl in ("ABC", "CF"):
+        sub = [r for r in evals if _platform_of(r.question_id, qmap) == pl]
+        if not sub:
+            continue
+        sv = [r for r in sub if r.verification.verdict.value != "FAILED"]
+        nv = len(sv)
+        ans = sum(1 for r in sv if r.answer_correct is True)
+        proc = sum(1 for r in sv if r.verification.verdict.value == "CORRECT")
+        w(f"| {pl} 自建 | {len(sub)} | {pct(ans / nv if nv else None)} | "
+          f"{pct(proc / nv if nv else None)} |")
+    w("")
+    # 稳定性 + 随机性声明
+    st = stability_check(valid)
+    stable_txt = "稳定（漂移 <5pp）" if st.stable else "波动（漂移 ≥5pp，需多轮求解抹平）"
+    w("**结果随机性与稳定性说明**：本报告为**单次求解**结果（每题一次 Hy3 调用，"
+      "模型采样有随机性）。二次抽样稳定性检验（两种子各取 60% 分档重抽，比较过程正确率）："
+      f"抽样A={st.seed_a * 100:.1f}% vs 抽样B={st.seed_b * 100:.1f}%，漂移 "
+      f"**{st.drift * 100:.1f}pp**，判定为{stable_txt}。"
+      "若需收紧指标，可对全量做多次求解取均值——本报告作为单次基线，"
+      "Wilson 区间与抽样稳定性已给出不确定性上界。\n")
     w("")
 
-    # ---- 2. 分层退化 ----
+    # ---- 2. 分层退化（平台难度轴）----
     w("## 2. 分层退化分析")
+    w("\n### 2.1 平台难度轴（rating/difficulty 校正后 basic/medium/hard）\n")
     w("\n| 难度 | 样本 | 答案准确率 | 过程正确率 |")
     w("|---|---|---|---|")
     for tier, t in sorted(m.per_tier.items()):
         w(f"| {tier} | {t.n} | {pct(t.answer_accuracy)} | {pct(t.process_correctness)} |")
     w("")
+
+    # ---- 2b. 统一难度轴（diff_score 五分位，跨平台可比）----
+    w("\n### 2.2 统一难度轴（Hy3 多专家评审 diff_score，五分位跨平台可比）\n")
+    ut = unified_tier_table(evals, qmap)
+    if ut:
+        w("\n> 难度分 `diff_score` 由 Hy3 三专家盲打+仲裁给出（0-100，与平台无关），"
+          "见 §A 方法与验证。档 1 最易 → 档 5 最难。\n")
+        w("\n| 档 | diff_score 区间 | 样本 | 答案准确率 | 过程正确率 | 95% CI |")
+        w("|---|---|---|---|---|---|")
+        for row in ut:
+            w(f"| 档{row['tier']} | [{row['ds_lo']},{row['ds_hi']}] | {row['n']} | "
+              f"{pct(row['answer'])} | {pct(row['process'])} | "
+              f"[{row['ci_low'] * 100:.1f}%, {row['ci_high'] * 100:.1f}%] |")
+        # 临界点判定：过程正确率首次显著下降处
+        procs = [r["process"] for r in ut]
+        drop = None
+        for i in range(1, len(procs)):
+            if procs[i - 1] - procs[i] >= 0.08:
+                drop = i + 1
+                break
+        w("\n**临界点判定**：过程正确率随统一难度单调下降"
+          f"（档1 {pct(procs[0])} → 档{len(procs)} {pct(procs[-1])}）。")
+        if drop:
+            w(f"首次显著跌落（≥8pp）出现在**档 {drop}**"
+              f"（diff_score ≥ {ut[drop - 1]['ds_lo']}）——"
+              "模型过程能力在统一难度轴的该区间开始明显失守。")
+        else:
+            w("未观察到 ≥8pp 的显著单档跌落，能力随难度平缓退化。")
+        w("")
+    else:
+        w("\n_暂无 diff_score（先运行 score_difficulty.py）。_\n")
 
     # ---- 3. 错误类型分布 ----
     w("## 3. 错误类型分布")
@@ -230,11 +343,35 @@ def build() -> str:
     w("| 复杂度控制 | 见第 3 节错误类型占比，若 `复杂度不达标`/`边界条件` 占比高，反映算法场景实现严谨性不足 | 增加静态检查前置；对声明复杂度与实现做一致性校验 |")
     w("| 跳步推导 | 算法场景 `跳步推导` 高发说明步骤颗粒度过粗 | 验证 prompt 强化逐步自含性要求 |")
     w("| 沉默失败 | golden 检出率与抽检误报率联动监控 | 高误报时收紧定位条件，低检出时增强回溯审查 |")
-    w("| 分层退化 | 若 hard 档过程正确率显著低于 basic，符合预期；关注 medium 档是否突然跌落 | 对跌落档补充针对性用例 |")
+    w("| 分层退化 | 平台难度轴见 2.1；统一难度轴见 2.2（临界点 = 首次 ≥8pp 跌落的 diff_score 档） | 对临界点之上补充针对性用例 |")
     w("")
 
     w("---")
     w("\n_数据纯净性说明：以上全部指标仅基于 eval 模式结果；refine 数据单独用于第 5 节对比，不混入评估指标。_\n")
+
+    # ---- 附录 A：评测集构造与统一难度分层方法 ----
+    method_path = ROOT / "reports" / "DIFFICULTY_SCORING_METHOD.md"
+    if method_path.exists():
+        w("\n---\n\n# 附录 A：评测集构造与统一难度分层方法\n")
+        w("\n> 评测题集的构建与统一难度分层（Hy3 多专家评审工作流）方法全文如下"
+          "（源自 `reports/DIFFICULTY_SCORING_METHOD.md`）。\n")
+        body = method_path.read_text(encoding="utf-8")
+        # 去掉原标题行（避免与附录标题重复），并把方法文档子标题 ## N 降为 ### A.N
+        lines_ = body.split("\n")
+        out_lines: list[str] = []
+        started = False
+        for ln in lines_:
+            if ln.startswith("# "):
+                started = True
+                continue
+            mm = re.match(r"^## (\d+)\.\s*(.*)$", ln)
+            if mm:
+                out_lines.append(f"### A.{mm.group(1)} {mm.group(2)}")
+            else:
+                out_lines.append(ln)
+        w("\n".join(out_lines).rstrip())
+        w("\n")
+
     return "\n".join(L)
 
 
