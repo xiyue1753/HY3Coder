@@ -125,9 +125,12 @@ def _run_cpp(code: str, stdin, timeout, work, env, compile_timeout) -> SandboxRe
     exe = work / "_rex_prog.exe"
     src.write_text(code, encoding="utf-8")
     # 编译
+    # Windows(MSYS2 ucrt64) 默认栈 ~1MB，CF 递归解(DFS 2e5 深)必崩 0xC0000005；
+    # 加 -Wl,--stack 扩大运行时栈（256MB），贴近 CF/Linux 默认 256MB 栈限制。
     try:
         proc = subprocess.run(
-            [GPP, "-std=c++17", "-O2", str(src), "-o", str(exe)],
+            [GPP, "-std=c++17", "-O2", "-Wl,--stack,268435456",
+             str(src), "-o", str(exe)],
             capture_output=True, timeout=compile_timeout,
             cwd=str(work), env=env, creationflags=_CREATE_NO_WINDOW,
         )

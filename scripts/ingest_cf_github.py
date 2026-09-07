@@ -284,6 +284,31 @@ def ingest_from_github(batch: CFBatch, item: dict,
 
 
 # ---------------------------------------------------------------------------
+def load_picked_items(path: str) -> list[dict]:
+    """读取人工精选清单 json → 候选 item 列表。
+
+    精选 json 每行形如 {sid, rating, name, tags, contest, index, ...}，
+    转成 ingest_from_github 需要的 {contest, index, name, typ, diff}。
+    """
+    p = Path(path)
+    if not p.exists():
+        print(f"[fatal] 精选清单不存在: {p}")
+        sys.exit(2)
+    data = json.loads(p.read_text(encoding="utf-8"))
+    if isinstance(data, dict) and "items" in data:
+        data = data["items"]
+    items = []
+    for d in data:
+        r = int(d.get("rating", 2000))
+        diff = "basic" if r <= 1100 else ("medium" if r <= 1700 else "hard")
+        items.append({
+            "contest": str(d["contest"]), "index": d["index"],
+            "name": d.get("name", ""), "typ": type_of(d.get("tags", [])),
+            "diff": diff,
+        })
+    return items
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="GitHub 源补 CF 自建题")
     ap.add_argument("--limit", type=int, default=25,
@@ -292,13 +317,21 @@ def main() -> None:
     ap.add_argument("--dry-plan", action="store_true", help="只打印候选池，不抓取")
     ap.add_argument("--delay", type=float,
                     default=float(os.environ.get("CF_DELAY", "2.0")))
+    ap.add_argument("--picked", default=None,
+                    help="抓取人工精选清单（json: [{contest,index,name,tags,rating}]），"
+                         "替代 auto_plan_github 自动选题")
+    ap.add_argument("--no-cookie", action="store_true",
+                    help="匿名抓题面（不加载 cf_cookies.json；题面路由无 cookie 也可用）")
     args = ap.parse_args()
 
     os.environ.setdefault("CF_DELAY", str(args.delay))
     gh_index = _build_gh_index()
     print(f"[idx] GitHub 索引 {len(gh_index)} 题")
 
-    pool = auto_plan_github(gh_index, args.seed)
+    if args.picked:
+        pool = load_picked_items(args.picked)
+    else:
+        pool = auto_plan_github(gh_index, args.seed)
     if not pool:
         print("[plan] 无可用候选（缺口已满或 GitHub 覆盖不足）")
         return
@@ -311,7 +344,11 @@ def main() -> None:
             print(f"  {_task(x['contest'], x['index'])}({x['diff']}) {x['name']}")
         return
 
-    cookies, ua = _load_cookies()
+    if args.no_cookie:
+        cookies: list[dict] = []
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    else:
+        cookies, ua = _load_cookies()
     batch = CFBatch(cookies, ua=ua, headless=True, human_wait=30)
     ok = fail = exhausted = 0
     try:

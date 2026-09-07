@@ -90,6 +90,29 @@ def unified_tier_table(evals: list[EvalRecord], qmap: dict) -> list[dict]:
     return rows
 
 
+def _band_stats(recs: list[tuple[float, EvalRecord]]) -> dict:
+    """给定 (diff_score, EvalRecord) 列表，聚合答案率/过程率（含空样本）。"""
+    if not recs:
+        return {"n": 0, "answer": None, "process": None,
+                "ci_low": None, "ci_high": None}
+    ans = sum(1 for _, r in recs if r.answer_correct is True)
+    proc = sum(1 for _, r in recs
+               if r.verification.verdict.value == "CORRECT")
+    lo_w, hi_w = wilson_interval(proc, len(recs))
+    return {"n": len(recs), "answer": ans / len(recs), "process": proc / len(recs),
+            "ci_low": lo_w, "ci_high": hi_w}
+
+
+def merged_high_stats(scored: list[tuple[float, EvalRecord]], cut: float = 60.0) -> dict:
+    """把 diff_score >= cut 的全部样本合并统计（高端档样本不足时的合并读数）。
+
+    语义：五档结构中难档与极高难档样本偏少时，单独一行分档统计置信度有限，
+    故合并为"高难段"给出聚合读数，作为高端能力的保守估计。
+    """
+    hi = [(d, r) for d, r in scored if d >= cut]
+    return _band_stats(hi)
+
+
 def build() -> str:
     cfg = Config.from_env(ROOT)
     # 数据文件位置统一由数据源注册中心声明（见 src/rex/datasource.py）
@@ -204,14 +227,27 @@ def build() -> str:
                   "模型过程能力在该难度区间开始明显失守。")
             else:
                 w("未观察到 ≥8pp 的显著单档跌落，能力随难度平缓退化。")
-        # 高端样本不足声明
+        # 高端样本不足声明：难档/极高难档样本少时合并叙述（保留五档结构，
+        # 高难两档合计作为保守聚合读数，避免单档小样本夸大/缩小结论）
         hi_lo = ut[3]["n"] if len(ut) > 3 else 0   # [60,80)
         hi_hi = ut[4]["n"] if len(ut) > 4 else 0   # [80,100)
         if hi_lo + hi_hi < 60:
-            w(f"\n> **局限声明**：当前自建 350 题难度天花板偏低——「难」档"
-              f"（[60,80)）仅 {hi_lo} 题、「极高难」（[80,100]）仅 {hi_hi} 题，"
-              "高端结论置信度有限；临界点分析结论限定在入门~中等区间，"
-              "后续可补入高 rating 题扩充。")
+            scored_hi = []
+            for r in evals:
+                if r.source != "run-eval":
+                    continue
+                ds_ = _diff_score_of(r, qmap)
+                if ds_ is not None and ds_ >= 60:
+                    scored_hi.append((ds_, r))
+            mh = merged_high_stats(scored_hi, cut=60.0)
+            hi_txt = (f"{pct(mh['answer'])} / {pct(mh['process'])}"
+                      if mh["n"] else "— / —")
+            w(f"\n> **高难档合并说明**：五档结构中「难」（[60,80)）仅 {hi_lo} 题、"
+              f"「极高难」（[80,100]）仅 {hi_hi} 题——高端两档样本不足，" 
+              "单档统计置信度有限。合并为**高难段（[60,100]，共 "
+              f"{mh['n']} 题）**读数：答案/过程正确率 {hi_txt}"
+              "，作为高端能力的保守聚合估计；临界点分析结论限定在入门~中等区间，"
+              "后续可继续补入高 rating 题扩充。")
         w("")
     else:
         w("\n_暂无 diff_score（先运行 score_difficulty.py）。_\n")
