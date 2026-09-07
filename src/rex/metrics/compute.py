@@ -208,10 +208,17 @@ def audit_metrics(records: list[EvalRecord], audits: list) -> AuditMetrics | Non
     对齐任务书 P4 口径：利用标准答案（answer_correct）划分样本——
     - 定位准确率：在"答案错误"的样本上，评估器能否判定过程有问题并定位到出错步骤。
     - 误报率：在"答案正确"的样本上，被判过程有问题的样本经人工抽检确认真实/误报比例。
+
+    只纳入**人工已回填**的样本（verdict_human 非空）：抽检指标的分母必须
+    由人工核实过的样本构成，未回填的模板（如分批发出的 CF 抽检）不稀释分母。
     """
     by_id = {r.question_id: r for r in records}
+    done = [
+        a for a in audits
+        if getattr(a, "verdict_human", None) is not None
+    ]
     pairs: list[tuple[EvalRecord, object]] = [
-        (by_id[a.question_id], a) for a in audits if a.question_id in by_id
+        (by_id[a.question_id], a) for a in done if a.question_id in by_id
     ]
     if not pairs:
         return None

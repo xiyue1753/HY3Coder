@@ -90,7 +90,10 @@ def test_audit_metrics_localization_and_fp() -> None:
 
     class Audit:
         def __init__(self, qid, step=None, fp=False):
-            self.question_id, self.error_step_id, self.is_false_positive = qid, step, fp
+            self.question_id = qid
+            self.error_step_id = step
+            self.is_false_positive = fp
+            self.verdict_human = "CORRECT"   # 人工已回填
 
     # 定位：a 命中（step1 被覆盖），b 未命中（step99 未被覆盖）
     audits = [Audit("a", step=1), Audit("b", step=99), Audit("c", step=1)]
@@ -106,6 +109,18 @@ def test_audit_metrics_localization_and_fp() -> None:
                         [Audit("a", step=1), Audit("b", step=99), Audit("c", fp=True)])
     assert am2 is not None and am2.false_positive_rate == 1.0
 
+    # 未回填（verdict_human=None）的审计不计入分母
+    class AuditPending:
+        def __init__(self, qid):
+            self.question_id = qid
+            self.error_step_id = None
+            self.is_false_positive = None
+            self.verdict_human = None
+    am3 = audit_metrics([rec_wrong1, rec_wrong2, rec_right],
+                        [Audit("a", step=1), Audit("b", step=99),
+                         Audit("c", step=1), AuditPending("a")])
+    assert am3 is not None and am3.n == 3   # 未回填被排除，不稀释分母
+
 
 def test_audit_metrics_answer_unknown_excluded() -> None:
     """答案正确性未知（answer_correct=None）的样本不进两个分母，但计入 n。"""
@@ -115,7 +130,10 @@ def test_audit_metrics_answer_unknown_excluded() -> None:
 
     class Audit:
         def __init__(self, qid, step=None, fp=False):
-            self.question_id, self.error_step_id, self.is_false_positive = qid, step, fp
+            self.question_id = qid
+            self.error_step_id = step
+            self.is_false_positive = fp
+            self.verdict_human = "PROCESS_INCORRECT"   # 人工已回填
 
     am = audit_metrics([rec_unknown], [Audit("u", step=1)])
     assert am is not None
