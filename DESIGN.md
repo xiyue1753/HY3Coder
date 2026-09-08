@@ -305,11 +305,12 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 - minor 出现在 SF 的常见形态是**人工核验纠正**：系统把实质 minor 误判为 fatal → 样本被误放入 SF/PI → 抽检判 `level_mismatch`（C2118/C2140）。因此 SF 中与 minor 相关的统计 = `level_mismatch` 计数，不是 minor finding 计数。
 
 **temperature=0 全量重做 checklist（不覆盖当前记录）**：
-1. 用 `REX_TEMPERATURE=0`（env），跑 `python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --out eval_abc_t0.jsonl`（CF 同理 `eval_cf_t0.jsonl`）——**`--out` 写新文件，不覆盖现有 eval_*.jsonl**；
-2. 每样本自动产出 answer_correct/verdict/findings(severity)/arbiter(=ARBITER 总仲裁)；
-3. 统计统一走 `make_report.py`（§1 主/副 + minor-only 行、§6 抽检区间）——主/副口径按 §9.1 路线自动一致；
-4. 抽检模板基于新记录重新生成（`scripts/audit_sample.py`），标注仍按 `audit_rules.md` v4；
-5. 新旧两套记录并存于 `data/outputs/` 与 `_archived/`，报告注明数据版本。
+1. 生成侧：`REX_TEMPERATURE=0` 跑 `python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --out eval_selfbuilt_all_t0.jsonl`（CF 同理 `--out eval_cf_all_t0.jsonl`）——写独立文件，当前 eval_*.jsonl 原样保留；
+2. 读取侧：`export REX_EVAL_SUFFIX=_t0` 后，`make_report.py`/审计/仪表盘统一读 t0 记录（`datasource.evals_path` 按后缀解析；不设该环境变量即读默认注册文件）；
+3. 每样本自动产出 answer_correct/verdict/findings(severity)/arbiter(=ARBITER 总仲裁)；
+4. 统计统一走 `make_report.py`（§1 主/副 + minor-only 行、§6 抽检区间）——主/副口径按 §9.1 路线自动一致；
+5. 抽检模板基于 t0 记录重新生成（`scripts/audit_sample.py`），标注仍按 `audit_rules.md` v4，回填后同步 `data/audit/` 副本；
+6. 新旧两套记录并存于 `data/outputs/`，报告/表格注明数据版本（默认注册文件 = temp0 前基线，`REX_EVAL_SUFFIX=_t0` = 重跑结果）。
 
 ## 10. 运行方式
 

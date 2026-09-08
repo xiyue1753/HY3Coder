@@ -29,6 +29,7 @@ make_report / 前端提示 / ingest 脚本）一律通过本模块的访问器�
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -158,7 +159,18 @@ def questions_path(root: str | Path, ds: Dataset) -> Path:
 
 
 def evals_path(root: str | Path, ds: Dataset) -> Path | None:
-    return outputs_dir(root) / ds.evals if ds.evals else None
+    """评测输出文件路径。环境变量 REX_EVAL_SUFFIX 可为读取侧追加文件名后缀
+    （如 _t0），用于 temperature=0 全量重跑的独立文件接入：生成侧用
+    ``--out eval_selfbuilt_all_t0.jsonl`` 等，读取侧 export REX_EVAL_SUFFIX=_t0
+    后 make_report/audit/仪表盘统一读重跑结果；不设时读默认注册文件。"""
+    if not ds.evals:
+        return None
+    name = ds.evals
+    suffix = os.getenv("REX_EVAL_SUFFIX", "").strip()
+    if suffix:
+        stem, _, ext = name.rpartition(".")
+        name = f"{stem}{suffix}.{ext}" if ext else f"{name}{suffix}"
+    return outputs_dir(root) / name
 
 
 def refine_path(root: str | Path, ds: Dataset) -> Path | None:
