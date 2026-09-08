@@ -50,11 +50,25 @@ class ErrorType(str, Enum):
     OTHER = "other"                        # 其他
 
 
+class ErrorSeverity(str, Enum):
+    """缺陷严重度（过程评估判定的核心分层）：
+
+    - FATAL: 破坏推理链成立性/算法正确性的实质缺陷——只有 FATAL 才驱动
+      PROCESS_INCORRECT / SILENT_FAILURE / ANSWER_INCORRECT 判定。
+    - MINOR: 不影响推理链成立性的轻微瑕疵（表述笔误、自测文字错误、
+      可重建的常规论证省略、复杂度叙述不精确但结论仍成立等）——仅记录，
+      不驱动非 CORRECT 判定。
+    """
+    FATAL = "fatal"
+    MINOR = "minor"
+
+
 class ErrorFinding(BaseModel):
     step_id: int
     error_type: ErrorType
     detail: str        # 问题描述
     evidence: str      # 判定依据（可解释，供仲裁与人工复核）
+    severity: ErrorSeverity = ErrorSeverity.FATAL  # 默认 fatal：无标注时按实质缺陷处理
 
 
 class Verdict(str, Enum):
@@ -180,17 +194,45 @@ class RefineRecord(BaseModel):
     error: str | None = None
 
 
+class HumanSeverityMatch(str, Enum):
+    """人工抽检对「系统 fatal/minor 分级」的三层复核结论。
+
+    人工抽检的对象不是 AI 解题本身，而是**系统判定准不准**——即 verifier
+    给出的 verdict 与每条 finding 的 severity(fatal/minor) 是否属实。三层结论：
+
+    - MATCH（完全相符）  : 系统对 fatal/minor 的分级与实际一致——系统判
+      PROCESS_INCORRECT/SILENT_FAILURE 确有 fatal（或判 CORRECT 确无 fatal）。
+      系统审查正确 → 非误报、非漏检。
+    - LEVEL_MISMATCH（层次不符）: 系统方向对但分级打反——确有缺陷但严重级错了
+      （如系统把 minor 瑕疵判成 fatal，或把 fatal 判成 minor）。
+      fatal→minor 属漏检侧（本应驱动非 CORRECT 却放行）；
+      minor→fatal 属误报侧（主口径误报、副口径不计）。
+    - FP（完全不符）    : 系统说有错实际过程正确（或说正确实际有致命缺陷），
+      与真实完全相反 → 主/副口径均计误报。
+    """
+
+    MATCH = "match"
+    LEVEL_MISMATCH = "level_mismatch"
+    FP = "fp"
+
+
 class AuditRecord(BaseModel):
     """人工抽检标注记录（data/outputs/audit_records.jsonl）。
 
     模板由 scripts/audit_sample.py 生成，标注字段人工回填。
+    主判定字段为 human_severity_match（三层：match/level_mismatch/fp）；
+    旧字段 is_false_positive / human_error_severity 仅用于兼容历史标注，
+    新标注请直接填 human_severity_match。
     """
 
     question_id: str
     verdict_human: Verdict | None = None
     error_step_id: int | None = None       # 真实错误起始步骤
     error_type_human: ErrorType | None = None
-    is_false_positive: bool | None = None  # 系统误报标记
+    human_severity_match: HumanSeverityMatch | None = None  # 三层复核结论（主字段）
+    is_false_positive: bool | None = None  # [兼容] 系统误报标记（旧字段，新标注不用）
+    human_error_severity: Literal["none", "minor", "fatal"] | None = None
+    # [兼容] 旧字段：none/minor/fatal，见 HumanSeverityMatch 说明；新标注用上面的三层
     note: str = ""
     audited_by: str = ""
     audited_at: str | None = None

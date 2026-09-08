@@ -24,6 +24,9 @@ from rex.executor.tests import run_test_cases
 from rex.hy3_client import Hy3Client
 from rex.models import (
     Answer,
+    ErrorFinding,
+    ErrorSeverity,
+    ErrorType,
     EvalRecord,
     QuestionItem,
     RefineRecord,
@@ -251,18 +254,18 @@ class Pipeline:
             progress("verify", None)
         verification = self.verifier.verify(q, answer, static_evidence=evidence,
                                             execution_feedback=exec_fb)
-        # 客观优先兜底：沙盒证明答案错时，verdict 绝不可能是 CORRECT（防止 LLM 漏检）
-        if answer_correct is False and verification.verdict == Verdict.CORRECT:
-            verification.verdict = Verdict.ANSWER_INCORRECT
-            log.info("eval %s: 客观答案错误但 LLM 判 CORRECT，强制降级为 ANSWER_INCORRECT", q.id)
+        # 程序化一致性裁决（有沙盒客观信号，是最终兜底层）：
+        #   - 答案对 + fatal → SILENT_FAILURE；答案对 + 无 fatal → CORRECT（剥离 minor）
+        #   - 答案错 → 绝不可能是 CORRECT/SILENT_FAILURE
+        _reconcile_verdict(verification, answer_correct)
         # 编译/运行级失败兜底：执行反馈含编译/语法错误但 verifier 未定位时，程序化补一条
-        # s4 finding（指向 implement 步骤），保证"编译失败"类错误一定有可定位诊断，
+        # s4 fatal finding（指向 implement 步骤），保证"编译失败"类错误一定有可定位诊断，
         # 不依赖 LLM 自觉（曾出现 A1098 编译失败却 findings 空的情况）。
         if exec_err and _is_exec_failure(exec_err) and not verification.findings:
-            from rex.models import ErrorFinding, ErrorType
             verification.findings.append(ErrorFinding(
                 step_id=4,
                 error_type=ErrorType.OTHER,
+                severity=ErrorSeverity.FATAL,
                 detail=f"代码存在编译/运行级错误：{exec_err[:200]}",
                 evidence="沙盒执行返回编译/运行错误（客观事实），对应 implement 步骤代码不可执行。",
             ))
@@ -283,6 +286,50 @@ class Pipeline:
                  q.id, verification.verdict.value, answer_correct, pass_rate,
                  time.time() - t0)
         return rec
+
+    # -- re-verify mode -----------------------------------------------------
+    def reverify_one(self, q: QuestionItem, answer: Answer) -> EvalRecord:
+        """单条重判定：复用已有 answer（不重跑 solver），重新走执行/静态/验证。
+
+        用途：verifier 判定口径升级（如 severity 重构）后，对既有 eval 记录
+        只重判 verdict/findings——solver 产物不变、沙盒答案结果不变，但
+        verification 由新口径 verifier 重新生成。
+
+        - execute/static 客观部分仍重算（沙盒 answer_correct 不变，保证记录自洽；
+          静态校验代码已更新 C++ 检测，重算以获得最新规则诊断）。
+        - verify → reconcile 走完整程序化一致性裁决（severity 语义）。
+        - 不修改 question 的已有判定来源；由调用方决定写盘位置。
+        """
+        from rex.executor.static_check import check_static, static_evidence_block, static_result_to_dict
+
+        answer_correct, pass_rate, exec_err = self._execute(q, answer)
+        static = check_static(q, answer)
+        evidence = static_evidence_block(static)
+        exec_fb = _execution_feedback(q, answer_correct, pass_rate, exec_err)
+        verification = self.verifier.verify(q, answer, static_evidence=evidence,
+                                            execution_feedback=exec_fb)
+        _reconcile_verdict(verification, answer_correct)
+        if exec_err and _is_exec_failure(exec_err) and not verification.findings:
+            verification.findings.append(ErrorFinding(
+                step_id=4,
+                error_type=ErrorType.OTHER,
+                severity=ErrorSeverity.FATAL,
+                detail=f"代码存在编译/运行级错误：{exec_err[:200]}",
+                evidence="沙盒执行返回编译/运行错误（客观事实），对应 implement 步骤代码不可执行。",
+            ))
+            log.info("reverify %s: 编译/运行失败未定位，程序化补充 s4 finding", q.id)
+        return EvalRecord(
+            question_id=q.id,
+            scene=q.scene,
+            difficulty=q.difficulty,
+            answer=answer,
+            answer_correct=answer_correct,
+            test_pass_rate=pass_rate,
+            verification=verification,
+            static_check=static_result_to_dict(static),
+            cost_calls=self.client.call_count,
+            created_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+        )
 
     # -- refine mode --------------------------------------------------------
     def run_refine(
@@ -344,6 +391,52 @@ class Pipeline:
         if q.standard_answer and answer.final_answer:
             return normalize_answer_text(answer.final_answer) == normalize_answer_text(q.standard_answer), None, None
         return None, None, None
+
+
+def _reconcile_verdict(verification: VerificationResult,
+                       answer_correct: bool | None) -> None:
+    """程序化一致性裁决：以沙盒客观信号 + findings severity 强制 verdict 语义一致。
+
+    （severity 语义见 models.ErrorSeverity；此函数是最终兜底，LLM 的判定
+    可能自相矛盾——这里把它纠正到任务书口径。）
+
+    规则：
+    1. 答案客观正确（answer_correct=True）：
+       - 存在 fatal finding → verdict 不得是 CORRECT/ANSWER_INCORRECT，
+         统一为 SILENT_FAILURE（答案对但过程有实质缺陷）。
+       - 无 fatal finding（全 minor 或空）→ verdict 强制 CORRECT
+         （剥离"minor 被 LLM 提升为过程错误"的误报）。
+    2. 答案客观错误（answer_correct=False）：
+       - verdict 不可能是 CORRECT/SILENT_FAILURE（沙盒已证伪答案）：
+         存在 fatal → PROCESS_INCORRECT；无 fatal → ANSWER_INCORRECT。
+    3. answer_correct is None（无沙盒信号）：不动 LLM 判定（无客观依据）。
+
+    执行反馈未注入时（pass_rate 未知的文本比对场景），verdict 仍由
+    LLM 判定保留，此函数仅在 answer_correct 客观已知时生效。
+    """
+    if answer_correct is None:
+        return
+    has_fatal = any(
+        getattr(f, "severity", ErrorSeverity.FATAL) == ErrorSeverity.FATAL
+        for f in verification.findings
+    )
+    v = verification.verdict
+    if answer_correct is True:
+        if has_fatal and v in (Verdict.CORRECT, Verdict.ANSWER_INCORRECT):
+            verification.verdict = Verdict.SILENT_FAILURE
+            log.info("reconcile: 答案正确且存在 fatal finding，%s → SILENT_FAILURE", v.value)
+        elif not has_fatal and v in (Verdict.PROCESS_INCORRECT, Verdict.SILENT_FAILURE):
+            verification.verdict = Verdict.CORRECT
+            log.info("reconcile: 答案正确且无 fatal finding，%s → CORRECT（剥离 minor）", v.value)
+    elif answer_correct is False:
+        if v == Verdict.CORRECT:
+            verification.verdict = Verdict.ANSWER_INCORRECT
+            log.info("reconcile: 答案客观错误但 LLM 判 CORRECT，→ ANSWER_INCORRECT")
+        elif v == Verdict.SILENT_FAILURE:
+            # SILENT_FAILURE 语义要求答案正确，客观已证伪 → 按是否 fatal 归类
+            verification.verdict = Verdict.PROCESS_INCORRECT if has_fatal else Verdict.ANSWER_INCORRECT
+            log.info("reconcile: 答案客观错误但判 SILENT_FAILURE，→ %s",
+                     verification.verdict.value)
 
 
 def _execution_feedback(

@@ -230,23 +230,45 @@ def _boundary_diagnostics(question: QuestionItem, answer: Answer) -> list[Static
     return diags
 
 
+def _is_cpp(code: str) -> bool:
+    head = (code or "")[:4000]
+    return "#include" in head or "using namespace" in head
+
+
 def check_static(question: QuestionItem, answer: Answer) -> StaticCheckResult:
+    """Run static checks; language-aware (Python via ast, C++ via token heuristics).
+
+    C++ 路径（task 2 补盲）：CF/ABC 主场景代码是 C++，ast 无法解析 → 此前
+    complexity/loop/recursion 检测全部失效（estimated=unknown(syntax)）。
+    现按 detect_language 分发到 C++ token 级分析器。
+    """
     declared = _extract_declared(answer)
-    estimated = _estimate_complexity(answer.code or "")
-    mismatch = False
+    code = answer.code or ""
     diags: list[StaticDiagnostic] = []
+    if _is_cpp(code):
+        estimated = _cpp_complexity_estimate(code)
+        loop_diags = _cpp_infinite_loop_diags(code)
+        recursion_diags = _cpp_recursion_diags(code)
+        diags.extend(loop_diags)
+        diags.extend(recursion_diags)
+        loop_risk = any(d.category == "loop" and d.severity == "warn" for d in loop_diags)
+        recursion_risk = bool(recursion_diags)
+    else:
+        estimated = _estimate_complexity(code)
+        loop_diags, loop_risk, recursion_risk = _loop_and_recursion_diagnostics(code)
+        diags.extend(loop_diags)
+    mismatch = False
     if declared and estimated:
         est = _normalize(estimated)
         dec = _normalize(declared)
-        if est and dec and est > dec:
+        # 注意：dec=0 表示 O(1)（falsy），不能用 `est and dec` 判空，须用 is not None
+        if est is not None and dec is not None and est > dec:
             mismatch = True
             diags.append(StaticDiagnostic(
                 "complexity", "warn",
                 f"声明复杂度 {declared} 但代码启发式估计 {estimated}，可能复杂度不达标",
             ))
     diags.extend(_boundary_diagnostics(question, answer))
-    loop_diags, loop_risk, recursion_risk = _loop_and_recursion_diagnostics(answer.code or "")
-    diags.extend(loop_diags)
     return StaticCheckResult(
         declared=declared, estimated=estimated, mismatch=mismatch,
         diagnostics=diags, loop_risk=loop_risk, recursion_risk=recursion_risk,
@@ -294,3 +316,307 @@ def _normalize(expr: str) -> int | None:
         "n2": 4, "n^2": 4, "n{2}": 4, "n3": 5, "n^3": 5,
     }
     return mapping.get(e)
+
+
+# ---------------------------------------------------------------------------
+# C++ 静态分析（轻量启发式，不追求完整 C++ 解析）
+#
+# Python 路径用 ast；C++ 没有内置 parser。这里用 token 级启发式：
+#   1. 剔除注释/字符串字面量；
+#   2. 配对 `{ }` / `( )`，识别 for/while 块及其嵌套深度 → 复杂度粗估；
+#   3. 常量真 while / for(;;) 且块内无 break/return/goto → 死循环风险；
+#   4. 递归函数无"非递归 return"的终止分支 → 递归无终止风险。
+# 与 Python 版一致的定位：启发式诊断，仅供 verifier 参考，绝不阻断 verdict。
+# ---------------------------------------------------------------------------
+
+_CPP_KEYWORDS = {
+    "for", "while", "do", "if", "else", "switch", "case", "default",
+    "return", "break", "continue", "goto", "new", "delete", "using",
+    "namespace", "typedef", "class", "struct", "union", "enum",
+    "const", "static", "constexpr", "inline", "template", "typename",
+    "int", "long", "short", "char", "bool", "float", "double", "void",
+    "auto", "signed", "unsigned", "size_t", "true", "false", "nullptr",
+    "main", "cin", "cout", "endl",
+}
+
+# 注释 / 字符串 / 字符字面量（替换为等长空白，保留位置信息）
+_CPP_SKIP_RE = re.compile(
+    r"//[^\n]*|/\*.*?\*/|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'",
+    re.DOTALL,
+)
+_CPP_IDENT_START = re.compile(r"[A-Za-z_]")
+_CPP_IDENT = re.compile(r"[A-Za-z0-9_]")
+
+
+def _cpp_tokens(code: str) -> list[tuple[str, int, int]]:
+    """Tokenize C++ source (comments/strings removed): list of (value, start, end)."""
+    if not code:
+        return []
+    cleaned = _CPP_SKIP_RE.sub(lambda m: " " * (m.end() - m.start()), code)
+    toks: list[tuple[str, int, int]] = []
+    i = 0
+    n = len(cleaned)
+    while i < n:
+        ch = cleaned[i]
+        if ch.isspace():
+            i += 1
+            continue
+        start = i
+        if _CPP_IDENT_START.match(ch):
+            i += 1
+            while i < n and _CPP_IDENT.match(cleaned[i]):
+                i += 1
+            toks.append((cleaned[start:i], start, i))
+            continue
+        if ch.isdigit():
+            i += 1
+            while i < n and (cleaned[i].isalnum() or cleaned[i] in "xX.+-eE'"):
+                i += 1
+            toks.append((cleaned[start:i], start, i))
+            continue
+        toks.append((ch, start, i + 1))
+        i += 1
+    return toks
+
+
+def _cpp_match_paren(tokens: list[tuple[str, int, int]]) -> dict[int, int]:
+    """Map every '(' token index -> matching ')' token index."""
+    stack: list[int] = []
+    match: dict[int, int] = {}
+    for idx, (val, _, _) in enumerate(tokens):
+        if val == "(":
+            stack.append(idx)
+        elif val == ")":
+            if stack:
+                match[stack.pop()] = idx
+    return match
+
+
+def _cpp_block_children(tokens: list[tuple[str, int, int]]) -> tuple[dict[int, list[int]], list[int]]:
+    """Build a block tree over '{...}' pairs."""
+    stack: list[int] = []
+    children: dict[int, list[int]] = {}
+    roots: list[int] = []
+    for idx, (val, _, _) in enumerate(tokens):
+        if val == "{":
+            if stack:
+                children.setdefault(stack[-1], []).append(idx)
+            else:
+                roots.append(idx)
+            stack.append(idx)
+        elif val == "}":
+            if stack:
+                stack.pop()
+    return children, roots
+
+
+def _cpp_is_loop_block(tokens, paren_close: dict[int, int], open_idx: int) -> bool:
+    """A '{' opens a for/while body iff the token before it is ')' of a for/while head."""
+    if open_idx <= 0 or tokens[open_idx][0] != "{":
+        return False
+    prev = tokens[open_idx - 1][0]
+    if prev != ")":
+        return False
+    # find matching '('
+    close_idx = open_idx - 1
+    for op, cl in paren_close.items():
+        if cl == close_idx:
+            if op > 0 and tokens[op - 1][0] in ("for", "while"):
+                return True
+            return False
+    return False
+
+
+def _cpp_analyze_loops(code: str) -> tuple[int, bool]:
+    """Return (max_loop_depth, headless_loop).
+
+    - max_loop_depth: 最大循环嵌套深度（块循环 + 无块循环均计入）
+    - headless_loop: 存在 for/while 头后不接 `{` 的循环
+    """
+    toks = _cpp_tokens(code)
+    if not toks:
+        return 0, False
+    paren = _cpp_match_paren(toks)
+    children, roots = _cpp_block_children(toks)
+    values = [t[0] for t in toks]
+
+    # 1) collect block-loops with their depth
+    loop_blocks: list[tuple[int, int, int]] = []  # (open_idx, close_idx, depth)
+
+    def _block_close(open_idx: int) -> int:
+        bal = 1
+        j = open_idx + 1
+        while j < len(toks) and bal:
+            if values[j] == "{":
+                bal += 1
+            elif values[j] == "}":
+                bal -= 1
+            j += 1
+        return j - 1  # index of matching '}'
+
+    def _walk(open_idx: int, depth: int) -> None:
+        is_loop = _cpp_is_loop_block(toks, paren, open_idx)
+        d = depth + 1 if is_loop else depth
+        if is_loop:
+            loop_blocks.append((open_idx, _block_close(open_idx), d))
+        for child in children.get(open_idx, []):
+            _walk(child, d)
+
+    for r in roots:
+        _walk(r, 0)
+
+    max_depth = max((d for _, _, d in loop_blocks), default=0)
+
+    # 2) headless loops (for/while body without '{'): find the block-loop that
+    #    contains their head '(' and count as depth+1; otherwise depth >= 1.
+    headless = False
+    for op, cl in paren.items():
+        if op <= 0 or values[op - 1] not in ("for", "while"):
+            continue
+        if cl + 1 < len(toks) and values[cl + 1] == "{":
+            continue  # already a block-loop
+        headless = True
+        d = 1
+        for (bo, bc, bd) in loop_blocks:
+            if bo < op < bc:
+                d = max(d, bd + 1)
+        max_depth = max(max_depth, d)
+    return max_depth, headless
+
+
+def _cpp_infinite_loop_diags(code: str) -> list[StaticDiagnostic]:
+    """Detect `while(true)` / `for(;;)` bodies lacking break/return/goto."""
+    diags: list[StaticDiagnostic] = []
+    toks = _cpp_tokens(code)
+    if not toks:
+        return diags
+    values = [t[0] for t in toks]
+    paren = _cpp_match_paren(toks)
+
+    def _has_exit(start: int, end: int) -> bool:
+        return any(values[j] in ("break", "return", "goto", "continue", "exit") for j in range(start, end))
+
+    for op, cl in paren.items():
+        if op <= 0:
+            continue
+        kw = values[op - 1]
+        if kw not in ("for", "while"):
+            continue
+        # constant-true check
+        inner = [values[j] for j in range(op + 1, cl)]
+        const_true = False
+        if kw == "while":
+            body = [x for x in inner if x not in ("(", ")")]
+            const_true = all(x in ("true", "1") for x in body) if body else False
+        else:  # for(;;)
+            no_semi = [x for x in inner if x != ";"]
+            const_true = not no_semi
+        if not const_true:
+            continue
+        snippet = code[toks[op][1]:min(len(code), toks[op][1] + 60)] if code else ""
+        # body range: next '{' after cl -> matching close
+        body_start = cl + 1
+        if body_start >= len(toks) or values[body_start] != "{":
+            # single-statement infinite loop: for(;;); or while(true) stmt;
+            stmt_end = body_start
+            while stmt_end < len(toks) and values[stmt_end] != ";":
+                stmt_end += 1
+            if not _has_exit(body_start, min(stmt_end + 1, len(toks))):
+                diags.append(StaticDiagnostic(
+                    "loop", "warn",
+                    f"检测到 `{kw}(...)` 为恒真循环且循环体无 break/return/goto，存在死循环风险",
+                    code_ref=snippet,
+                ))
+            continue
+        bal = 1
+        j = body_start + 1
+        while j < len(toks) and bal:
+            if values[j] == "{":
+                bal += 1
+            elif values[j] == "}":
+                bal -= 1
+            j += 1
+        if not _has_exit(body_start, min(j, len(toks))):
+            diags.append(StaticDiagnostic(
+                "loop", "warn",
+                f"检测到 `{kw}(...)` 为恒真循环且循环体内无 break/return/goto，存在死循环风险",
+                code_ref=snippet,
+            ))
+    return diags
+
+
+def _cpp_recursion_diags(code: str) -> list[StaticDiagnostic]:
+    """Detect recursion without a non-recursive return (no base case)."""
+    diags: list[StaticDiagnostic] = []
+    toks = _cpp_tokens(code)
+    if not toks:
+        return diags
+    values = [t[0] for t in toks]
+    paren = _cpp_match_paren(toks)
+    # find function definitions: name '(' ... ')' '{'
+    func_bodies: dict[str, tuple[int, int]] = {}  # name -> (body_open, body_close)
+    for idx in range(len(toks) - 1):
+        val = values[idx]
+        if not _CPP_IDENT_START.match(val or ""):
+            continue
+        if val in _CPP_KEYWORDS:
+            continue
+        if idx + 1 < len(toks) and values[idx + 1] != "(":
+            continue
+        if idx + 1 not in paren:
+            continue
+        cl = paren[idx + 1]
+        if cl + 1 >= len(toks) or values[cl + 1] != "{":
+            continue
+        # distinguish call vs definition: a definition's '{' is the body.
+        # we still need to ensure the identifier isn't a return type/name confusion;
+        # acceptable heuristic for contest C++.
+        body_start = cl + 1
+        bal = 1
+        j = body_start + 1
+        while j < len(toks) and bal:
+            if values[j] == "{":
+                bal += 1
+            elif values[j] == "}":
+                bal -= 1
+            j += 1
+        func_bodies[val] = (body_start, min(j, len(toks)))
+
+    for name, (bs, be) in func_bodies.items():
+        # recursive call inside body: name '('
+        recursive = False
+        has_base_return = False
+        for idx in range(bs + 1, be):
+            if values[idx] == "return":
+                # check the return value for a direct recursive call up to ';'
+                k = idx + 1
+                rec_ret = False
+                while k < be and values[k] != ";":
+                    if values[k] == name and k + 1 < be and values[k + 1] == "(":
+                        rec_ret = True
+                        break
+                    k += 1
+                if not rec_ret:
+                    has_base_return = True
+            elif values[idx] == name and idx + 1 < be and values[idx + 1] == "(":
+                recursive = True
+        if recursive and not has_base_return:
+            diags.append(StaticDiagnostic(
+                "recursion", "warn",
+                f"函数 `{name}` 存在递归调用，但未发现非递归 return 的终止（base case）分支，"
+                "递归可能无终止条件",
+                code_ref=(code[toks[bs][1]:] or "")[:120],
+            ))
+    return diags
+
+
+def _cpp_complexity_estimate(code: str) -> str | None:
+    """Estimate C++ complexity from loop nesting depth (heuristic)."""
+    max_depth, headless = _cpp_analyze_loops(code)
+    if max_depth >= 3:
+        return f"O(n^{max_depth})"
+    if max_depth == 2:
+        return "O(n^2)"
+    if max_depth == 1 or headless:
+        return "O(n)"
+    return "O(1)"

@@ -77,7 +77,8 @@ def _load_golden() -> list[GoldenSample]:
 
 
 @app.get("/api/summary")
-def summary(ds: str | None = None) -> dict:
+def summary(ds: str | None = None, minor: int | None = None) -> dict:
+    """``minor=1`` 可临时切到副口径（minor 计入过程错），否则用 config 开关。"""
     evals = _load_evals()
     refines = _load_refines()
     # 数据集过滤（按题号前缀 A*/C*），便于分别看 ABC / Codeforces 总览
@@ -87,7 +88,9 @@ def summary(ds: str | None = None) -> dict:
         refines = [r for r in refines if r.question_id.startswith(prefix)]
     # formal_only：总览指标只统计正式 run-eval（交互演示不入统计口径）
     formal = [r for r in evals if r.source == "run-eval"]
-    base = compute_metrics(evals, formal_only=True) if evals else None
+    minor_as_error = (minor == 1) if minor is not None else CFG.minor_as_error
+    base = compute_metrics(evals, formal_only=True, minor_as_error=minor_as_error) if evals else None
+    base_main = compute_metrics(evals, formal_only=True) if evals else None  # 主口径参考
     golden = _load_golden()
     # 多维画像（join 题集元数据：alg_classes / scale_tier）
     from rex.metrics.compute import compute_facets
@@ -99,6 +102,8 @@ def summary(ds: str | None = None) -> dict:
         "n": base.n if base else 0,
         "answer_accuracy": base.answer_accuracy if base else None,
         "process_correctness": base.process_correctness if base else None,
+        "minor_as_error": minor_as_error,   # 当前口径：True=副口径(minor计入)
+        "process_correctness_main": base_main.process_correctness if base_main else None,
         "verdict_dist": base.verdict_dist if base else {},
         "error_type_dist": base.error_type_dist if base else {},
         "per_tier": {k: _dump(v) for k, v in (base.per_tier.items() if base else {})},

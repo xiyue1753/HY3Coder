@@ -131,6 +131,25 @@ class RefineRecord(BaseModel):
 | | boundary 边界条件 | 输入边界处理缺失 | 除零、空输入、0 值特例 |
 | | complexity 复杂度不达标 | 复杂度声明与实际不符 | 声明 O(n) 实际 O(n²)/O(2^n) |
 
+## 5.4 规则校验定位（executor/static_check.py）
+
+规则校验审的是 **solver 产出的代码实现**（implement 步骤的 artifact）——复杂度
+声明一致性、死循环/递归无终止、边界启发式，覆盖 Python 与 C++。它属于
+**实现/结果层审核**（对代码这个产物的规则审查），与 verifier 对**推理链文本**
+的过程评估是两个正交维度：
+
+- **过程评估（LLM）**：判断推理链是否成立（跳步/误用定理/条件遗漏等）。
+- **结果审核（规则/沙盒）**：沙盒判答案对错；规则校验判代码是否满足
+  可自动检查的性质（复杂度声明与实现一致、无死循环等）。
+
+因此规则校验**不单独阻断 verdict**：启发式有误报，且不直接判断推理链成立性。
+它的输出作为 verifier 的**补充诊断证据**（static_evidence）喂给双视角 LLM 审查，
+帮助定位实现层缺陷——对应任务书"规则校验 + 分步 LLM 审查"的多手段组合。
+
+规则黄金样例集与规则配对存放：`tests/test_static_check.py`（每条规则含
+"正例应命中 / 负例不误报"），开源后 `pytest tests/test_static_check.py` 即可
+验证规则行为，便于后续按需扩展新规则而不影响主判定。
+
 ## 5.5 算法判题模式（executor/judge.py：exact vs special/SPJ）
 
 常规算法题输出唯一，判题用"期望文本比对"（`run_test_cases`，含浮点容差 1e-5）。
@@ -168,11 +187,39 @@ class RefineRecord(BaseModel):
 3. 双视角不一致 → 仲裁 Agent 判定；仍分歧 → `HUMAN_REVIEW`。
 4. `findings` 携带 step_id 供定位与 refine 使用。
 
-判定口径（`Verdict`）：
-- `CORRECT`：过程与答案均成立。
-- `PROCESS_INCORRECT`：过程有缺陷，答案可能仍对（含沉默失败）。
+### 6.1 缺陷严重度分级（severity，2026-09-07 判定重构）
+
+每条 `ErrorFinding` 带 `severity`：
+- **fatal**（实质缺陷）：推理链断裂/关键引理未证且不可重建、误用定理、循环论证、
+  逻辑缺陷、推理与代码实质不符、漏处理会致错的条件 → **只有 fatal 驱动
+  PROCESS_INCORRECT/SILENT_FAILURE/ANSWER_INCORRECT 判定**。
+- **minor**（轻微瑕疵）：表述笔误、自测文字错误、可重建的常规论证省略、
+  复杂度叙述不精确但结论仍成立、无害背景误述 → **只记录，不驱动非 CORRECT**。
+
+### 6.2 重建测试（所有缺陷判定的总闸）
+
+怀疑某步有问题时，先问：去掉/修复该句后，剩余推理链 + 题面条件 + 领域常识
+能否**重新推出**该结论？
+- 能重建 → minor（省略的是平凡/显然/常规推导，不构成过程错误）
+- 不能重建 → fatal（结论依赖未给出的关键推理，或该步断言本身错误）
+平凡公式/常识（sin30°=1/2、勾股定理、定义直接可推出）不需推导；解题关键
+引理（贪心最优性、组合计数、必胜性）仅以"显然"带过 → fatal jump。
+
+### 6.3 判定口径（`Verdict`）
+
+- `CORRECT`：过程成立（无 fatal；可带 minor 记录）且答案正确。
+- `PROCESS_INCORRECT`：存在 fatal 过程缺陷，答案可能对也可能错。
 - `ANSWER_INCORRECT`：答案与标准答案不符（沙盒/比对为准）。
-- `SILENT_FAILURE`：答案正确（沙盒/比对/步骤自含性均通过）但过程存在根本缺陷。
+- `SILENT_FAILURE`：答案正确（沙盒/比对均通过）但存在 fatal 过程根本缺陷。
+
+### 6.4 程序化一致性兜底（pipeline `_reconcile_verdict`）
+
+LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终裁决：
+- 答案正确 + fatal → SILENT_FAILURE（不得 CORRECT/ANSWER_INCORRECT）
+- 答案正确 + 无 fatal（全 minor/空）→ CORRECT（剥离 minor 被提升为过程错的误报）
+- 答案错误 → 绝不可能是 CORRECT/SILENT_FAILURE（fatal 则 PROCESS_INCORRECT，
+  否则 ANSWER_INCORRECT）
+- refine 模式无沙盒 → 仅 minor 视同正确（`_strip_minor_only`），避免空转修正。
 
 ## 7. 双模式与数据纯净性
 
@@ -206,13 +253,23 @@ class RefineRecord(BaseModel):
 | 指标 | 定义 | 支撑 |
 |---|---|---|
 | 答案准确率 | 答案正确题目 / 总题 | 算法沙盒全过（无用例时文本比对） |
-| 过程正确率 | verdict=CORRECT 题目 / 总题 | 验证 Agent×2+仲裁 |
+| 过程正确率 | verdict=CORRECT 题目 / 总题（仅 fatal 驱动非 CORRECT） | 验证 Agent×2+仲裁 |
 | 错误定位命中率 | 系统定位 step 与人工标注 ≤1 步 / 答案错误抽检样本 | audit_records.jsonl |
-| 误报率 | 答案正确但被判有错样本中人工确认为误报比例 | audit_records.jsonl |
+| 误报率（区间） | 答案正确但被判有错样本中人工复核为误报比例。三层复核（`human_severity_match`）：完全相符=系统分级正确；层次不符=fatal/minor 打反（误报侧，主口径计）；完全不符=系统说有错实际过程正确（主/副口径均计）。报告给区间：下界=仅完全不符，上界=含层次不符 | audit_records.jsonl |
 | 沉默失败检出率 | golden 样本中判定 SILENT_FAILURE 比例 | golden 库 |
 | 修正提升 | refine 前后过程正确率差 | refine_{scene}.jsonl |
 | 置信区间 | Wilson interval（95%） | stats.py |
 | 稳定性 | 同档二次抽样指标漂移 | stats.py |
+
+人工抽检三层复核（对系统 fatal/minor 分级是否属实）：
+- `match`：系统 fatal/minor 分级正确 → 非误报
+- `level_mismatch`：方向对但分级打反（系统把 minor 判 fatal）→ 误报率上界
+- `fp`：系统说有错但实际过程正确 → 误报率下界（主/副口径均计）
+
+双口径敏感性：
+- 主口径：verdict 由 fatal 驱动（minor 剥离，`_reconcile_verdict` 已落库）
+- 副口径：若把 minor 也计入过程错误，过程正确率/误报率各是多少
+  （报告并列展示区间两端说明口径敏感性）
 
 ## 10. 运行方式
 

@@ -35,6 +35,10 @@ class Config:
     max_retries: int = 3
     timeout: float = 180.0
     temperature: float = 0.9
+    # 指标口径开关：minor 瑕疵是否计入"过程错误"（false=主口径 fatal-only；
+    # true=副口径 minor 也算错）。env REX_MINOR_AS_ERROR=1/true 一键切换，
+    # 供报告/面板统一读取，无需改代码。
+    minor_as_error: bool = False
 
     def __post_init__(self) -> None:
         self.data_dir = Path(self.data_dir)
@@ -58,6 +62,12 @@ class Config:
             except (TypeError, ValueError):
                 return default
 
+        def _bool(name: str, default: bool) -> bool:
+            v = os.getenv(name)
+            if v is None:
+                return default
+            return v.strip().lower() in ("1", "true", "yes", "on")
+
         return cls(
             hy3_api_key=os.getenv("HY3_API_KEY", ""),
             hy3_base_url=os.getenv("HY3_BASE_URL", DEFAULT_BASE_URL),
@@ -70,6 +80,7 @@ class Config:
             max_retries=_int("REX_MAX_RETRIES", 3),
             timeout=_float("REX_TIMEOUT", 180.0),
             temperature=_float("REX_TEMPERATURE", 0.9),
+            minor_as_error=_bool("REX_MINOR_AS_ERROR", False),
         )
 
     @property

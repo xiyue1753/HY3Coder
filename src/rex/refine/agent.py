@@ -14,6 +14,7 @@ import time
 from typing import Callable
 
 from rex.models import (
+    ErrorSeverity,
     QuestionItem,
     RefineRecord,
     RefineRound,
@@ -25,6 +26,24 @@ from rex.solver.agent import SolverAgent
 from rex.verifier.agent import VerifierAgent
 
 log = logging.getLogger(__name__)
+
+
+def _strip_minor_only(v: VerificationResult) -> VerificationResult:
+    """refine 模式一致性：全部 findings 均为 minor → 视同过程正确。
+
+    refine 无沙盒执行（不产生 answer_correct），无法判断答案对错；但若
+    verifier 只报告 minor（不破坏推理链成立性），则不存在需要修正的实质
+    缺陷，置 CORRECT 避免对表述瑕疵空转修正轮（与 eval 侧 reconcile 一致：
+    无 fatal 不驱动过程错）。
+    """
+    if not v.findings:
+        return v
+    has_fatal = any(f.severity == ErrorSeverity.FATAL for f in v.findings)
+    if not has_fatal and v.verdict in (Verdict.PROCESS_INCORRECT, Verdict.SILENT_FAILURE):
+        v.verdict = Verdict.CORRECT
+        log.info("refine: 仅 minor findings（%d 条），%s → CORRECT（无实质缺陷）",
+                 len(v.findings), v.verdict.value)
+    return v
 
 
 class Refiner:
@@ -53,7 +72,7 @@ class Refiner:
             progress("answer", answer)
         if progress:
             progress("verify", None)
-        initial = self._verifier.verify(question, answer)
+        initial = _strip_minor_only(self._verifier.verify(question, answer))
         rounds: list[RefineRound] = []
         current_answer = answer
         current_v = initial
@@ -71,7 +90,7 @@ class Refiner:
                     progress(f"answer-{round_no}", revised)
                 if progress:
                     progress(f"verify-{round_no}", None)
-                current_v = self._verifier.verify(question, revised)
+                current_v = _strip_minor_only(self._verifier.verify(question, revised))
                 cost_now = self._client.call_count
                 rounds.append(RefineRound(
                     round_no=round_no,

@@ -15,13 +15,22 @@ from rex.models import Answer, QuestionItem
 from rex.verifier.errors import catalog
 
 _VERDICT_RULES = """判定标准（重要）：
-- CORRECT            : 过程与最终答案均正确，推理链完整无缺口
-- PROCESS_INCORRECT  : 过程存在错误（即使最终答案恰好正确）
+- CORRECT            : 过程与最终答案均正确，推理链成立
+- PROCESS_INCORRECT  : 过程存在实质缺陷（fatal，即使最终答案恰好正确）
 - ANSWER_INCORRECT   : 最终答案错误
-- SILENT_FAILURE     : 最终答案正确，但过程存在根本性错误（如结论凭运气成立、
-                        关键步骤错误却得到正确数字）——必须识别，不能放行
-注意：最终答案正确 ≠ 过程正确。发现过程错误时优先标记为 PROCESS_INCORRECT
+- SILENT_FAILURE     : 最终答案正确，但过程存在根本性缺陷（如结论凭运气成立、
+                        误用定理却得对、恰好通过用例但实现逻辑有缺陷）——必须识别，不能放行
+注意：最终答案正确 ≠ 过程正确。发现 fatal 过程缺陷时判 PROCESS_INCORRECT
 或 SILENT_FAILURE，不得因答案正确而放行。
+
+【重建测试（所有缺陷判定的总闸）】每当你怀疑某一步存在问题时，先做重建测试：
+  去掉/修复你怀疑的那一句后，剩余推理链 + 题目已知条件 + 领域常识能否**重新推出**
+  该结论？
+  - 能重建（只缺装饰性表述、或省略的是可由常识/常规论证直接补齐的步骤）
+    → 该问题为 MINOR（轻微瑕疵），不驱动非 CORRECT 判定；
+  - 不能重建（结论依赖未给出的关键推理，或该步本身断言错误/论证不成立，
+    必须替换成别的推理才说得通）→ 该问题为 FATAL（实质缺陷）。
+  平凡/显然/常规公式定理的省略推导 = 可重建 → 不算 fatal（不判 jump）。
 
 错误分类（error_type 必须是以下枚举值之一）：
 {error_catalog}
@@ -30,27 +39,35 @@ _VERDICT_RULES = """判定标准（重要）：
 {{
   "verdict": "CORRECT | PROCESS_INCORRECT | ANSWER_INCORRECT | SILENT_FAILURE",
   "findings": [
-    {{"step_id": 1, "error_type": "calculation", "detail": "问题描述", "evidence": "判定依据（引用具体内容）"}}
+    {{"step_id": 1, "error_type": "calculation", "severity": "fatal", "detail": "问题描述", "evidence": "判定依据（引用具体内容 + 重建测试结论）"}}
   ],
   "confidence": 0.9
 }}
-规则：
-- 若过程正确，findings 为空数组
+判定与严重度规则：
+- findings 每条必须带 severity：`fatal`（实质缺陷，驱动非 CORRECT）或 `minor`
+  （轻微瑕疵，仅记录）。拿不准时先做重建测试再定。
+- 判定一致性约束：
+  * 存在 fatal finding  → verdict 必须是 PROCESS_INCORRECT / ANSWER_INCORRECT / SILENT_FAILURE 之一，不得是 CORRECT
+  * 只有 minor findings 或无 findings → verdict 必须是 CORRECT（答案正确时）
+    ；若执行反馈显示答案错误则判 ANSWER_INCORRECT（minor 不单独驱动过程错）
+  * SILENT_FAILURE 仅在"答案正确但存在 fatal 过程缺陷"时使用（答案对 + fatal）
+  * PROCESS_INCORRECT 用于"答案错误或答案正确但无法确证答案、且存在 fatal 过程缺陷"
+- 若过程完全正确，findings 为空数组
 - step_id 必须引用解题过程的真实步骤 id；若问题不属于任何单步，step_id 取最近相关步骤
 - confidence 表示你对判定的确信度（0~1）
 - 只报告你确有依据的错误，不要臆测
 
 特别提醒（防"答案对但过程错"被放行）：
 - 跳步判定分两类：
-  ① 领域常识/定义值（如 sin30°=1/2、常见公式、勾股定理等公认性质）直接引用 → 不算 jump，
-     它们属于背景知识，不要求逐步推导；
-  ② 解题关键中间结论仅以「显然/易得/可查」一带而过、无推导依据，且该结论直接支撑最终答案
-     → 算 jump（跳步推导）
-- 拿不准时不要判 jump，除非去掉该步后推理链明显断裂
+  ① 领域常识/定义值（如 sin30°=1/2、常见公式、勾股定理、排序贪心的最优性直觉之外的
+     公认性质）直接引用 → 不算 jump，它们属于背景知识，不要求逐步推导；
+  ② 解题关键中间结论仅以「显然/易得/可查」一带而过、无推导依据，且该结论直接支撑
+     最终答案、去掉后推理链无法重建 → 算 fatal jump（跳步推导）
+- 拿不准时不要判 fatal，除非去掉该步后推理链明显断裂（重建失败）
 - 中间表达式必须可复现：每一步出现的数值/符号变换必须能由上一步合法推出；即使最终化简
-  结果碰巧正确，中间若出现非法变换（如分母有理化写成 1/√2=√2/√4），仍属过程错误
+  结果碰巧正确，中间若出现非法变换（如分母有理化写成 1/√2=√2/√4），仍属 fatal 过程错误
 - 若题目要求证明恒等式/求解，使用与结论等价的断言（如用勾股定理直接证明 sin²+cos²=1）
-  属于循环论证，应标记为 logic 或 concept"""
+  属于循环论证，应标记为 fatal logic 或 fatal concept"""
 
 
 def verifier_system(view: str) -> str:
@@ -115,10 +132,13 @@ def verify_user_prompt(
 ARBITER_SYSTEM = (
     "你是首席仲裁员。两位审查员对同一解题过程的判定不一致，请依据以下原则裁决：\n"
     "1. 任何一方发现可验证的错误（引用具体步骤内容/数字），该错误即为事实，采纳之\n"
-    "2. 证据充分的错误优先于「答案正确」——SILENT_FAILURE 与 PROCESS_INCORRECT 优先于 CORRECT\n"
-    "3. 若双方证据均不足以确证错误，且最终答案与过程自洽，判 CORRECT\n"
-    "4. findings 合并双方有效发现，去除重复；confidence 取你对最终判定的确信度\n"
-    "输出 JSON：{{\"verdict\": \"...\", \"findings\": [...], \"confidence\": 0.0}}，字段含义同审查员。"
+    "2. 实质缺陷（fatal）优先于「答案正确」——SILENT_FAILURE 与 PROCESS_INCORRECT 优先于 CORRECT\n"
+    "3. 若双方证据均不足以确证 fatal 缺陷，且最终答案与过程自洽，判 CORRECT\n"
+    "   （仅 minor 瑕疵（表述/笔误/可重建的省略推导）不驱动非 CORRECT）\n"
+    "4. findings 合并双方有效发现并保留各自 severity，去除重复；confidence 取你对最终判定的确信度\n"
+    "每条 finding 须带 severity：fatal（实质缺陷）/ minor（轻微瑕疵）。存在 fatal 时 verdict 不得是 CORRECT。\n"
+    "输出 JSON：{{\"verdict\": \"...\", \"findings\": [{{\"step_id\": 1, \"error_type\": \"...\", "
+    "\"severity\": \"fatal\", \"detail\": \"...\", \"evidence\": \"...\"}}], \"confidence\": 0.0}}。"
 )
 
 

@@ -14,7 +14,7 @@ import time
 
 from rex._json import extract_json_object
 from rex.hy3_client import Hy3Client, Hy3Error
-from rex.models import Answer, ErrorFinding, QuestionItem, VerificationResult, Verdict
+from rex.models import Answer, ErrorFinding, ErrorSeverity, QuestionItem, VerificationResult, Verdict
 from rex.verifier.prompts import (
     ARBITER_SYSTEM,
     arbiter_user_prompt,
@@ -91,8 +91,7 @@ class VerifierAgent:
     ) -> VerificationResult:
         system = verifier_system(view)
         user = verify_user_prompt(question, answer, static_evidence, execution_feedback)
-        raw = self._chat_json(system, user)
-        return _parse_verification(raw)
+        return self._chat_verify(system, user)
 
     def _arbitrate(
         self,
@@ -106,31 +105,45 @@ class VerifierAgent:
             question, answer, v1.model_dump_json(indent=1),
             v2.model_dump_json(indent=1), execution_feedback,
         )
-        raw = self._chat_json(ARBITER_SYSTEM, user)
-        return _parse_verification(raw)
+        return self._chat_verify(ARBITER_SYSTEM, user)
 
     @property
     def call_count(self) -> int:
         """模型调用计数（含重试），供成本核算。"""
         return self._client.call_count
 
-    def _chat_json(self, system: str, user: str) -> str:
+    def _chat_json(self, system: str, user: str,
+                   validator=None) -> VerificationResult:
+        """模型调用 + 重试，覆盖 JSON 提取失败与 schema 校验失败两类错误。
+
+        ``validator``：``str -> VerificationResult`` 的解析函数（含 pydantic
+        enum/结构校验）。LLM 可能输出合法 JSON 但字段非法（如
+        ``error_type='concept/logic'`` 连写、severity 拼错），此类错误此前
+        不重试直接抛 Hy3Error → 单题失败。现把 schema 错误一并反馈重试。
+        """
         last_err: str | None = None
         for attempt in range(self._max_json_retries + 1):
             msg = user
             if last_err and attempt > 0:
                 msg = (
-                    f"{user}\n\n注意：你上次输出无法解析为合法 JSON，错误：{last_err}\n"
-                    "请只输出一个合法的 JSON 对象（不要代码块围栏、不要解释文字）。"
+                    f"{user}\n\n注意：你上次输出不合格，错误：{last_err}\n"
+                    "请只输出一个合法的 JSON 对象（不要代码块围栏、不要解释文字），"
+                    "并确保 error_type 必须是枚举值之一、severity 只能是 fatal 或 minor。"
                 )
             raw = self._client.chat(msg, system=system, reasoning_effort=self._reasoning)
             try:
-                extract_json_object(raw)  # 先验证可提取，再交给解析
-                return raw
-            except ValueError as e:
+                extract_json_object(raw)  # 先验证可提取
+                if validator is None:
+                    return raw  # type: ignore[return-value]  # 兼容旧调用方
+                return validator(raw)
+            except (ValueError, json.JSONDecodeError) as e:
                 last_err = str(e)
-                log.warning("verifier JSON parse failed (attempt %d): %s", attempt + 1, last_err)
-        raise Hy3Error(f"verifier: invalid JSON after {self._max_json_retries + 1} attempts")
+                log.warning("verifier output invalid (attempt %d): %s", attempt + 1, last_err)
+        raise Hy3Error(f"verifier: invalid output after {self._max_json_retries + 1} attempts")
+
+    def _chat_verify(self, system: str, user: str) -> VerificationResult:
+        """view/arbiter 的模型调用：JSON 提取 + schema 校验统一重试。"""
+        return self._chat_json(system, user, validator=_parse_verification)
 
     @staticmethod
     def _merge(a: VerificationResult, b: VerificationResult) -> VerificationResult:
@@ -154,4 +167,35 @@ def _parse_verification(text: str) -> VerificationResult:
     result = VerificationResult.model_validate(obj)
     if result.verdict not in Verdict:
         raise ValueError(f"unknown verdict: {result.verdict}")
+    _enforce_fatal_consistency(result)
     return result
+
+
+def _enforce_fatal_consistency(result: VerificationResult) -> None:
+    """程序化一致性：存在 fatal finding 时 verdict 不得为 CORRECT。
+
+    防止 LLM 自相矛盾（报了实质缺陷却仍判 CORRECT）。无 fatal 时不动 verdict
+    ——"剥离 minor"依赖 answer_correct 客观信号，在 pipeline 层完成（那里有
+    沙盒结果）；此处只消除 fatal↔CORRECT 的硬矛盾。
+    """
+    if result.verdict == Verdict.CORRECT:
+        has_fatal = any(
+            getattr(f, "severity", ErrorSeverity.FATAL) == ErrorSeverity.FATAL
+            for f in result.findings
+        )
+        if has_fatal:
+            # LLM 自相矛盾：报了实质缺陷却仍判 CORRECT → 强制 PROCESS_INCORRECT
+            result.verdict = Verdict.PROCESS_INCORRECT
+            log.info("verifier: 存在 fatal finding 却判 CORRECT，强制 PROCESS_INCORRECT")
+        return
+    # 非 CORRECT：若完全没有 fatal（只有 minor 或无 findings），此处无沙盒信号
+    # 无法判断答案对错——保留判定让 pipeline 依据 answer_correct 做最终裁决。
+    if result.verdict in (Verdict.PROCESS_INCORRECT, Verdict.SILENT_FAILURE):
+        has_fatal = any(
+            getattr(f, "severity", ErrorSeverity.FATAL) == ErrorSeverity.FATAL
+            for f in result.findings
+        )
+        if not has_fatal:
+            log.info("verifier: 无 fatal finding 却判 %s（共 %d findings），"
+                     "交由 pipeline 依据答案正确性裁决",
+                     result.verdict.value, len(result.findings))

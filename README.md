@@ -145,3 +145,11 @@ Hy3_APP2/
 - **错误定位命中率 / 误报率**：基于人工抽检标注（`scripts/audit_sample.py` 生成模板）。
 - **沉默失败检出率**：golden 样本中判定 SILENT_FAILURE 占比。
 - 指标附 **Wilson 95% 置信区间**与**同档二次抽样稳定性验证**。
+
+**过程判定 severity 口径**：每条 finding 带 `fatal`（实质缺陷，驱动非 CORRECT）或
+`minor`（表述瑕疵，不驱动非 CORRECT）。默认**主口径**=仅 fatal 计入过程错；
+设置环境变量 `REX_MINOR_AS_ERROR=1` 可一键切到**副口径**（minor 也计入），
+报告与仪表盘均按此开关展示（`src/rex/config.py`）。规则校验（复杂度/死循环/
+边界，Python+C++）属**实现/结果层审核**，不单独阻断 verdict，其黄金样例集与
+规则配对存放于 `tests/test_static_check.py`（`pytest tests/test_static_check.py`
+可直接验证规则行为）。

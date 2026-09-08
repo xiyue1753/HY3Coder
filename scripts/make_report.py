@@ -138,12 +138,19 @@ def build() -> str:
     if not evals:
         w("\n_暂无可评估数据，先运行 `run-eval`。_\n")
         return "\n".join(L)
-    m = compute_metrics(evals)
+    minor_on = cfg.minor_as_error  # env REX_MINOR_AS_ERROR 一键切换主/副口径
+    m = compute_metrics(evals, minor_as_error=minor_on)
+    m_main = compute_metrics(evals)  # 主口径参考（fatal-only）
     w("\n| 指标 | 数值 |")
     w("|---|---|")
     w(f"| 评估样本数 | {m.n} |")
     w(f"| 答案准确率 | {pct(m.answer_accuracy)} |")
-    w(f"| 过程正确率 | {pct(m.process_correctness)} |")
+    # 过程正确率：当前口径 + 主口径参考（说明 minor 剥离影响）
+    cal = "（副口径：minor 计入过程错）" if minor_on else "（主口径：仅 fatal 计入过程错）"
+    w(f"| 过程正确率{cal} | {pct(m.process_correctness)} |")
+    if m_main.process_correctness != m.process_correctness:
+        w(f"| 过程正确率·主口径参考 | {pct(m_main.process_correctness)} "
+          "（fatal-only，minor 不计） |")
     w(f"| 判定分布 | {', '.join(f'{k}={v}' for k, v in sorted(m.verdict_dist.items()))} |")
     sf = m.verdict_dist.get("SILENT_FAILURE", 0)
     if sf:
@@ -314,10 +321,23 @@ def build() -> str:
         if am:
             # 对齐任务书 P4 口径：定位准确率用答案错误样本，误报率用答案正确样本
             w(f"| 定位准确率（答案错误样本 {am.localization_n}） | {pct(am.error_localization_hit_rate)} |")
-            w(f"| 误报率（答案正确且判过程有错 {am.fp_n}） | {pct(am.false_positive_rate)} |")
+            # 三层复核分布（针对系统 fatal/minor 分级是否属实）
+            w(f"| 三层复核 · 完全相符（分级正确） | {am.match_n} |")
+            if am.level_mismatch_n:
+                w(f"| 三层复核 · 层次不符（fatal/minor 打反） | {am.level_mismatch_n} |")
+            if am.fp_human_n:
+                w(f"| 三层复核 · 完全不符（系统误报） | {am.fp_human_n} |")
+            # 误报率给区间：下界=仅完全不符，上界=含层次不符（与副/主口径对应）
+            w(f"| 误报率（判过程有错 {am.fp_n}） | "
+              f"{pct(am.false_positive_rate_strict)}（仅完全不符）～ "
+              f"{pct(am.false_positive_rate)}（含层次不符） |")
         w("")
-        w("> 口径说明：定位准确率分母为「答案错误」样本（用标准答案判定），"
-          "误报率分母为「答案正确」样本中被评估器判过程有错者（经人工抽检确认）。\n")
+        w("> 口径说明：定位准确率分母为「答案错误」样本（用标准答案判定）；"
+          "误报率分母为「答案正确」样本中被评估器判过程有错者（经人工抽检确认）。"
+          "三层复核针对系统 fatal/minor 分级是否属实：完全相符=分级正确；"
+          "层次不符=分级打反（系统把 minor 判 fatal，属误报侧）；完全不符=系统说有错但"
+          "实际过程正确。误报率区间=仅完全不符（下界，minor 也算过程错）～ 含层次不符"
+          "（上界，minor 不算过程错）。\n")
     else:
         w(f"\n_暂无抽检标注，运行 `python -m src.cli audit --results {ds.evals_path(ROOT, next(d for d in ds.active_datasets() if d.evals))}` 生成模板。_\n")
 
@@ -420,16 +440,60 @@ def build() -> str:
         # 去掉原标题行（避免与附录标题重复），并把方法文档子标题 ## N 降为 ### A.N
         lines_ = body.split("\n")
         out_lines: list[str] = []
-        started = False
         for ln in lines_:
             if ln.startswith("# "):
-                started = True
                 continue
             mm = re.match(r"^## (\d+)\.\s*(.*)$", ln)
             if mm:
                 out_lines.append(f"### A.{mm.group(1)} {mm.group(2)}")
-            else:
-                out_lines.append(ln)
+                continue
+            mf = re.match(r"^## (附.*)$", ln)
+            if mf:
+                out_lines.append(f"### A.{mf.group(1)}")
+                continue
+            out_lines.append(ln)
+        w("\n".join(out_lines).rstrip())
+        w("\n")
+
+    # ---- 附录 B：过程评估方法与新旧版本对比 ----
+    pe_path = ROOT / "reports" / "PROCESS_EVAL_METHOD.md"
+    if pe_path.exists():
+        w("\n---\n\n# 附录 B：过程评估方法与新旧版本对比\n")
+        w("\n> 过程评估器的判定方法（severity 分层 + 重建测试 + 程序化一致性裁决 + "
+          "静态规则校验补盲）全文如下（源自 `reports/PROCESS_EVAL_METHOD.md`，2026-09-07 定稿）。\n")
+        w("\n**与旧版评估器的对比（增强说服力的关键证据）**：\n")
+        w("- **旧版**（2026-09-03 定稿，双视角 LLM 审查 + 仲裁、无 severity）：任何 finding "
+          "都驱动“过程有错” → 误报率被结构性推高；verdict 无程序化兜底 → 出现漏检"
+          "（曾修复“答案错却判 CORRECT”，见 `docs/IMPL_LOG.md` hard-eval 任务）；规则校验仅支持 "
+          "Python，CF/ABC 主场景（C++）全部失效。旧版抽检产物：`data/outputs/audit_review.md`"
+          "（27 题模板）、`data/outputs/audit_records_full.jsonl`（40 条回填，双视角口径）。\n")
+        w("- **本版**（2026-09-07 severity v1）：在**同一判定标准**下对难题区间 28 条 "
+          "re-verify，10 条判定变化——误报剥离 2 条、漏检补抓 3 条（C2084/C2102/C2119，"
+          "人工核验全为真 fatal）、语义细化 5 条；小样本误报率 **0/4**。证明 severity 版"
+          "不是靠放宽判定压误报，而是同一标准下更精准。\n")
+        w("- **全量人工抽检**（本报告第 6 节，2026-09-08 回填 18/40）：误报率 "
+          "5.6%（仅完全不符）～16.7%（含层次不符）。其中 6 条 fatal/minor 争议样本经用户"
+          "逐条裁决：C2029/C2062/C2094/C2095 确认 fatal 成立（维持 E5 规则，归入完全相符）；"
+          "C2118/C2140 属 minor（fatal/minor 打反，主口径误报）。\n")
+        body = pe_path.read_text(encoding="utf-8")
+        lines_ = body.split("\n")
+        out_lines: list[str] = []
+        for ln in lines_:
+            if ln.startswith("# "):
+                continue
+            mm = re.match(r"^## (\d+)\.\s*(.*)$", ln)
+            if mm:
+                out_lines.append(f"### B.{mm.group(1)} {mm.group(2)}")
+                continue
+            mf = re.match(r"^## (附.*)$", ln)
+            if mf:
+                out_lines.append(f"### B.{mf.group(1)}")
+                continue
+            md = re.match(r"^### (\d+)\.(\d+)\s*(.*)$", ln)
+            if md:
+                out_lines.append(f"#### B.{md.group(1)}.{md.group(2)} {md.group(3)}")
+                continue
+            out_lines.append(ln)
         w("\n".join(out_lines).rstrip())
         w("\n")
 

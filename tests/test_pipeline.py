@@ -154,6 +154,62 @@ def test_compile_failure_gets_fallback_finding(tmp_path) -> None:
     assert client.responses == []
 
 
+def test_reverify_one_skips_solver_reruns_verifier(tmp_path) -> None:
+    """reverify_one：复用已有 answer（不重跑 solver），只重跑执行/静态/验证。
+
+    调用序列 = verify A/B 双视角（2 次），无 solve 调用——solver 产物复用。
+    """
+    algo_q = QuestionItem(id="A000", scene="algorithm", title="t", prompt="输出 1",
+                          difficulty="basic", source="self", standard_answer="1",
+                          test_cases=[TestCase(input="", output="1")])
+    code = "print(1)\n"
+    ans = Answer(
+        steps=[Step(id=1, kind="implement", content=code, conclusion="实现", deps=[]),
+               Step(id=2, kind="selftest", content="样例", conclusion="1", deps=[1])],
+        final_answer="1",
+        code=code,
+    )
+    client = FakeHy3([
+        _verdict_json("CORRECT"),   # V1
+        _verdict_json("CORRECT"),   # V2
+    ])
+    cfg = _cfg(tmp_path)
+    pipe = Pipeline(cfg, client=client)
+    rec = pipe.reverify_one(algo_q, ans)
+    assert rec.answer_correct is True          # 沙盒执行（print(1) 全过）
+    assert rec.verification.verdict.value == "CORRECT"
+    assert rec.static_check is not None
+    # 只有 verify 双视角的 2 次调用（无 solve）
+    assert client.calls == 2
+    assert client.responses == []
+
+
+def test_reverify_one_correct_answer_with_minor_stripped(tmp_path) -> None:
+    """reverify_one 走 reconcile：答案对 + 无 fatal → CORRECT（minor 剥离）。"""
+    algo_q = QuestionItem(id="A000", scene="algorithm", title="t", prompt="输出 1",
+                          difficulty="basic", source="self", standard_answer="1",
+                          test_cases=[TestCase(input="", output="1")])
+    ans = Answer(
+        steps=[Step(id=1, kind="implement", content="print(1)\n", conclusion="x", deps=[])],
+        final_answer="1",
+        code="print(1)\n",
+    )
+    # 双视角都判 PROCESS_INCORRECT 但只有 minor finding → reconcile 剥离为 CORRECT
+    minor_f = [{"step_id": 1, "error_type": "format", "severity": "minor",
+                "detail": "表述可优化", "evidence": "e"}]
+    client = FakeHy3([
+        json.dumps({"verdict": "PROCESS_INCORRECT", "findings": minor_f, "confidence": 0.8}),
+        json.dumps({"verdict": "PROCESS_INCORRECT", "findings": minor_f, "confidence": 0.7}),
+    ])
+    cfg = _cfg(tmp_path)
+    pipe = Pipeline(cfg, client=client)
+    rec = pipe.reverify_one(algo_q, ans)
+    assert rec.answer_correct is True
+    assert rec.verification.verdict.value == "CORRECT"   # 无 fatal → 剥离
+    assert len(rec.verification.findings) == 1            # minor 记录保留
+    assert client.responses == []
+
+
 def test_run_refine_convergence(tmp_path) -> None:
     # 调用序列：solve(1) + verify A/B(2) → revise(1) + verify A/B(2) = 6 次
     incorrect = json.dumps({"verdict": "PROCESS_INCORRECT",

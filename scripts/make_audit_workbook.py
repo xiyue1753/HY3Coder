@@ -122,11 +122,12 @@ def _card(idx: int, rec: dict) -> str:
             <select class="in-etype" data-qid="{qid}">
               <option value="">— 选择 —</option>{type_opts}
             </select></label>
-          <label>系统误报？
-            <select class="in-fp" data-qid="{qid}">
+          <label>系统 fatal/minor 分级复核
+            <select class="in-match" data-qid="{qid}">
               <option value="">— 选择 —</option>
-              <option value="false">否（系统判定合理）</option>
-              <option value="true">是（系统误报）</option>
+              <option value="match">完全相符（分级正确）</option>
+              <option value="level_mismatch">层次不符（fatal↔minor 打反）</option>
+              <option value="fp">完全不符（系统说有错实际过程正确）</option>
             </select></label>
           <label class="full">备注
             <textarea class="in-note" data-qid="{qid}" rows="2"></textarea></label>
@@ -146,7 +147,7 @@ def build(records: list[dict]) -> str:
         v = sc.get("sys_verdict")
         ans = sc.get("answer_correct")
         if ans is True and v in ("PROCESS_INCORRECT", "SILENT_FAILURE"):
-            key = "答案对 + 过程判错（误报率分母，需确认是否误报）"
+            key = "答案对 + 过程判错（误报率分母，复核系统 fatal/minor 分级）"
         elif ans is False and v in ("PROCESS_INCORRECT", "SILENT_FAILURE"):
             key = "答案错 + 过程判错（定位准确率核心层）"
         elif ans is False:
@@ -244,7 +245,7 @@ function fillForm(qid) {{
   if (s.verdict_human) document.querySelector(`.in-verdict[data-qid="${{qid}}"]`).value = s.verdict_human;
   if (s.error_step_id != null) document.querySelector(`.in-step[data-qid="${{qid}}"]`).value = s.error_step_id;
   if (s.error_type_human) document.querySelector(`.in-etype[data-qid="${{qid}}"]`).value = s.error_type_human;
-  if (s.is_false_positive != null) document.querySelector(`.in-fp[data-qid="${{qid}}"]`).value = String(s.is_false_positive);
+  if (s.human_severity_match) document.querySelector(`.in-match[data-qid="${{qid}}"]`).value = s.human_severity_match;
   if (s.note) document.querySelector(`.in-note[data-qid="${{qid}}"]`).value = s.note;
   markStatus(qid);
 }}
@@ -260,14 +261,14 @@ document.querySelectorAll('.btn-save').forEach(btn => {{
     const verdict = document.querySelector(`.in-verdict[data-qid="${{qid}}"]`).value;
     const stepVal = document.querySelector(`.in-step[data-qid="${{qid}}"]`).value;
     const etype = document.querySelector(`.in-etype[data-qid="${{qid}}"]`).value;
-    const fpVal = document.querySelector(`.in-fp[data-qid="${{qid}}"]`).value;
+    const matchVal = document.querySelector(`.in-match[data-qid="${{qid}}"]`).value;
     const note = document.querySelector(`.in-note[data-qid="${{qid}}"]`).value;
     saved[qid] = {{
       question_id: qid,
       verdict_human: verdict || null,
       error_step_id: stepVal === '' ? null : Number(stepVal),
       error_type_human: etype || null,
-      is_false_positive: fpVal === '' ? null : (fpVal === 'true'),
+      human_severity_match: matchVal || null,
       note: note,
       audited_by: '',
       audited_at: new Date().toISOString(),
@@ -288,7 +289,7 @@ function exportAudits() {{
       verdict_human: s.verdict_human || null,
       error_step_id: s.error_step_id ?? null,
       error_type_human: s.error_type_human || null,
-      is_false_positive: s.is_false_positive ?? null,
+      human_severity_match: s.human_severity_match || null,
       note: s.note || '',
       audited_by: s.audited_by || '',
       audited_at: s.audited_at || null,

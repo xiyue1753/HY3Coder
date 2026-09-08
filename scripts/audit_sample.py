@@ -6,10 +6,12 @@
         --sample 35 --out data/outputs/audit_records.jsonl
 
 模板每行一个 AuditRecord（question_id 预填 + 附系统上下文便于人工判断）：
-    - verdict_human   : 人工判定（CORRECT/PROCESS_INCORRECT/ANSWER_INCORRECT/SILENT_FAILURE）
+    - verdict_human   : 人工对系统判定的终审（CORRECT/PROCESS_INCORRECT/...）
     - error_step_id   : 真实错误起始步骤（无则留 null）
     - error_type_human: 真实错误类型（与 ErrorType 枚举一致）
-    - is_false_positive: 系统判错但实际正确 → true
+    - human_severity_match: 三层复核系统 fatal/minor 分级是否属实：
+        match（完全相符，分级对）/ level_mismatch（层次不符，fatal↔minor 打反）
+        / fp（完全不符，系统说有错但实际过程正确 = 误报）
     - note            : 说明
 
 生成后可用 --check 校验回填结果是否完整：
@@ -66,6 +68,7 @@ def _template_for(r: EvalRecord, qmap: dict[str, dict]) -> dict:
         })
     findings = [{
         "step_id": f.step_id, "error_type": f.error_type.value,
+        "severity": (f.severity.value if hasattr(f, "severity") and f.severity is not None else "fatal"),
         "detail": f.detail[:300], "evidence": f.evidence[:400],
     } for f in v.findings]
     return {
@@ -86,11 +89,15 @@ def _template_for(r: EvalRecord, qmap: dict[str, dict]) -> dict:
             "findings": findings,
             "final_answer": r.answer.final_answer[:500],
         },
-        # 人工回填字段（初始为空）
+        # 人工回填字段（初始为空）。主判定字段 human_severity_match（三层）：
+        #   - match          = 完全相符：系统 fatal/minor 分级正确（审查对）
+        #   - level_mismatch = 层次不符：方向对但分级打反（fatal↔minor）
+        #   - fp             = 完全不符：系统说有错但实际过程正确（误报）
+        # 旧字段 is_false_positive / human_error_severity 已弃用（仅历史数据兼容）。
         "verdict_human": None,
         "error_step_id": None,
         "error_type_human": None,
-        "is_false_positive": None,
+        "human_severity_match": None,
         "note": "",
         "audited_by": "",
         "audited_at": None,

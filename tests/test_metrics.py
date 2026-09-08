@@ -71,6 +71,30 @@ def test_compute_metrics_per_tier() -> None:
     assert m.per_tier["hard"].n == 1
 
 
+def test_compute_metrics_minor_as_error_dual_caliber() -> None:
+    """副口径：若把 minor 瑕疵也计入过程错误，过程正确率变化。"""
+    from rex.metrics.compute import _is_process_correct
+    from rex.models import ErrorSeverity, ErrorType
+
+    # CORRECT + minor finding → 主口径算对，副口径算错
+    rec_minor = _rec("a", Verdict.CORRECT,
+                     findings=[ErrorFinding(step_id=1, error_type=ErrorType.FORMAT,
+                                            severity=ErrorSeverity.MINOR,
+                                            detail="d", evidence="e")])
+    rec_clean = _rec("b", Verdict.CORRECT)
+    rec_fatal = _rec("c", Verdict.PROCESS_INCORRECT,
+                     findings=[ErrorFinding(step_id=1, error_type=ErrorType.LOGIC,
+                                            severity=ErrorSeverity.FATAL,
+                                            detail="d", evidence="e")])
+    records = [rec_minor, rec_clean, rec_fatal]
+    m_main = compute_metrics(records)
+    m_strict = compute_metrics(records, minor_as_error=True)
+    assert m_main.process_correctness == 2 / 3        # a(CORRECT+minor) 算对
+    assert m_strict.process_correctness == 1 / 3      # 副口径下 a 算错
+    assert _is_process_correct(rec_minor, False) is True
+    assert _is_process_correct(rec_minor, True) is False
+
+
 def test_audit_metrics_localization_and_fp() -> None:
     """对齐任务书口径：定位准确率用答案错误样本，误报率用答案正确样本。"""
     # 答案错误的样本（answer_correct=False），用于测定位准确率
@@ -120,6 +144,35 @@ def test_audit_metrics_localization_and_fp() -> None:
                         [Audit("a", step=1), Audit("b", step=99),
                          Audit("c", step=1), AuditPending("a")])
     assert am3 is not None and am3.n == 3   # 未回填被排除，不稀释分母
+
+
+def test_audit_metrics_minor_as_error_dual_caliber() -> None:
+    """副口径：CORRECT+minor findings 也算"被判过程有错"→ 误报率分母扩大。"""
+    from rex.models import ErrorSeverity, ErrorType
+
+    rec_minor = _rec("a", Verdict.CORRECT,
+                     findings=[ErrorFinding(step_id=1, error_type=ErrorType.FORMAT,
+                                            severity=ErrorSeverity.MINOR,
+                                            detail="d", evidence="e")])
+    rec_pi = _rec("b", Verdict.PROCESS_INCORRECT,
+                  findings=[ErrorFinding(step_id=1, error_type=ErrorType.LOGIC,
+                                         severity=ErrorSeverity.FATAL,
+                                         detail="d", evidence="e")])
+
+    class Audit:
+        def __init__(self, qid, fp=False):
+            self.question_id = qid
+            self.error_step_id = None
+            self.is_false_positive = fp
+            self.verdict_human = "CORRECT"
+
+    # 主口径：a(CORRECT+minor) 不算被判过程有错 → fp_n=1
+    am_main = audit_metrics([rec_minor, rec_pi], [Audit("a"), Audit("b")])
+    assert am_main is not None and am_main.fp_n == 1
+    # 副口径：a 也算 → fp_n=2
+    am_strict = audit_metrics([rec_minor, rec_pi], [Audit("a"), Audit("b")],
+                              minor_as_error=True)
+    assert am_strict is not None and am_strict.fp_n == 2
 
 
 def test_audit_metrics_answer_unknown_excluded() -> None:
@@ -227,3 +280,73 @@ def test_refine_comparison_excludes_failed() -> None:
     assert rc.before_correct == 0.0
     assert rc.after_correct == 1.0
     assert rc.improved == 1.0
+
+
+def test_audit_metrics_three_way_dual_caliber() -> None:
+    """human_severity_match 三层复核支撑误报率区间（下界=仅完全不符，上界=含层次不符）。
+
+    三层针对「系统 fatal/minor 分级是否属实」：
+      match          = 完全相符：系统 fatal 分级正确 → 非误报
+      level_mismatch = 层次不符：系统把 minor 判 fatal（分级打反）
+                      → 主口径（minor 不算过程错）误报；副口径不算
+      fp             = 完全不符：系统说有错但实际过程正确 → 两口径均误报
+    """
+    def _rec_rp(qid: str) -> EvalRecord:
+        return _rec(qid, Verdict.SILENT_FAILURE, answer_correct=True,
+                    findings=[ErrorFinding(step_id=1, error_type=ErrorType.LOGIC,
+                                           detail="d", evidence="e")])
+
+    recs = [_rec_rp("a"), _rec_rp("b"), _rec_rp("c")]
+
+    class Audit:
+        def __init__(self, qid, tw):
+            self.question_id = qid
+            self.verdict_human = "SILENT_FAILURE"
+            self.error_step_id = None
+            self.human_severity_match = tw
+
+    audits = [Audit("a", "fp"), Audit("b", "level_mismatch"), Audit("c", "match")]
+    am = audit_metrics(recs, audits)
+    assert am is not None
+    assert am.fp_n == 3
+    assert am.fp_human_n == 1      # 完全不符
+    assert am.level_mismatch_n == 1
+    assert am.match_n == 1
+    # 上界（主口径）：fp + level_mismatch = 2/3
+    assert am.false_positive_rate == 2 / 3
+    # 下界（副口径）：仅 fp = 1/3
+    assert am.false_positive_rate_strict == 1 / 3
+
+
+def test_audit_metrics_three_way_fallback_legacy() -> None:
+    """旧标注（is_false_positive / human_error_severity）回退到三层。"""
+    from rex.metrics.compute import _three_way
+
+    class AuditOld:
+        def __init__(self, qid, fp=None, sev=None):
+            self.question_id = qid
+            self.verdict_human = "CORRECT"
+            self.error_step_id = None
+            self.is_false_positive = fp
+            self.human_error_severity = sev
+            # 无 human_severity_match
+
+    # human_error_severity 优先于 is_false_positive
+    assert _three_way(AuditOld("a", fp=True, sev="fatal")) == "match"
+    assert _three_way(AuditOld("b", fp=False, sev="minor")) == "level_mismatch"
+    assert _three_way(AuditOld("c", fp=True, sev="none")) == "fp"
+    # 无 severity → 回退 is_false_positive
+    assert _three_way(AuditOld("d", fp=True)) == "fp"
+    assert _three_way(AuditOld("e", fp=False)) == "match"
+    # 完全无标记 → None
+    assert _three_way(AuditOld("f")) is None
+
+    # 指标层：旧字段经 _three_way 归入对应层
+    rec = _rec("a", Verdict.SILENT_FAILURE, answer_correct=True,
+               findings=[ErrorFinding(step_id=1, error_type=ErrorType.LOGIC,
+                                      detail="d", evidence="e")])
+    am = audit_metrics([rec], [AuditOld("a", fp=False, sev="minor")])
+    assert am is not None and am.fp_n == 1
+    assert am.level_mismatch_n == 1
+    assert am.false_positive_rate == 1.0   # 主口径含层次不符
+    assert am.false_positive_rate_strict == 0.0

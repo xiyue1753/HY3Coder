@@ -30,7 +30,8 @@ async function loadOverview(){
   const s=await j('/api/summary'+(SDS?'?ds='+SDS:''));
   $('#kpiN').innerHTML=`<div class="v">${s.n}</div><div class="l">已评估题目</div>`;
   $('#kpiAns').innerHTML=`<div class="v">${s.answer_accuracy==null?'—':(s.answer_accuracy*100).toFixed(1)+'%'}</div><div class="l">答案准确率</div>`;
-  $('#kpiProc').innerHTML=`<div class="v">${s.process_correctness==null?'—':(s.process_correctness*100).toFixed(1)+'%'}</div><div class="l">过程正确率</div>`;
+  const calTag=s.minor_as_error?'（minor计入）':'';
+  $('#kpiProc').innerHTML=`<div class="v">${s.process_correctness==null?'—':(s.process_correctness*100).toFixed(1)+'%'}</div><div class="l">过程正确率${calTag}</div>`;
   const sf=(s.verdict_dist||{})['SILENT_FAILURE']||0;
   $('#kpiFail').innerHTML=`<div class="v">${sf}</div><div class="l">沉默失败检出</div>`;
   // tier chart
@@ -185,9 +186,10 @@ async function loadAudit(){
   const a=await j('/api/audit');
   const meta=await j('/api/meta');
   const cmd=meta.audit_command||'python -m src.cli audit --results <正式评测文件>';
-  $('#auditTable').innerHTML=a.length?`<table class="dt"><thead><tr><th>题号</th><th>人工判定</th><th>错误步骤</th><th>误报</th><th>备注</th></tr></thead>
+  const cn={match:'相符',level_mismatch:'层次不符',fp:'误报'};
+  $('#auditTable').innerHTML=a.length?`<table class="dt"><thead><tr><th>题号</th><th>人工判定</th><th>错误步骤</th><th>分级复核</th><th>备注</th></tr></thead>
     <tbody>${a.map(x=>`<tr><td class="mono">${x.question_id}</td><td>${x.verdict_human||'待标注'}</td>
-    <td class="mono">${x.error_step_id??'—'}</td><td>${x.is_false_positive?'是':'否'}</td><td class="muted">${x.note||''}</td></tr>`).join('')}</tbody></table>`
+    <td class="mono">${x.error_step_id??'—'}</td><td>${cn[x.human_severity_match]||'—'}</td><td class="muted">${x.note||''}</td></tr>`).join('')}</tbody></table>`
     :`<div class="muted">暂无抽检记录，运行 <span class="mono">${cmd}</span> 生成标注模板</div>`;
 }
 

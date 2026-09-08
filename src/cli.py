@@ -175,6 +175,106 @@ def check_answers(
 
 
 @app.command()
+def re_verify(
+    results: Path = typer.Option(..., help="旧 eval 结果 jsonl（读取 answer）"),
+    questions: Path = typer.Option(None, help="题集 jsonl（附题面/用例；默认按前缀自动找）"),
+    qids: str = typer.Option(None, help="逗号分隔的题号白名单（小样本验证用）"),
+    difficulty: str = typer.Option(None, help="basic|medium|hard 过滤"),
+    diff_min: float = typer.Option(None, help="只重判 metadata.diff_score >= 阈值 的样本"),
+    out: Path = typer.Option(None, help="输出文件（默认 <results>.reverified.jsonl）"),
+    resume: bool = typer.Option(True),
+    verbose: bool = typer.Option(False, "--verbose"),
+) -> None:
+    """重判定既有 eval 记录：不重跑 solver，用新 verifier(severity) 重判 verification。
+
+    用途：verifier 口径升级后（如 P1 severity 重构 / P4 C++ 静态补盲），对历史
+    eval 数据重判 verdict/findings。answer（solver 产物）与沙盒答案结果复用/重算，
+    仅 verification 由新口径重新生成。
+    """
+    _logging(verbose)
+    cfg = _config()
+    sys.path.insert(0, str(ROOT / "src"))
+    import json as _json
+
+    from rex import datasource as ds
+    from rex.models import EvalRecord, QuestionItem
+    from rex.pipeline import Pipeline, load_jsonl
+
+    records = load_jsonl(results, EvalRecord)
+    if not records:
+        typer.secho(f"结果文件为空：{results}", fg=typer.colors.RED)
+        raise typer.Exit(2)
+
+    # 题目池：显式 --questions 或按数据集注册中心自动加载全部启用题集
+    qmap: dict[str, QuestionItem] = {}
+    if questions is not None and questions.exists():
+        for line in questions.open(encoding="utf-8"):
+            if line.strip():
+                q = QuestionItem.model_validate_json(line)
+                qmap[q.id] = q
+    else:
+        for q in ds.load_active_questions(ROOT):
+            qmap[q.id] = q
+    if not qmap:
+        typer.secho("题目池为空：需 --questions 或存在启用数据集", fg=typer.colors.RED)
+        raise typer.Exit(2)
+
+    # 过滤
+    sel = list(records)
+    if qids:
+        whitelist = set(x.strip() for x in qids.split(",") if x.strip())
+        sel = [r for r in sel if r.question_id in whitelist]
+    if difficulty:
+        sel = [r for r in sel if r.difficulty.value == difficulty]
+    if diff_min is not None:
+        def _diff(r) -> float | None:
+            q = qmap.get(r.question_id)
+            return (q.metadata or {}).get("diff_score") if q else None
+        sel = [r for r in sel if (_diff(r) is not None and _diff(r) >= diff_min)]
+    missing_q = [r.question_id for r in sel if r.question_id not in qmap]
+    if missing_q:
+        typer.secho(f"以下题在题集中缺失（无法重判）：{','.join(missing_q)}",
+                    fg=typer.colors.YELLOW)
+        sel = [r for r in sel if r.question_id in qmap]
+    if not sel:
+        typer.secho("过滤后无样本", fg=typer.colors.RED)
+        raise typer.Exit(2)
+
+    out_path = out or Path(str(results) + ".reverified.jsonl")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    done_ids: set[str] = set()
+    if resume and out_path.exists():
+        for line in out_path.open(encoding="utf-8"):
+            if line.strip():
+                done_ids.add(EvalRecord.model_validate_json(line).question_id)
+        typer.echo(f"resume: {len(done_ids)} 已完成")
+
+    pipe = Pipeline(cfg)
+    todo = [r for r in sel if r.question_id not in done_ids]
+    typer.echo(f"重判定 {len(todo)}/{len(sel)} 题 → {out_path}（新 verifier severity 口径）")
+    with out_path.open("a", encoding="utf-8") as f:
+        for i, r in enumerate(todo, 1):
+            q = qmap[r.question_id]
+            try:
+                rec = pipe.reverify_one(q, r.answer)
+            except Exception as e:  # noqa: BLE001
+                typer.secho(f"[{i}/{len(todo)}] {r.question_id} 失败: {e}",
+                            fg=typer.colors.RED)
+                continue
+            f.write(rec.model_dump_json() + "\n")
+            f.flush()
+            n_fatal = sum(1 for x in rec.verification.findings
+                          if getattr(x, "severity", None) == "fatal")
+            n_minor = len(rec.verification.findings) - n_fatal
+            typer.echo(f"[{i}/{len(todo)}] {r.question_id} "
+                       f"旧={r.verification.verdict.value} → 新={rec.verification.verdict.value} "
+                       f"ans={rec.answer_correct} findings={len(rec.verification.findings)}"
+                       f"(fatal{n_fatal}/minor{n_minor})")
+    pipe.client.close()
+    typer.echo(f"完成 → {out_path}（模型调用 {pipe.client.call_count} 次）")
+
+
+@app.command()
 def audit(
     results: Path = typer.Option(..., help="eval 结果 jsonl"),
     questions: Path = typer.Option(None, help="题目池 jsonl（附题面上下文，可选）"),

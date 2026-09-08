@@ -6,16 +6,23 @@ feedback; a CORRECT verdict yields no feedback (loop terminates).
 """
 from __future__ import annotations
 
-from rex.models import ErrorFinding, RefineFeedback, VerificationResult, Verdict
+from rex.models import ErrorFinding, ErrorSeverity, RefineFeedback, VerificationResult, Verdict
 from rex.verifier.errors import describe
 
 
 def findings_to_feedback(verification: VerificationResult) -> list[RefineFeedback]:
-    """Convert verifier findings into revision instructions (limited set)."""
+    """Convert verifier findings into revision instructions (limited set).
+
+    severity 语义（P1）：只有 fatal（实质缺陷）才驱动修正——minor 不破坏
+    推理链成立性，不产生修订指令（避免对表述瑕疵空转修正轮）。
+    """
     if verification.verdict == Verdict.CORRECT:
         return []
     feedbacks: list[RefineFeedback] = []
     for f in verification.findings:
+        # minor 不驱动修正；仅 fatal（默认 severity=fatal 也视为 fatal）
+        if getattr(f, "severity", ErrorSeverity.FATAL) == ErrorSeverity.MINOR:
+            continue
         # 相同 step+type 只保留首条，避免同一步被重复指令轰炸
         key = (f.step_id, f.error_type.value)
         if any((x.step_id, x.error_type.value) == key for x in feedbacks):
