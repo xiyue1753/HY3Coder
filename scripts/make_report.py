@@ -124,9 +124,6 @@ def build() -> str:
     qmap: dict[str, QuestionItem] = {}
     for q in ds.load_active_questions(ROOT):
         qmap[q.id] = q
-    # 合成 golden（展示样例）与真实检出库分开读，路径由注册中心声明
-    golden = (load_jsonl(ds.golden_synthetic_path(ROOT), GoldenSample)
-              if ds.golden_synthetic_path(ROOT).exists() else [])
 
     L: list[str] = []
     w = L.append
@@ -151,6 +148,12 @@ def build() -> str:
     if m_main.process_correctness != m.process_correctness:
         w(f"| 过程正确率·主口径参考 | {pct(m_main.process_correctness)} "
           "（fatal-only，minor 不计） |")
+    # minor 统计去向（见 DESIGN §9.1）：CORRECT 且带 minor findings = 仅 minor 记录样本
+    # （主口径计过程正确；副口径 minor_as_error 计过程错）。
+    minor_only = sum(1 for r in evals
+                     if r.verification.verdict.value == "CORRECT"
+                     and r.verification.findings)
+    w(f"| 仅 minor 记录样本 | {minor_only}（主口径计过程正确 / 副口径计过程错） |")
     w(f"| 判定分布 | {', '.join(f'{k}={v}' for k, v in sorted(m.verdict_dist.items()))} |")
     sf = m.verdict_dist.get("SILENT_FAILURE", 0)
     if sf:
@@ -345,77 +348,24 @@ def build() -> str:
     # 真实评测检出库（独立文件，见注册中心 golden_real_path）
     golden_real = (load_jsonl(ds.golden_real_path(ROOT), GoldenSample)
                    if ds.golden_real_path(ROOT).exists() else [])
-    w("## 7. Golden 沉默失败样本库")
-    w("\n**样本分两类来源，口径独立统计：**\n")
-    w(f"- 合成陷阱库 `golden_algorithm.jsonl`：{len(golden)} 条（人工构造「答案对但过程错」）")
-    w(f"- 真实评测库 `golden_real_algorithm.jsonl`：{len(golden_real)} 条"
-      "（真实 Hy3 评测中 verifier 检出 `SILENT_FAILURE` 的样本，沙盒答案全对，"
-      "flaw_answer 即当时模型真实输出）\n")
-
-    if golden:
-        w(f"### 7.1 合成展示样例（{len(golden)} 条）\n")
-        w("> 合成库已精简为 2 条展示样例（GA001/GA002），样本主体以真实评测检出库为主。\n")
-        for g in golden:
-            w(f"- `{g.question.id}` [{g.question.scene}] {g.question.title} — 真实缺陷："
-              f"{TYPE_CN.get(g.flaw_type.value, g.flaw_type.value)}（{g.construction_note[:80]}…）")
-        w("")
-
+    w("## 7. 真实评测检出的 SILENT_FAILURE 样本留档")
+    w(f"\n> 真实 Hy3 评测中 verifier 检出 `SILENT_FAILURE`（{len(golden_real)} 条：答案正确但过程"
+      "存在根本缺陷）的样本留档。每条含题目源（contest）、检测时间、定位缺陷与步骤、沙盒通过率；"
+      "flaw_answer 为当时模型的真实求解输出（含代码），非人工编造。"
+      "检出计数已计入第 1 节判定分布，本节供逐条核验。\n")
     if golden_real:
-        w(f"### 7.2 真实评测检出库（{len(golden_real)} 条）\n")
-        w("> 每条记录真实评测来源：题目源（contest）、检测时间、verifier 定位的缺陷与步骤、"
-          "沙盒通过率。flaw_answer 是当时模型的真实求解输出（含代码），非人工编造。\n")
         for g in golden_real:
             q = g.question
             src_id = q.source_id or "—"
             w(f"- **`{q.id}`**（{q.source} · `{src_id}` · {q.difficulty.value}）")
             w(f"  - 题面：{q.prompt[:160].strip()}…")
             w(f"  - 缺陷类型：{TYPE_CN.get(g.flaw_type.value, g.flaw_type.value)}")
-            w(f"  - 构造/来源说明：{g.construction_note}")
+            w(f"  - 来源说明：{g.construction_note}")
             w(f"  - 陷阱步骤数：{len(g.flaw_answer.steps)}（含代码 "
               f"{'✓' if g.flaw_answer.code else '✗'}）")
         w("")
-
-    ge_path = cfg.outputs_dir / "golden_eval.jsonl"
-    golden_eval: list[dict] = []
-    if ge_path.exists():
-        import json as _json
-        with ge_path.open(encoding="utf-8") as f:
-            golden_eval = [_json.loads(l) for l in f if l.strip()]
-    if golden_eval:
-        w("\n### 7.3 评估器检出验证（陷阱答案直喂验证器）\n")
-        w("> 把每条 golden 的 `flaw_answer` 直接喂 verifier，检验能否识别"
-          "「答案对但过程错」。下表区分合成（G 开头）与真实评测检出样本。\n")
-        real_ids = {g.question.id for g in golden_real}
-        w("| 样本 | 来源 | 真实缺陷 | 判定 |")
-        w("|---|---|---|---|")
-        for r in golden_eval:
-            qid = r.get("question_id") or "?"
-            v = r["verdict"]
-            src = "真实评测" if qid in real_ids else ("合成" if str(qid).startswith("GA") else "?")
-            tag = ("未检出(放行)" if v == "CORRECT"
-                   else ("严格检出(答案对+过程错)" if v == "SILENT_FAILURE"
-                         else ("宽口径检出(判过程有错)" if v in ("PROCESS_INCORRECT",)
-                               else "识别(答案/格式)")))
-            w(f"| {qid} | {src} | {TYPE_CN.get(r['flaw_type'], r['flaw_type'])} | {v} — {tag} |")
-        n = len(golden_eval)
-        strict = sum(1 for r in golden_eval if r["verdict"] == "SILENT_FAILURE")
-        broad = sum(1 for r in golden_eval
-                    if r["verdict"] in ("SILENT_FAILURE", "PROCESS_INCORRECT"))
-        passed = sum(1 for r in golden_eval if r["verdict"] != "CORRECT")
-        missed = n - passed
-        # 口径说明：宽口径把 PROCESS_INCORRECT 也算"检出过程有错"；严格口径只认
-        # SILENT_FAILURE（答案正确 + 过程根本缺陷），是最能体现沉默失败识别能力的指标。
-        w(f"\n**检出统计（n={n}）**\n")
-        w(f"- 严格口径（判定 SILENT_FAILURE）：{strict} 条（{strict/n*100:.1f}%）")
-        w(f"- 宽口径（SILENT_FAILURE + PROCESS_INCORRECT，判过程有错）：{broad} 条（{broad/n*100:.1f}%）")
-        w(f"- 答案/格式识别：{passed - broad} 条（ANSWER_INCORRECT 等，识别到异常但未判过程）")
-        w(f"- 误放行（CORRECT 放过陷阱）：{missed} 条")
-        w("")
-        if strict < broad:
-            w(f"> 注：严格口径 {strict} 条 < 宽口径 {broad} 条，"
-              "说明部分陷阱被判为 PROCESS_INCORRECT 而非 SILENT_FAILURE——"
-              "评估器识别到了过程错误，但未单独标注【答案正确】这一性质。\n")
-    w("")
+    else:
+        w("\n_暂无真实检出的 SILENT_FAILURE 留档。_\n")
 
     # ---- 8. 能力画像 ----
     w("## 8. 能力画像弱项清单")

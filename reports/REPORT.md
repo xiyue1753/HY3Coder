@@ -1,6 +1,6 @@
 # HY3Coder 分析报告
 
-> 生成时间：2026-09-08 19:21 ｜ 数据：`data/outputs/`（eval/refine 严格分离）
+> 生成时间：2026-09-08 20:44 ｜ 数据：`data/outputs/`（eval/refine 严格分离）
 
 ## 1. 评估总览
 
@@ -9,6 +9,7 @@
 | 评估样本数 | 359 |
 | 答案准确率 | 88.6% |
 | 过程正确率（主口径：仅 fatal 计入过程错） | 83.6% |
+| 仅 minor 记录样本 | 18（主口径计过程正确 / 副口径计过程错） |
 | 判定分布 | ANSWER_INCORRECT=8, CORRECT=300, PROCESS_INCORRECT=33, SILENT_FAILURE=18 |
 | 沉默失败检出 | 18（5.0%） |
 | 过程正确率 95% CI | [79.4%, 87.0%]（Wilson） |
@@ -142,8 +143,8 @@ _暂无 refine 数据。_
 
 | 指标 | 数值 |
 |---|---|
-| 已标注样本 | 18 / 40 |
-| 定位准确率（答案错误样本 0） | 0.0% |
+| 已标注样本 | 40 / 40 |
+| 定位准确率（答案错误样本 22） | 100.0% |
 | 三层复核 · 完全相符（分级正确） | 15 |
 | 三层复核 · 层次不符（fatal/minor 打反） | 2 |
 | 三层复核 · 完全不符（系统误报） | 1 |
@@ -151,23 +152,9 @@ _暂无 refine 数据。_
 
 > 口径说明：定位准确率分母为「答案错误」样本（用标准答案判定）；误报率分母为「答案正确」样本中被评估器判过程有错者（经人工抽检确认）。三层复核针对系统 fatal/minor 分级是否属实：完全相符=分级正确；层次不符=分级打反（系统把 minor 判 fatal，属误报侧）；完全不符=系统说有错但实际过程正确。误报率区间=仅完全不符（下界，minor 也算过程错）～ 含层次不符（上界，minor 不算过程错）。
 
-## 7. Golden 沉默失败样本库
+## 7. 真实评测检出的 SILENT_FAILURE 样本留档
 
-**样本分两类来源，口径独立统计：**
-
-- 合成陷阱库 `golden_algorithm.jsonl`：2 条（人工构造「答案对但过程错」）
-- 真实评测库 `golden_real_algorithm.jsonl`：2 条（真实 Hy3 评测中 verifier 检出 `SILENT_FAILURE` 的样本，沙盒答案全对，flaw_answer 即当时模型真实输出）
-
-### 7.1 合成展示样例（2 条）
-
-> 合成库已精简为 2 条展示样例（GA001/GA002），样本主体以真实评测检出库为主。
-
-- `GA001` [algorithm] 判断整数 n(1≤n≤10^4) 是否为质数，是输出 yes，否则 no。 — 真实缺陷：概念理解错误（陷阱把 1 当质数（is_prime 缺 n<2 分支）。题目合法输入含 n=1，但公开/隐藏用例恰好只覆盖 n≥2，故缺陷不触发、答案全部正确——过程却对合法…）
-- `GA002` [algorithm] 给定有序整数数组，输出去重后的数组（保持原顺序）。 — 真实缺陷：概念理解错误（陷阱用 list(set(a)) 去重并宣称保持原顺序，Python set 无序；恰好输入升序，set 迭代序碰巧与升序一致…）
-
-### 7.2 真实评测检出库（2 条）
-
-> 每条记录真实评测来源：题目源（contest）、检测时间、verifier 定位的缺陷与步骤、沙盒通过率。flaw_answer 是当时模型的真实求解输出（含代码），非人工编造。
+> 真实 Hy3 评测中 verifier 检出 `SILENT_FAILURE`（2 条：答案正确但过程存在根本缺陷）的样本留档。每条含题目源（contest）、检测时间、定位缺陷与步骤、沙盒通过率；flaw_answer 为当时模型的真实求解输出（含代码），非人工编造。检出计数已计入第 1 节判定分布，本节供逐条核验。
 
 - **`A1042`**（AtCoder-自建 · `abc257_d` · medium）
   - 题面：Score : $400$ points
@@ -181,7 +168,7 @@ _暂无 refine 数据。_
 ### Problem Statement
 There are $N$ trampolines on a two-dimensional planar town where Takahashi lives.  The $i$-th trampoline i…
   - 缺陷类型：概念理解错误
-  - 构造/来源说明：真实评测检出：2026-09-03T17:06:38 · 来源 eval_selfbuilt_all.jsonl · 沙盒通过率 1.0 · answer_correct=True · verifier=SILENT_FAILURE · 缺陷定位: step2[concept] 二分上界估算错误：误将最大曼哈顿距离等同于最大坐标差2e9，实际|x_i-x_j|+|y_i-y_j|最大可达4e9（x,y分别取±1e9极值），导致设定上界2e9+10可能不足。代码继承此错误(hi=2000000010)。在极端输入下会输出错误答案，但当前测试集全过使最终答案碰巧正确。
+  - 来源说明：真实评测检出：2026-09-03T17:06:38 · 来源 eval_selfbuilt_all.jsonl · 沙盒通过率 1.0 · answer_correct=True · verifier=SILENT_FAILURE · 缺陷定位: step2[concept] 二分上界估算错误：误将最大曼哈顿距离等同于最大坐标差2e9，实际|x_i-x_j|+|y_i-y_j|最大可达4e9（x,y分别取±1e9极值），导致设定上界2e9+10可能不足。代码继承此错误(hi=2000000010)。在极端输入下会输出错误答案，但当前测试集全过使最终答案碰巧正确。
   - 陷阱步骤数：5（含代码 ✓）
 - **`A1148`**（AtCoder-自建 · `abc368_d` · hard）
   - 题面：Score : $425$ points
@@ -191,30 +178,8 @@ You are given a tree with $N$ vertices numbered $1$ to $N$. The $i$-th edge conn
 
 Cons…
   - 缺陷类型：概念理解错误
-  - 构造/来源说明：真实评测检出：2026-09-03T02:03:03 · 来源 eval_selfbuilt_all.jsonl · 沙盒通过率 1.0 · answer_correct=True · verifier=SILENT_FAILURE · 缺陷定位: step2[concept] 算法思路错误地要求节点u在‘自身为关键点或某个子节点子树含关键点’时必须保留以连通到上层（根）。实际上极小连通子树只需连通所有关键点彼此之间，并不要求连通到原树根；若根不是关键点且仅有单侧分支含关键点，根及传递链上的非关键点不应全部保留（例如树1-2，V={2}时最小顶点数为1，但所述算法会输出2）。该步骤结论‘通过D; step2[logic] 算法思路错误地认为只要节点子树中含有关键点（或自身为关键点）就必须保留以连通到上层，但未区分根节点无父节点的情况：若所有关键点均位于根的某一子树中（如K=1且关键点非根），根及其无关祖先不应被保留，最小子树应仅含关键点本身（或对应连通块）。该DFS会统计从根到关键点的整条路径，得到错误过程结论，但代码在沙盒测试中可能因
+  - 来源说明：真实评测检出：2026-09-03T02:03:03 · 来源 eval_selfbuilt_all.jsonl · 沙盒通过率 1.0 · answer_correct=True · verifier=SILENT_FAILURE · 缺陷定位: step2[concept] 算法思路错误地要求节点u在‘自身为关键点或某个子节点子树含关键点’时必须保留以连通到上层（根）。实际上极小连通子树只需连通所有关键点彼此之间，并不要求连通到原树根；若根不是关键点且仅有单侧分支含关键点，根及传递链上的非关键点不应全部保留（例如树1-2，V={2}时最小顶点数为1，但所述算法会输出2）。该步骤结论‘通过D; step2[logic] 算法思路错误地认为只要节点子树中含有关键点（或自身为关键点）就必须保留以连通到上层，但未区分根节点无父节点的情况：若所有关键点均位于根的某一子树中（如K=1且关键点非根），根及其无关祖先不应被保留，最小子树应仅含关键点本身（或对应连通块）。该DFS会统计从根到关键点的整条路径，得到错误过程结论，但代码在沙盒测试中可能因
   - 陷阱步骤数：5（含代码 ✓）
-
-
-### 7.3 评估器检出验证（陷阱答案直喂验证器）
-
-> 把每条 golden 的 `flaw_answer` 直接喂 verifier，检验能否识别「答案对但过程错」。下表区分合成（G 开头）与真实评测检出样本。
-
-| 样本 | 来源 | 真实缺陷 | 判定 |
-|---|---|---|---|
-| GA001 | 合成 | 概念理解错误 | PROCESS_INCORRECT — 宽口径检出(判过程有错) |
-| GA002 | 合成 | 概念理解错误 | SILENT_FAILURE — 严格检出(答案对+过程错) |
-| A1042 | 真实评测 | 概念理解错误 | SILENT_FAILURE — 严格检出(答案对+过程错) |
-| A1148 | 真实评测 | 概念理解错误 | SILENT_FAILURE — 严格检出(答案对+过程错) |
-
-**检出统计（n=4）**
-
-- 严格口径（判定 SILENT_FAILURE）：3 条（75.0%）
-- 宽口径（SILENT_FAILURE + PROCESS_INCORRECT，判过程有错）：4 条（100.0%）
-- 答案/格式识别：0 条（ANSWER_INCORRECT 等，识别到异常但未判过程）
-- 误放行（CORRECT 放过陷阱）：0 条
-
-> 注：严格口径 3 条 < 宽口径 4 条，说明部分陷阱被判为 PROCESS_INCORRECT 而非 SILENT_FAILURE——评估器识别到了过程错误，但未单独标注【答案正确】这一性质。
-
 
 ## 8. 能力画像弱项清单
 
@@ -587,8 +552,8 @@ solve → executor(沙盒 answer_correct) → static_check(规则校验，Python
   │                                          │
   └──► verifier V1(自含性) + V2(全局回溯)     └──► static_evidence（补充诊断）
         │ 每条 finding 带 severity + 重建测试
-        ├─ 一致 → merge（保留各自 severity）
-        ├─ 分歧 → ARBITER（同样要求 severity）
+        └─ ARBITER 总仲裁：复核双方判定并交付最终 verdict
+           （无论 V1/V2 是否一致；findings 合并保留各自 severity；调用失败 → HUMAN_REVIEW）
         ▼
         _enforce_fatal_consistency（agent：fatal+CORRECT 矛盾 → 强制非 CORRECT）
         ▼

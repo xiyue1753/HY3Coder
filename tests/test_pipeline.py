@@ -66,11 +66,11 @@ def test_normalize_answer_text() -> None:
 
 
 def test_run_eval_dual_mode(tmp_path) -> None:
-    # A000: solve + verify(A) + verify(B) = 3 calls；A001 同
+    # A000: solve + verify 双视角 + 总仲裁 = 4 calls；A001 同
     # 模型对两题都判 CORRECT，但 A001 标准答案=2 而 SOLVE 输出 1/2 → 客观答案错误，
     # 修复后的语义要求 verdict 强制降级为 ANSWER_INCORRECT（客观优先，防漏检）。
-    client = FakeHy3([SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"),
-                      SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")])
+    client = FakeHy3([SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT"),
+                      SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT")])
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
     out = tmp_path / "eval_algorithm.jsonl"
@@ -86,7 +86,7 @@ def test_run_eval_dual_mode(tmp_path) -> None:
 
 
 def test_run_eval_resume_skips_done(tmp_path) -> None:
-    client = FakeHy3([SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")])
+    client = FakeHy3([SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT")])
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
     out = tmp_path / "eval_algorithm.jsonl"
@@ -111,7 +111,8 @@ def test_run_eval_algorithm_static_check_recorded(tmp_path) -> None:
         "final_answer": "1",
         "code": code,
     })
-    client = FakeHy3([solve, _verdict_json("CORRECT"), _verdict_json("CORRECT")])
+    client = FakeHy3([solve, _verdict_json("CORRECT"), _verdict_json("CORRECT"),
+                      _verdict_json("CORRECT")])
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
     out = tmp_path / "eval_algorithm.jsonl"
@@ -139,7 +140,8 @@ def test_compile_failure_gets_fallback_finding(tmp_path) -> None:
         "code": bad_code,
     })
     # LLM 双视角都判 CORRECT（不看沙盒）——兜底应补 s4 finding 且降级 ANSWER_INCORRECT
-    client = FakeHy3([solve, _verdict_json("CORRECT"), _verdict_json("CORRECT")])
+    client = FakeHy3([solve, _verdict_json("CORRECT"), _verdict_json("CORRECT"),
+                      _verdict_json("CORRECT")])  # 总仲裁：仲裁也判 CORRECT → 由沙盒降级
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
     rec = pipe._eval_one(algo_q)
@@ -172,6 +174,7 @@ def test_reverify_one_skips_solver_reruns_verifier(tmp_path) -> None:
     client = FakeHy3([
         _verdict_json("CORRECT"),   # V1
         _verdict_json("CORRECT"),   # V2
+        _verdict_json("CORRECT"),   # ARBITER（总仲裁）
     ])
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
@@ -179,8 +182,8 @@ def test_reverify_one_skips_solver_reruns_verifier(tmp_path) -> None:
     assert rec.answer_correct is True          # 沙盒执行（print(1) 全过）
     assert rec.verification.verdict.value == "CORRECT"
     assert rec.static_check is not None
-    # 只有 verify 双视角的 2 次调用（无 solve）
-    assert client.calls == 2
+    # 无 solve：双视角 2 次 + 总仲裁 1 次 = 3 次调用
+    assert client.calls == 3
     assert client.responses == []
 
 
@@ -200,6 +203,7 @@ def test_reverify_one_correct_answer_with_minor_stripped(tmp_path) -> None:
     client = FakeHy3([
         json.dumps({"verdict": "PROCESS_INCORRECT", "findings": minor_f, "confidence": 0.8}),
         json.dumps({"verdict": "PROCESS_INCORRECT", "findings": minor_f, "confidence": 0.7}),
+        json.dumps({"verdict": "PROCESS_INCORRECT", "findings": minor_f, "confidence": 0.75}),
     ])
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
@@ -211,14 +215,14 @@ def test_reverify_one_correct_answer_with_minor_stripped(tmp_path) -> None:
 
 
 def test_run_refine_convergence(tmp_path) -> None:
-    # 调用序列：solve(1) + verify A/B(2) → revise(1) + verify A/B(2) = 6 次
+    # 调用序列：solve(1) + verify 双视角+总仲裁(3) → revise(1) + verify 双视角+总仲裁(3) = 8 次
     incorrect = json.dumps({"verdict": "PROCESS_INCORRECT",
                             "findings": [{"step_id": 1, "error_type": "calculation",
                                           "detail": "d", "evidence": "e"}],
                             "confidence": 0.8})
     client = FakeHy3([
-        SOLVE, incorrect, incorrect,   # 首轮：求解 + 双视角一致判错
-        SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"),  # 修订 + 双视角判对
+        SOLVE, incorrect, incorrect, incorrect,   # 首轮：求解 + 双视角 + 总仲裁判错
+        SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT"),
     ])
     cfg = _cfg(tmp_path)
     pipe = Pipeline(cfg, client=client)
@@ -229,5 +233,5 @@ def test_run_refine_convergence(tmp_path) -> None:
     assert r.initial.verdict.value == "PROCESS_INCORRECT"
     assert r.converged is True
     assert len(r.rounds) == 1
-    assert r.rounds[0].cost_calls == 3  # revise(1) + 重验证 A/B(2)
+    assert r.rounds[0].cost_calls == 4  # revise(1) + 重验证 双视角+仲裁(3)
     assert client.responses == []

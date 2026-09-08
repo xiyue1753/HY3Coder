@@ -71,7 +71,7 @@ def _dump(o):
 
 
 def _load_golden() -> list[GoldenSample]:
-    """真实评测检出库置前 + 合成展示样例，路径由注册中心统一声明。"""
+    """真实评测检出的 SILENT_FAILURE 留档，路径由注册中心统一声明。"""
     from rex.datasource import load_golden
     return load_golden(ROOT)
 

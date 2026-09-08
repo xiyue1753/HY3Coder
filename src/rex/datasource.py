@@ -16,7 +16,7 @@ make_report / 前端提示 / ingest 脚本）一律通过本模块的访问器�
     - eval_selfbuilt_all.jsonl  = abc_selfbuilt 数据集的正式评测输出
     - refine_selfbuilt_all.jsonl = abc_selfbuilt 数据集的正式 refine 输出
     - eval_interactive.jsonl   = 交互演示记录（source=interactive）
-    - golden_algorithm.jsonl   = 合成 golden（展示样例）
+    - golden_algorithm.jsonl   = 合成 golden（已删除，2026-09-08；常量注册保留兼容）
     - golden_real_algorithm.jsonl = 真实评测检出 golden
     - audit_records.jsonl      = 人工抽检标注
 
@@ -106,7 +106,7 @@ INTERACTIVE_EVAL = "eval_interactive.jsonl"
 AUDIT_FILE = "audit_records.jsonl"
 #: 测试用例源目录（data/cases，ingest 脚本生成）。
 CASES_DIRNAME = "cases"
-#: 合成 golden（展示样例）与真实评测检出 golden 的独立文件名。
+#: 真实评测检出 golden 文件名（合成 golden_algorithm.jsonl 已删除，常量保留兼容读取，文件不存在时自然为空）。
 GOLDEN_SYNTHETIC_FILE = "golden_algorithm.jsonl"
 GOLDEN_REAL_FILE = "golden_real_algorithm.jsonl"
 GOLDEN_FILES = (GOLDEN_REAL_FILE, GOLDEN_SYNTHETIC_FILE)

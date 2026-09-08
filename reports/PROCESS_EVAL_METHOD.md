@@ -127,8 +127,8 @@ solve → executor(沙盒 answer_correct) → static_check(规则校验，Python
   │                                          │
   └──► verifier V1(自含性) + V2(全局回溯)     └──► static_evidence（补充诊断）
         │ 每条 finding 带 severity + 重建测试
-        ├─ 一致 → merge（保留各自 severity）
-        ├─ 分歧 → ARBITER（同样要求 severity）
+        └─ ARBITER 总仲裁：复核双方判定并交付最终 verdict
+           （无论 V1/V2 是否一致；findings 合并保留各自 severity；调用失败 → HUMAN_REVIEW）
         ▼
         _enforce_fatal_consistency（agent：fatal+CORRECT 矛盾 → 强制非 CORRECT）
         ▼

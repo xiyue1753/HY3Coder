@@ -56,19 +56,23 @@ def _verdict_json(verdict: str, conf: float, findings: list | None = None) -> st
     return json.dumps({"verdict": verdict, "findings": findings or [], "confidence": conf})
 
 
-def test_verifier_agree_merges_and_sets_arbiter() -> None:
-    # 视图 2 报 minor format（不驱动非 CORRECT）→ 合并后仍 CORRECT，findings 保留 minor
+def test_verifier_always_arbitrates_agreed_views() -> None:
+    # 双视角一致（CORRECT）也过仲裁：最终结果由 ARBITER 交付，arbiter 恒="ARBITER"
     agent = VerifierAgent(FakeHy3([
         _verdict_json("CORRECT", 0.9),
         _verdict_json("CORRECT", 0.7, [{"step_id": 1, "error_type": "format",
                                         "severity": "minor",
                                         "detail": "d", "evidence": "e"}]),
+        _verdict_json("CORRECT", 0.85, [{"step_id": 1, "error_type": "format",
+                                         "severity": "minor",
+                                         "detail": "d", "evidence": "e"}]),
     ]))
     res = agent.verify(Q, OK_ANSWER)
     assert res.verdict == Verdict.CORRECT
-    assert res.arbiter == "V1"
-    assert len(res.findings) == 1  # 合并去重保留（minor）
+    assert res.arbiter == "ARBITER"   # 总仲裁：一致也不直接合并
+    assert len(res.findings) == 1  # 仲裁合并保留（minor）
     assert res.timestamp is not None
+    assert len(agent._client.calls) == 3
 
 
 def test_verifier_fatal_finding_forces_non_correct() -> None:
@@ -101,16 +105,17 @@ def test_verifier_invalid_enum_retries_with_feedback() -> None:
     ok = _verdict_json("PROCESS_INCORRECT", 0.9,
                        [{"step_id": 1, "error_type": "logic", "severity": "fatal",
                          "detail": "d", "evidence": "e"}])
-    agent = VerifierAgent(FakeHy3([bad, ok, bad, ok]), max_json_retries=2)
+    agent = VerifierAgent(FakeHy3([bad, ok, bad, ok, ok]), max_json_retries=2)
     res = agent.verify(Q, OK_ANSWER)
     assert res.verdict == Verdict.PROCESS_INCORRECT
-    # 两次 view 都经历了一次失败重试 → 共 4 次调用
-    assert len(agent._client.calls) == 4
+    # 两个 view 各失败重试一次 + 总仲裁一次 → 共 5 次调用
+    assert len(agent._client.calls) == 5
     # 重试消息包含 schema 错误提示
     assert any("error_type" in c and "枚举" in c for c in agent._client.calls)
 
 
-def test_verifier_disagreement_triggers_arbiter() -> None:
+def test_verifier_arbiter_delivers_final_verdict() -> None:
+    """总仲裁：无论双视角一致与否，最终 verdict/arbiter 标签由 ARBITER 交付。"""
     agent = VerifierAgent(FakeHy3([
         _verdict_json("CORRECT", 0.8),
         _verdict_json("SILENT_FAILURE", 0.75,
@@ -133,7 +138,7 @@ def test_verifier_arbiter_failure_falls_back_to_human_review() -> None:
             raise Hy3Error("arbiter should not be called")
     agent = VerifierAgent(BoomHy3([]), max_json_retries=0)
     res = agent.verify(Q, OK_ANSWER)
-    # V1(0.6 CORRECT) vs V2(0.9 PROCESS_INCORRECT) 分歧，但 arbiter 抛错 → 取高置信 + HUMAN_REVIEW
+    # 总仲裁：第 3 次调用即仲裁，抛错 → 回退高置信视角 + HUMAN_REVIEW
     assert res.arbiter == "HUMAN_REVIEW"
     assert res.verdict == Verdict.PROCESS_INCORRECT
 
@@ -185,6 +190,8 @@ def test_verifier_receives_static_evidence() -> None:
         _verdict_json("PROCESS_INCORRECT", 0.8,
                       [{"step_id": 1, "error_type": "logic", "detail": "死循环", "evidence": "while True"}]),
         _verdict_json("PROCESS_INCORRECT", 0.7,
+                      [{"step_id": 1, "error_type": "logic", "detail": "死循环", "evidence": "while True"}]),
+        _verdict_json("PROCESS_INCORRECT", 0.85,
                       [{"step_id": 1, "error_type": "logic", "detail": "死循环", "evidence": "while True"}]),
     ]))
     static = check_static(AQ, _algo_answer("while True:\n    pass\n"))

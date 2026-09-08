@@ -31,7 +31,7 @@ class Config:
     # HF 数据集缓存必须落在项目内（data/cache/hf），中间数据不写系统盘
     hf_cache_dir: Path = field(default_factory=lambda: Path.cwd() / "data" / "cache" / "hf")
     random_seed: int = 42
-    # Per-call budget (see DESIGN.md): eval = solve 1 + verify 2 + arbitrate 0~1
+    # Per-call budget (see DESIGN.md): eval = solve 1 + verify 双视角 2 + arbitrate 1（总仲裁）
     max_retries: int = 3
     timeout: float = 180.0
     temperature: float = 0.9

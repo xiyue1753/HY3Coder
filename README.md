@@ -8,9 +8,9 @@
 |---|---|
 | 大规模分层题集 | 自建 AtCoder ABC 175 题（主推）+ Codeforces 自建 175 题（含 GitHub 公开题解源），按基础/中等/困难三档分层，附来源与可复现分层规则 |
 | 分步求解 | 求解 Agent 产出结构化分步过程（每步含结论与前置依赖），自动提取可执行代码 |
-| 过程评估 | 逐步自含性检查 + 全局回溯两轮审查；两个独立验证视角交叉复核，不一致时仲裁 |
+| 过程评估 | 逐步自含性检查 + 全局回溯两轮审查；两个独立验证视角 + ARBITER 总仲裁交付最终结果 |
 | 错误定位归类 | 6 类基线（题意误读/概念错误/计算错误/条件遗漏/跳步推导/格式不符）+ 算法扩展（逻辑缺陷/边界条件/复杂度不达标） |
-| 沉默失败识别 | golden 样本库（真实评测检出为主 + 合成展示样例，附构造/来源说明），验证"答案对但过程错"的检出能力 |
+| 沉默失败识别 | 评估器在自然评测中识别"答案对但过程根本缺陷"（SILENT_FAILURE）并留档核验（`data/golden/golden_real_algorithm.jsonl`） |
 | ReAct 自我修正 | eval 模式（一次性、反馈绝不回流，保证指标可信）+ refine 模式（反馈→修订→重验证，限 3 轮收敛） |
 | 可自动校验 | 算法沙盒执行公开+隐藏测试用例（Python/C++ 自动检测、SPJ 判题），复杂度/边界/死循环静态检查 |
 | 量化评估 | 答案准确率/过程正确率/定位命中率/误报率 + Wilson 置信区间 + 抽样稳定性验证 |
@@ -103,7 +103,7 @@ copy .env.example .env
 - **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题，主推）**：由独立产线抓题面+AC 参考解+人工设计隐藏用例入库（`scripts/ingest_abc.py`，SOP 见 `docs/DATASET_BUILD_SOP.md`），难度按 ABC 分值映射三档，含 SPJ 多解构造题（checker 判题）；
 - **自建集 `cf_selfbuilt.jsonl`（Codeforces 175 题，与 ABC 大致同规模）**：同产线，参考解 150 题来自 CF 公开 AC 提交（提交页抓取）、25 题来自 GitHub 公开题解仓库（`ingest_cf_github.py`，绕开 CF 反爬的提交页限流，题目页抓取 + GitHub 解样例沙盒验证），分层 basic34/medium83/hard58；
 - TACO/CodeContests 公开镜像题集曾以 `algorithm.jsonl` 命名，2026-09 起废弃该命名（数据隔离，未来按独立数据集如 `taco` 注册），不再进入仪表盘/统计；
-- Golden 沉默失败样本库 `data/golden/`：`golden_real_algorithm.jsonl`（真实评测检出，主）+ `golden_algorithm.jsonl`（2 条合成展示样例）。
+- SILENT_FAILURE 留档 `data/golden/`：`golden_real_algorithm.jsonl`（真实评测检出的"答案对但过程根本缺陷"样本，含来源说明）。
 - **数据文件位置统一见 `docs/DATA_SOURCE_MAP.md`（注册中心 `src/rex/datasource.py`）。**
 
 ## 目录结构
@@ -126,10 +126,10 @@ Hy3_APP2/
 ├── src/web/  api.py  static/index.html      # FastAPI 仪表盘
 ├── src/cli.py                               # typer 入口
 ├── data/questions/  abc_selfbuilt.jsonl(175) cf_selfbuilt.jsonl(175)
-├── data/golden/     golden_real_algorithm.jsonl(2) golden_algorithm.jsonl(2)
+├── data/golden/     golden_real_algorithm.jsonl(2)  # SILENT_FAILURE 真实留档
 ├── data/outputs/    eval_selfbuilt_all.jsonl(175, ABC 主源) + eval_cf_all.jsonl(175, CF) + audit_records.jsonl
 │                    （.gitignore 排除，可再生成；历史分片归档于 _archived/）
-├── scripts/         build_questions.py build_golden.py build_golden_real.py
+├── scripts/         build_questions.py build_golden_real.py
 │                    audit_sample.py check_answers.py ingest_abc.py make_report.py
 ├── reports/         分析报告 + 自建题展示页
 └── tests/           pytest（FakeHy3 + 沙盒隔离 + refine 闭环）
@@ -143,7 +143,7 @@ Hy3_APP2/
 - **答案准确率**：算法 = 沙盒运行公开+隐藏用例通过率 ≥1（无测试用例时按标准答案文本比对）。
 - **过程正确率**：verdict=CORRECT 占比（验证 Agent×2+仲裁）。
 - **错误定位命中率 / 误报率**：基于人工抽检标注（`scripts/audit_sample.py` 生成模板）。
-- **沉默失败检出率**：golden 样本中判定 SILENT_FAILURE 占比。
+- **沉默失败检出**：自然评测中判定 SILENT_FAILURE 的样本数与占比（识别"答案对但过程根本缺陷"）。
 - 指标附 **Wilson 95% 置信区间**与**同档二次抽样稳定性验证**。
 
 **过程判定 severity 口径**：每条 finding 带 `fatal`（实质缺陷，驱动非 CORRECT）或

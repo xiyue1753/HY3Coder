@@ -1,6 +1,6 @@
 """构建 data/golden/golden_real_algorithm.jsonl —— 真实评测中检出的 SILENT_FAILURE 样本。
 
-与 golden_algorithm.jsonl（人工合成陷阱）不同：本库样本来自真实 Hy3 评测，
+本库样本来自真实 Hy3 评测，
 flaw_answer 即当时模型真实输出（含 code），findings 来自 verifier 实际定位。
 每个样本完整记录来源文件/时间戳、陷阱过程、沙盒结果、缺陷定位，便于审计与续补。
 

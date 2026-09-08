@@ -1,10 +1,12 @@
-"""Verifier agent: two independent judge perspectives + arbiter.
+"""Verifier agent: two independent judge perspectives + mandatory arbiter.
 
 - View A (self-containment first) and View B (global backtrace first) judge
   the same (question, answer) independently.
-- Same verdict  -> merge findings, arbiter = whichever view had higher confidence.
-- Different     -> an arbiter model call decides; if the arbiter itself is
-  low-confidence it still returns, and the pipeline may flag HUMAN_REVIEW.
+- The ARBITER reviews both perspectives (whether or not they agree) and is
+  the single deliverer of the final verdict/arbiter label. 一致/分歧不改变
+  该流程：最终评估结果一律由 ARBITER 交付。
+- If the arbiter call fails after retries, fall back to the higher-confidence
+  view and mark arbiter=HUMAN_REVIEW (the pipeline may then flag it).
 """
 from __future__ import annotations
 
@@ -43,7 +45,10 @@ class VerifierAgent:
         static_evidence: str | None = None,
         execution_feedback: str | None = None,
     ) -> VerificationResult:
-        """Two-perspective cross-check + arbitration when they disagree.
+        """Two perspectives judged, then a mandatory ARBITER issues the final verdict.
+
+        无论 V1/V2 是否一致，都由 ARBITER 复核双方判定并交付最终结果
+        （arbiter 恒为 "ARBITER"；仅当仲裁调用重试耗尽后回退 HUMAN_REVIEW）。
 
         ``static_evidence``: optional rule-based diagnostic block (from
         static_check) fed to both views as an additional evidence source.
@@ -59,14 +64,7 @@ class VerifierAgent:
         v1 = self._verify_view("A", question, answer, static_evidence, execution_feedback)
         v2 = self._verify_view("B", question, answer, static_evidence, execution_feedback)
 
-        if v1.verdict == v2.verdict:
-            merged = self._merge(v1, v2)
-            merged.arbiter = "V1" if v1.confidence >= v2.confidence else "V2"
-            merged.timestamp = t0
-            return merged
-
-        # 分歧 -> 仲裁
-        log.info("verifier views disagree (%s vs %s), calling arbiter",
+        log.info("verifier views done (%s vs %s), calling arbiter (mandatory)",
                  v1.verdict.value, v2.verdict.value)
         try:
             verdict = self._arbitrate(question, answer, v1, v2, execution_feedback)

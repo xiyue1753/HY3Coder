@@ -17,8 +17,7 @@
 | artifact | 目录 | 文件 |
 |---|---|---|
 | 交互评测记录 | data/outputs/ | `eval_interactive.jsonl` |
-| 真实评测检出 golden | data/golden/ | `golden_real_algorithm.jsonl` |
-| 合成 golden（展示样例） | data/golden/ | `golden_algorithm.jsonl` |
+| 真实评测检出 golden（SILENT_FAILURE 留档） | data/golden/ | `golden_real_algorithm.jsonl` |
 | 人工抽检标注 | data/outputs/ | `audit_records.jsonl` |
 | 测试用例源 | data/cases/ | `{source_id}_cases.json` |
 
@@ -29,7 +28,7 @@
 | `src/rex/store.py` | `active_eval_filenames()`（默认白名单）、`INTERACTIVE_EVAL` |
 | `src/web/api.py` | `load_active_questions/evals/refines/golden/audits`、`audit_path` |
 | `src/cli.py` | `_default_eval_out/_default_refine_out`（题集→数据集反查）、`audit_path` |
-| `scripts/make_report.py` | `load_active_*`、`golden_synthetic_path`、`golden_real_path` |
+| `scripts/make_report.py` | `load_active_*`、`golden_real_path` |
 | 前端提示 | 后端 `/api/meta` 下发 `audit_command` 等，不写死 |
 
 ## 4. 变更操作

@@ -29,7 +29,7 @@ solver/  分步求解 Agent ──► Answer(steps[]+final_answer+code)
         │                     │        （测试用例通过率；无用例时文本比对 standard_answer）
         ▼                     ▼
 verifier/  验证 Agent×2（自含性检查+全局回溯）──► VerificationResult
-        交叉复核不一致 → 仲裁 → 仍分歧标记 HUMAN_REVIEW
+        双视角 → ARBITER 总仲裁交付最终结果（调用失败 → HUMAN_REVIEW）
         │
         ├─ eval 模式（数据纯净）：结果写入 eval_{scene}.jsonl → metrics
         └─ refine 模式：findings → RefineFeedback → solver.revise → 重验证（≤3 轮）
@@ -94,6 +94,7 @@ class VerificationResult(BaseModel):
     findings: list[ErrorFinding]
     confidence: float
     arbiter: Literal["V1", "V2", "ARBITER", "HUMAN_REVIEW"]
+    # V1/V2 仅为历史数据兼容；新版 verify 恒走总仲裁（arbiter ∈ {ARBITER, HUMAN_REVIEW}）
     timestamp: float
 
 class RefineFeedback(BaseModel):
@@ -184,7 +185,9 @@ class RefineRecord(BaseModel):
 
 1. **V1**：逐步自含性检查——每步 content 推导 conclusion 是否成立、deps 是否覆盖前置。
 2. **V2**：全局回溯——从最终答案反向验证链条一致性，检查跳步/循环论证。
-3. 双视角不一致 → 仲裁 Agent 判定；仍分歧 → `HUMAN_REVIEW`。
+3. **ARBITER 总仲裁**：无论 V1/V2 是否一致，都由仲裁复核双方判定并交付最终
+   verdict（findings 合并保留各自 severity）；仲裁调用重试耗尽失败 → 回退高置信
+   视角并标 `HUMAN_REVIEW`。
 4. `findings` 携带 step_id 供定位与 refine 使用。
 
 ### 6.1 缺陷严重度分级（severity，2026-09-07 判定重构）
@@ -232,21 +235,25 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 - 断点续跑：JSONL 追加写，重启跳过已完成 question_id。
 - 成本核算：`Hy3Client.call_count` 每实际请求自增（含重试），逐轮/累计可查。
 
-## 8. Golden 沉默失败样本（data/golden/）
+### 7.1 ReAct 自我修正闭环（方法论与收敛判据）
 
-人工构造 15 条（算法）"陷阱样本"：**答案正确但过程存在根本缺陷**，
-用于验证评估器能否检出 `SILENT_FAILURE`，而非被正确答案误导。
+- 首轮与 eval 同路径（solve→verify，initial 可比）；initial==CORRECT 不进修正轮。
+- 反馈 = verifier findings 映射修订指令（`findings_to_feedback`）：**仅 fatal 驱动**
+  （minor 不空转）、指 `step_id`+`error_type`、同 (step,type) 去重、无定位时兜底整体指令；
+  `revise` 接收题目+上一版完整答案+反馈做全量重写，每轮独立 re-verify。
+- **收敛判据** = `verdict == CORRECT`（refine 无沙盒，全部 minor 经 `_strip_minor_only`
+  置 CORRECT 即停）；**停止条件** = 收敛 / 达 `max_rounds`（默认 3）/ 无反馈可生成。
+- 有效性指标 = `refine_comparison`（before/after_correct、improved、converged，报告 §5）。
+- 方法论全文与有效性论证：`reports/REACT_METHOD.md`（姊妹篇：题集难度分层
+  `DIFFICULTY_SCORING_METHOD.md`、过程评估器 `PROCESS_EVAL_METHOD.md`）。
 
-| 构造手法 | 示例（算法） |
-|---|---|
-| 用例恰好覆盖不到 | 质数判定把 1 当质数但用例 n≥2；GCD 缺 b=0 终止但用例 b>0 |
-| 数据范围内不触发 | 声明 O(n) 实为 O(n²)/O(2^n)，用例 n 恰好小 |
-| 概念误用却得对 | set 无序却宣称保序；无序组合数碰巧等于有序计数 |
-| 推理错误结果碰巧对 | 快排宣称稳定但输入无相等元素 |
-| 格式与要求不符 | 要求多行输出单行（单元素用例碰巧同） |
+## 8. SILENT_FAILURE（答案正确但过程根本缺陷）留档
 
-每条含 `flaw_type`（真实缺陷类型）与 `construction_note`（构造说明），
-供人工核验评估器检出率与定位精度。
+自然评测中 verifier 检出的 `SILENT_FAILURE` 样本（data/golden/golden_real_algorithm.jsonl）：
+**沙盒答案全对但过程/实现存在根本缺陷**——即任务书"结果正确但过程不成立"的样本。
+每条含题目源、检测时间、定位缺陷与步骤、`flaw_answer`（当时模型真实输出）与来源说明，
+供逐条核验评估器不会因"答案对"而放行根本缺陷。检出机制与判定口径见 §6；
+自然评测中的 SILENT_FAILURE 计数与分布见 `reports/REPORT.md` §1/§7。
 
 ## 9. 指标（src/rex/metrics/）
 
@@ -256,7 +263,7 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 | 过程正确率 | verdict=CORRECT 题目 / 总题（仅 fatal 驱动非 CORRECT） | 验证 Agent×2+仲裁 |
 | 错误定位命中率 | 系统定位 step 与人工标注 ≤1 步 / 答案错误抽检样本 | audit_records.jsonl |
 | 误报率（区间） | 答案正确但被判有错样本中人工复核为误报比例。三层复核（`human_severity_match`）：完全相符=系统分级正确；层次不符=fatal/minor 打反（误报侧，主口径计）；完全不符=系统说有错实际过程正确（主/副口径均计）。报告给区间：下界=仅完全不符，上界=含层次不符 | audit_records.jsonl |
-| 沉默失败检出率 | golden 样本中判定 SILENT_FAILURE 比例 | golden 库 |
+| 沉默失败检出 | 自然评测中判定 SILENT_FAILURE 的样本数与占比（识别"答案对但过程根本缺陷"） | eval 结果 |
 | 修正提升 | refine 前后过程正确率差 | refine_{scene}.jsonl |
 | 置信区间 | Wilson interval（95%） | stats.py |
 | 稳定性 | 同档二次抽样指标漂移 | stats.py |
@@ -270,6 +277,39 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 - 主口径：verdict 由 fatal 驱动（minor 剥离，`_reconcile_verdict` 已落库）
 - 副口径：若把 minor 也计入过程错误，过程正确率/误报率各是多少
   （报告并列展示区间两端说明口径敏感性）
+
+### 9.1 minor 统计口径路线（v1，2026-09-08 对齐，temp0 重做前必读）
+
+**定义**：`minor` 是 finding 的 severity（`finding.severity == minor`），表示"不破坏推理链成立性的轻微瑕疵"（表述笔误/可重建省略/无害误述）。**verdict 层无 minor 档**；错误分 fatal/minor 两类发生在 finding 层。
+
+**样本三类去向（一切统计的根）**：
+| 类 | verdict | findings | 主口径(默认) | 副口径(minor_as_error) |
+|---|---|---|---|---|
+| A 干净 | CORRECT | 空 | 过程正确 | 过程正确 |
+| B **仅 minor 记录** | CORRECT | 全 minor | 过程正确 | **过程错误** |
+| C fatal 驱动 | SILENT/PROCESS_INCORRECT/ANSWER_INCORRECT | 有 fatal（可附 minor） | 过程错误 | 过程错误 |
+
+**流转链（代码逐点）**：
+1. V1/V2/ARBITER 判定产出 findings（带 severity）——**总仲裁交付最终 verdict**；
+2. eval reconcile（`_reconcile_verdict`，有沙盒信号）：答案对+无 fatal → CORRECT（**minor 被"剥离"，findings 保留** → B 类）；答案对+有 fatal → SILENT_FAILURE（C 类）；答案错 → PROCESS_INCORRECT/ANSWER_INCORRECT；
+3. refine（`_strip_minor_only`，无沙盒）：仅 minor → CORRECT 即停（不空转）；
+4. metrics：`_is_process_correct`——主口径看 verdict==CORRECT；副口径要求 CORRECT 且 findings 为空（B 类变错）；`compute_metrics(minor_as_error=...)` 统一入口；
+5. 抽检（`audit_metrics`）：误报率分母=答案对且被判过程有错。主口径判据 verdict∈{PI,SF}；副口径追加 verdict==CORRECT 且 findings 非空（B 类入分母）。三层复核 `human_severity_match`：`level_mismatch`（系统把 minor 判 fatal）主口径误报、副口径不计；`fp` 两口径均误报；
+6. 报告呈现（`make_report.py` §1 总览）：过程正确率主/副并列 + **"仅 minor 记录样本 N（主口径对/副口径错）"**；§6 误报率区间。
+
+**当前基线（359，temp0 前）**：CORRECT 300 = 282 干净 + **18 仅 minor 记录**（A1013/A1024/A1104/C2106 等）；SILENT_FAILURE 18（17 无 minor + 1 附 minor）；PROCESS_INCORRECT 33（25 无 + 8 附 minor）。
+
+**关于 "minor 与 SILENT_FAILURE（答案对但过程错）的关系"（防误读）**：
+- SILENT_FAILURE 由 **fatal** 驱动，不是 minor；
+- 无 fatal 的 minor-only 样本 reconcile 后为 CORRECT（B 类，主口径正确），**不会进入 SF**；
+- minor 出现在 SF 的常见形态是**人工核验纠正**：系统把实质 minor 误判为 fatal → 样本被误放入 SF/PI → 抽检判 `level_mismatch`（C2118/C2140）。因此 SF 中与 minor 相关的统计 = `level_mismatch` 计数，不是 minor finding 计数。
+
+**temperature=0 全量重做 checklist（不覆盖当前记录）**：
+1. 用 `REX_TEMPERATURE=0`（env），跑 `python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --out eval_abc_t0.jsonl`（CF 同理 `eval_cf_t0.jsonl`）——**`--out` 写新文件，不覆盖现有 eval_*.jsonl**；
+2. 每样本自动产出 answer_correct/verdict/findings(severity)/arbiter(=ARBITER 总仲裁)；
+3. 统计统一走 `make_report.py`（§1 主/副 + minor-only 行、§6 抽检区间）——主/副口径按 §9.1 路线自动一致；
+4. 抽检模板基于新记录重新生成（`scripts/audit_sample.py`），标注仍按 `audit_rules.md` v4；
+5. 新旧两套记录并存于 `data/outputs/` 与 `_archived/`，报告注明数据版本。
 
 ## 10. 运行方式
 
@@ -306,8 +346,10 @@ python -m pytest tests/
   - 公开对照：algorithm.jsonl（TACO 350 活跃 + CF 350 deprecated + 自编）
   - 自建：abc_selfbuilt.jsonl（AtCoder ABC 175 题，含参考解/用例/SPJ，按难度分层）
   - 均含标准答案/参考解、分层依据（layer_basis）
-- Golden 样本库 data/golden/（golden_algorithm 15 条，含构造说明）
+- SILENT_FAILURE 留档 data/golden/golden_real_algorithm.jsonl（真实评测检出的"答案对但过程根本缺陷"样本，含来源说明）
 - 评估结果 data/outputs/（eval/refine 严格分离，可断点续跑）
 - 分析报告 reports/（分层退化、错误分布、case 归因、修正前后对比、能力画像）
+- 方法论文档 reports/：`DIFFICULTY_SCORING_METHOD.md`（题集统一难度分层）、
+  `PROCESS_EVAL_METHOD.md`（过程评估器判定）、`REACT_METHOD.md`（ReAct 自我修正闭环）
 - 人工抽检记录 data/outputs/audit_records.jsonl
 - Demo 视频脚本 reports/demo_script.md

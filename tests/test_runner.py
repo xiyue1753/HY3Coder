@@ -90,8 +90,8 @@ def _make_factory(per_question_responses, fail_once=False):
 
 def test_runner_eval_basic(tmp_path) -> None:
     factory, state = _make_factory([
-        [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")],
-        [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")],
+        [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT")],
+        [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT")],
     ])
     runner = EvalRunner(_cfg(tmp_path), retries=0, concurrency=1, pipeline_factory=factory)
     out = tmp_path / "eval_algorithm.jsonl"
@@ -103,18 +103,18 @@ def test_runner_eval_basic(tmp_path) -> None:
     assert by_id["M001"].verification.verdict.value == "ANSWER_INCORRECT"
     assert by_id["M000"].answer_correct is True
     assert by_id["M001"].answer_correct is False
-    # 每个 client 响应全部消费，各自恰好 3 次
+    # 每个 client 响应全部消费，各自恰好 4 次（双视角+总仲裁）
     for cli in state["clients"]:
         assert cli.responses == []
-        assert cli.calls == 3
-    assert costs["calls"] == 6              # 2 题 × 3 次
-    assert all(r.cost_calls == 3 for r in records)
+        assert cli.calls == 4
+    assert costs["calls"] == 8              # 2 题 × 4 次
+    assert all(r.cost_calls == 4 for r in records)
 
 
 def test_runner_resume_skips_done(tmp_path) -> None:
     factory, _ = _make_factory([
-        [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")],
-        [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")],
+        [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT")],
+        [SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT")],
     ])
     runner = EvalRunner(_cfg(tmp_path), retries=0, concurrency=1, pipeline_factory=factory)
     out = tmp_path / "eval_algorithm.jsonl"
@@ -130,10 +130,10 @@ def test_runner_resume_skips_done(tmp_path) -> None:
 def test_runner_retry_transient_failure(tmp_path) -> None:
     """全局第一次调用失败一次；重试（新建 client）后成功，不中断批。"""
     # 共享响应池：无论多少次 retry / 多少 client，都从同一池按序消费。
-    # 6 个响应 = 两题各 [SOLVE, verdict, verdict]；全局第一次调用前注入一次失败。
+    # 8 个响应 = 两题各 [SOLVE, verdict, verdict, 仲裁]；全局第一次调用前注入一次失败。
     pool = [
-        SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"),
-        SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"),
+        SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT"),
+        SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT"),
     ]
     shared = {"responses": list(pool), "failed": False}
     total_attempted = {"n": 0}
@@ -163,8 +163,8 @@ def test_runner_retry_transient_failure(tmp_path) -> None:
     # 重试后成功；M001 答案错（1/2 != 2）→ 客观优先降级 ANSWER_INCORRECT
     assert by_id["M000"].verification.verdict.value == "CORRECT"
     assert by_id["M001"].verification.verdict.value == "ANSWER_INCORRECT"
-    # 失败 1 次 + 成功 6 次 = 7 次模型调用（验证 retry 不重复算、不遗漏）
-    assert total_attempted["n"] == 7
+    # 失败 1 次 + 成功 8 次 = 9 次模型调用（验证 retry 不重复算、不遗漏）
+    assert total_attempted["n"] == 9
 
 
 def test_runner_retry_exhausted_placeholder(tmp_path) -> None:
@@ -194,8 +194,8 @@ def test_runner_parallel_thread_safe(tmp_path) -> None:
                      difficulty="basic", source="self", standard_answer="1/2")
         for i in range(n_questions)
     ]
-    # 每题 [SOLVE, verdict, verdict] = 3 响应
-    per_question = [[SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT")]
+    # 每题 [SOLVE, verdict, verdict, 仲裁] = 4 响应
+    per_question = [[SOLVE, _verdict_json("CORRECT"), _verdict_json("CORRECT"), _verdict_json("CORRECT")]
                     for _ in range(n_questions)]
 
     idx_lock = threading.Lock()          # 保护计数器（每个 worker 取独立题目响应池）
@@ -220,8 +220,8 @@ def test_runner_parallel_thread_safe(tmp_path) -> None:
     assert len(records) == n_questions
     assert {r.question_id for r in records} == {q.id for q in questions}
     assert all(r.verification.verdict.value == "CORRECT" for r in records)
-    # 总调用 = 8 题 × 3 = 24
-    assert costs["calls"] == n_questions * 3
+    # 总调用 = 8 题 × 4 = 32
+    assert costs["calls"] == n_questions * 4
     # 每个 client 响应全部消费
     assert all(not c.responses for c in state["clients"])
 
