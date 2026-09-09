@@ -1,6 +1,6 @@
 # HY3Coder 分析报告
 
-> 生成时间：2026-09-09 22:25 ｜ 数据：`data/outputs/`（eval/refine 严格分离）
+> 生成时间：2026-09-10 00:10 ｜ 数据：`data/outputs/`（eval/refine 严格分离）
 
 ## 1. 评估总览
 
@@ -447,7 +447,7 @@ data/questions/*.jsonl           # metadata.diff_score
 
 与旧版评估器的对比：
 
-- 旧版（2026-09-03 定稿，双视角 LLM 审查加仲裁、无 severity）：任何 finding 都驱动“过程有错”，误报率被结构性推高；verdict 无程序化兜底，出现漏检（曾修复“答案错却判 CORRECT”，见 `docs/IMPL_LOG.md` hard-eval 任务）；规则校验仅支持 Python，CF/ABC 主场景（C++）全部失效。旧版抽检产物：`data/outputs/audit_review.md`（27 题模板）、`data/outputs/audit_records_full.jsonl`（40 条回填，双视角口径）。
+- 旧版（2026-09-03 定稿，双视角 LLM 审查加仲裁、无 severity）：任何 finding 都驱动“过程有错”，误报率被结构性推高；verdict 无程序化兜底，出现漏检（曾修复“答案错却判 CORRECT”的漏检）；规则校验仅支持 Python，CF/ABC 主场景（C++）全部失效。旧版抽检产物：`data/outputs/audit_review.md`（27 题模板）、`data/outputs/audit_records_full.jsonl`（40 条回填，双视角口径）。
 
 - 本版（2026-09-07 severity v1）：在相同判定标准下对难题区间 28 条 re-verify，10 条判定变化——误报剥离 2 条、漏检补抓 3 条（C2084/C2102/C2119，人工核验全为真 fatal）、语义细化 5 条；小样本误报率 0/4。说明 severity 版并非靠放宽判定压误报，而是在同一标准下更精确。
 
