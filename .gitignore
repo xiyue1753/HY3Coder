@@ -35,6 +35,11 @@ data/questions/algorithm.jsonl
 # 展示类 HTML 报告（由 scripts/make_*_html.py 可再生，不入库）
 /reports/*.html
 
+# 内部开发文档与留档数据（实现日志/抓取指南/真实模型输出留档，
+# 不随公开仓库发布；文件保留本地工作区）
+/docs/
+/data/golden/
+
 # OS / IDE
 .DS_Store
 Thumbs.db
