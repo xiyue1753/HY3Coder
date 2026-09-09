@@ -179,10 +179,13 @@ def _emit_algorithm_profile(w, evals: list[EvalRecord], qmap: dict) -> None:
     rows.sort(key=lambda x: x["proc"])
 
     w("\n### 8.1 算法类别 × 能力边界（按 `alg_classes` 标签统计）")
-    w("\n> 口径：按题集人工归一算法类标签统计，多标签题计入多个类（类别不互斥），"
-      "无标签题（CF 难档新扩 9 题）不计入；平均 diff_score 用于区分「该类别本身偏难」"
-      "与「同难度下能力偏弱」。全库过程正确率基线 "
-      f"{pct(base_proc)}，答案正确率基线 {pct(sum(1 for r in valid if r.answer_correct is True) / len(valid) if valid else 0)}。\n")
+    n_tagged = sum(1 for r in valid
+                   if (qmap.get(r.question_id).metadata or {}).get("alg_classes"))
+    w("\n> 口径：按题集人工归一算法类标签统计，多标签题计入多个类（类别不互斥）；"
+      "平均 diff_score 用于区分「该类别本身偏难」与「同难度下能力偏弱」。"
+      f"全库过程正确率基线 {pct(base_proc)}，答案正确率基线 "
+      f"{pct(sum(1 for r in valid if r.answer_correct is True) / len(valid) if valid else 0)}"
+      f"（{n_tagged}/{len(valid)} 题有标签）。\n")
     w("\n| 算法类 | 样本 | 答案准确率 | 过程正确率 | 平均 diff_score | 主要过程错误类型 |")
     w("|---|---|---|---|---|---|")
     for row in rows:
