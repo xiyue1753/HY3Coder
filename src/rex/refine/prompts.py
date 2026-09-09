@@ -6,7 +6,7 @@ feedback; a CORRECT verdict yields no feedback (loop terminates).
 """
 from __future__ import annotations
 
-from rex.models import ErrorFinding, ErrorSeverity, RefineFeedback, VerificationResult, Verdict
+from rex.models import ErrorFinding, ErrorSeverity, ErrorType, RefineFeedback, VerificationResult, Verdict
 from rex.verifier.errors import describe
 
 
@@ -32,7 +32,7 @@ def findings_to_feedback(verification: VerificationResult) -> list[RefineFeedbac
         # 无具体 finding（如 verdict=ANSWER_INCORRECT 但没定位）→ 生成整体指令
         feedbacks.append(RefineFeedback(
             step_id=None,
-            error_type=verification.findings[0].error_type if verification.findings else None,
+            error_type=verification.findings[0].error_type if verification.findings else ErrorType.OTHER,
             instruction=(
                 f"整体判定为 {verification.verdict.value}，请重新完整推导并核对最终答案，"
                 "确保每一步都可验证。"
