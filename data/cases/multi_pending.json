@@ -1,0 +1,55 @@
+[
+ {
+  "task": "cf1907a",
+  "title": "Rook",
+  "type": "模拟",
+  "difficulty": "basic",
+  "recorded_at": "2026-09-05 01:17:24",
+  "status": "pending"
+ },
+ {
+  "task": "cf1305e",
+  "title": "Kuroni and the Score Distribution",
+  "type": "构造",
+  "difficulty": "hard",
+  "recorded_at": "2026-09-05 10:16:27",
+  "status": "ingested",
+  "ingested_at": "2026-09-05 checker written (SPJ)"
+ },
+ {
+  "task": "cf1054c",
+  "title": "Candies Distribution",
+  "type": "构造",
+  "difficulty": "medium",
+  "recorded_at": "2026-09-05 10:27:26",
+  "status": "ingested",
+  "ingested_at": "2026-09-05 checker written (SPJ)"
+ },
+ {
+  "task": "cf1327c",
+  "title": "Game with Chips",
+  "type": "构造",
+  "difficulty": "medium",
+  "recorded_at": "2026-09-05 11:00:00",
+  "status": "ingested",
+  "ingested_at": "2026-09-05 checker written (SPJ)"
+ },
+ {
+  "task": "cf1253b",
+  "title": "Silly Mistake",
+  "type": "贪心",
+  "difficulty": "medium",
+  "recorded_at": "2026-09-05 11:09:24",
+  "status": "ingested",
+  "ingested_at": "2026-09-05 checker written (SPJ)"
+ },
+ {
+  "task": "cf1991c",
+  "title": "Absolute Zero",
+  "type": "构造",
+  "difficulty": "medium",
+  "recorded_at": "2026-09-05 11:21:04",
+  "status": "ingested",
+  "ingested_at": "2026-09-05 checker written (SPJ)"
+ }
+]

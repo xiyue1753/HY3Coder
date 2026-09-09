@@ -1,0 +1,404 @@
+"""Metrics computation over eval records (+ optional human audit labels).
+
+Metrics produced (DESIGN.md §量化评估):
+  - answer_accuracy        答案准确率（exec 全过 或 标准答案文本比对通过）
+  - process_correctness    过程正确率（verdict == CORRECT）
+  - verdict distribution   四类判定占比（含 SILENT_FAILURE 检出）
+  - error_type distribution 错误类型分布（能力画像输入）
+  - per-difficulty         三档分档指标（分层退化分析）
+  - with audits:  error_localization_hit_rate 定位命中率
+                  false_positive_rate         误报率
+  - refine:      修正前后对比（refine/ 模块使用）
+
+指标只基于 eval 数据（数据纯净性：eval 与 refine 结果严格分离）。
+"""
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass, field
+from statistics import mean
+
+from typing import Literal
+
+from rex.models import Difficulty, EvalRecord, ErrorType, Verdict
+
+
+@dataclass
+class TierMetrics:
+    n: int
+    answer_accuracy: float
+    process_correctness: float
+
+
+@dataclass
+class MetricsReport:
+    n: int
+    answer_accuracy: float
+    process_correctness: float
+    verdict_dist: dict[str, int] = field(default_factory=dict)
+    error_type_dist: dict[str, int] = field(default_factory=dict)
+    per_tier: dict[str, TierMetrics] = field(default_factory=dict)
+    # 仅当提供人工抽检标注时才有值
+    error_localization_hit_rate: float | None = None
+    false_positive_rate: float | None = None
+    audit_n: int = 0
+
+    def to_dict(self) -> dict:
+        return {
+            "n": self.n,
+            "answer_accuracy": self.answer_accuracy,
+            "process_correctness": self.process_correctness,
+            "verdict_dist": self.verdict_dist,
+            "error_type_dist": self.error_type_dist,
+            "per_tier": {k: {"n": v.n, "answer_accuracy": v.answer_accuracy,
+                             "process_correctness": v.process_correctness}
+                         for k, v in self.per_tier.items()},
+            "error_localization_hit_rate": self.error_localization_hit_rate,
+            "false_positive_rate": self.false_positive_rate,
+            "audit_n": self.audit_n,
+        }
+
+
+def _is_answer_correct(r: EvalRecord) -> bool:
+    if r.answer_correct is not None:
+        return bool(r.answer_correct)
+    # 算法场景无答案比对时，以沙盒全过作为答案正确信号
+    return r.test_pass_rate is not None and r.test_pass_rate >= 1.0 and r.error is None
+
+
+def _is_process_correct(r: EvalRecord, minor_as_error: bool = False) -> bool:
+    """过程正确判定。
+
+    主口径（minor_as_error=False）：verdict == CORRECT（仅 fatal 驱动非 CORRECT，
+    reconcile 已剥离 minor——CORRECT 样本即使带 minor findings 仍算过程正确）。
+    副口径（minor_as_error=True）：若把任何 finding（含 minor）都算过程错误，
+    则只有"verdict==CORRECT 且 findings 为空"才计为过程正确。
+    """
+    if r.verification.verdict != Verdict.CORRECT:
+        return False
+    if minor_as_error:
+        return not r.verification.findings
+    return True
+
+
+def compute_metrics(records: list[EvalRecord],
+                    formal_only: bool = False,
+                    minor_as_error: bool = False) -> MetricsReport:
+    """Compute aggregate metrics over eval records.
+
+    ``formal_only=True``：只统计正式评测（source="run-eval"），排除
+    source="interactive" 交互演示记录——保证仪表盘指标口径 = 正式评测。
+    旧实现把交互记录混入总览（交互样本无标准答案，污染指标），此参数用于
+    面板层启用过滤；批处理统计与测试保持默认不过滤（兼容）。
+
+    ``minor_as_error=True``：副口径——若把 minor 瑕疵也计入过程错误，
+    过程正确率会怎么变（用于报告口径敏感性说明）。
+    """
+    if formal_only:
+        records = [r for r in records if r.source == "run-eval"]
+    if not records:
+        return MetricsReport(n=0, answer_accuracy=0.0, process_correctness=0.0)
+
+    n = len(records)
+    # 运行失败（Verdict.FAILED）样本没有真实判定，不计入正确率分母，但仍保留计数。
+    valid = [r for r in records if r.verification.verdict != Verdict.FAILED]
+    n_valid = len(valid)
+    answer_correct = sum(_is_answer_correct(r) for r in valid)
+    process_correct = sum(_is_process_correct(r, minor_as_error) for r in valid)
+    verdict_dist = dict(Counter(r.verification.verdict.value for r in records))
+    error_types: Counter[str] = Counter()
+    for r in valid:
+        for f in r.verification.findings:
+            error_types[f.error_type.value] += 1
+    per_tier: dict[str, TierMetrics] = {}
+    for d in Difficulty:
+        tier = [r for r in valid if r.difficulty == d]
+        if tier:
+            per_tier[d.value] = TierMetrics(
+                n=len(tier),
+                answer_accuracy=sum(_is_answer_correct(r) for r in tier) / len(tier),
+                process_correctness=sum(_is_process_correct(r, minor_as_error) for r in tier) / len(tier),
+            )
+    return MetricsReport(
+        n=n,
+        answer_accuracy=(answer_correct / n_valid) if n_valid else 0.0,
+        process_correctness=(process_correct / n_valid) if n_valid else 0.0,
+        verdict_dist=verdict_dist,
+        error_type_dist=dict(error_types),
+        per_tier=per_tier,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Facet profiles (多维画像：知识点 / 规模 / 规模×难度耦合)
+# ---------------------------------------------------------------------------
+@dataclass
+class FacetMetrics:
+    n: int
+    answer_accuracy: float
+    process_correctness: float
+
+
+def _facet_metrics(items: list[EvalRecord]) -> FacetMetrics:
+    valid = [r for r in items if r.verification.verdict != Verdict.FAILED]
+    nv = len(valid)
+    if not nv:
+        return FacetMetrics(n=len(items), answer_accuracy=0.0, process_correctness=0.0)
+    return FacetMetrics(
+        n=len(items),
+        answer_accuracy=sum(_is_answer_correct(r) for r in valid) / nv,
+        process_correctness=sum(r.verification.verdict == Verdict.CORRECT for r in valid) / nv,
+    )
+
+
+def compute_facets(records: list[EvalRecord], qmap: dict[str, dict]) -> dict:
+    """多维画像（能力画像输入，join 题集元数据）：
+
+    - per_type：按知识点主类（metadata.alg_classes）聚合——一题可入多桶
+      （多标签），各桶独立报告；桶样本 <3 不计（统计不稳）。
+    - per_scale：按数据规模档（metadata.scale_tier, S1..S4）聚合。
+    - per_tier_scale：难度 × 规模 耦合（同难度下规模压力退化观察）。
+
+    qmap: {question_id: question_row}（row 含 metadata.alg_classes/scale_tier）。
+    返回 None 桶对应 eval 记录找不到题目元数据的（不计入画像）。
+    """
+    def meta_of(rid: str) -> dict:
+        q = qmap.get(rid) or {}
+        return (q.get("metadata") or {})
+
+    type_buckets: dict[str, list] = {}
+    for r in records:
+        m = meta_of(r.question_id)
+        for cls in m.get("alg_classes") or []:
+            type_buckets.setdefault(cls, []).append(r)
+    per_type = {k: _facet_metrics(v).__dict__ for k, v in type_buckets.items()
+                if len(v) >= 3}
+
+    scale_buckets: dict[str, list] = {}
+    for r in records:
+        t = meta_of(r.question_id).get("scale_tier")
+        if t:
+            scale_buckets.setdefault(t, []).append(r)
+    per_scale = {k: _facet_metrics(v).__dict__ for k, v in scale_buckets.items()
+                 if len(v) >= 3}
+
+    cross: dict[tuple, list] = {}
+    for r in records:
+        t = meta_of(r.question_id).get("scale_tier")
+        if not t:
+            continue
+        cross.setdefault((r.difficulty.value, t), []).append(r)
+    per_tier_scale = {
+        f"{d}|{t}": _facet_metrics(v).__dict__
+        for (d, t), v in cross.items() if len(v) >= 3}
+
+    return {"per_type": per_type, "per_scale": per_scale,
+            "per_tier_scale": per_tier_scale}
+
+
+# ---------------------------------------------------------------------------
+# Audit-based metrics (需要人工抽检标注)
+# ---------------------------------------------------------------------------
+@dataclass
+class AuditMetrics:
+    """人工抽检口径（对齐任务书）：按"答案正确性"划分两套独立分母。
+
+    三层复核（human_severity_match，针对系统 fatal/minor 分级是否属实）：
+      MATCH         = 完全相符：系统 fatal/minor 分级正确 → 非误报
+      LEVEL_MISMATCH= 层次不符：方向对但分级打反（系统把 minor 判 fatal）
+                      → 主口径（minor 不算过程错）算误报；副口径（minor 也算错）不算
+      FP            = 完全不符：系统说有错但过程实际正确 → 两口径均误报
+
+    - localization_n / error_localization_hit_rate（定位准确率）：
+      分母 = 答案错误样本（answer_correct is False）；
+      分子 = 其中系统判定过程有错（PROCESS_INCORRECT/SILENT_FAILURE）
+            且 findings 覆盖人工标注的 error_step_id 的样本。
+    - fp_n / false_positive_rate（误报率，主口径）：
+      分母 = 答案正确样本（answer_correct is True）中被系统判定过程有错的样本；
+      分子 = LEVEL_MISMATCH + FP（含层次不符：minor 不算过程错，误报率上界）。
+    - false_positive_rate_strict（误报率，副口径）：
+      同分母；分子仅 FP（完全不符，minor 也算过程错 → 误报率下界）。
+    - 兼容回退：无 human_severity_match 时取 human_error_severity（none/minor/fatal），
+      再旧标注取 is_false_positive（两口径同值）。
+    - n：有抽检标注的样本总数（含答案正确性未知/无法比对者，用于统计可见性）。
+    """
+    n: int
+    error_localization_hit_rate: float
+    false_positive_rate: float
+    false_positive_rate_strict: float = 0.0  # 副口径：仅完全不符（FP）算误报
+    localization_n: int = 0       # 定位准确率分母：答案错误样本数
+    fp_n: int = 0                 # 误报率分母：答案正确且被判过程有错的样本数
+    match_n: int = 0              # 三层复核：完全相符（系统分级正确）
+    level_mismatch_n: int = 0     # 三层复核：层次不符（fatal/minor 打反）
+    fp_human_n: int = 0           # 三层复核：完全不符（系统误报）
+
+
+def _flagged_steps(r: EvalRecord) -> set[int]:
+    return {f.step_id for f in r.verification.findings}
+
+
+def _three_way(a: object) -> Literal["match", "level_mismatch", "fp"] | None:
+    """把人工复核标记归一化为三层结论（match / level_mismatch / fp）。
+
+    优先读新字段 human_severity_match；兼容旧字段 human_error_severity
+    （none→fp, minor→level_mismatch, fatal→match）与 is_false_positive
+    （True→fp, False→match）。
+    """
+    m = getattr(a, "human_severity_match", None)
+    if m is not None:
+        v = m.value if hasattr(m, "value") else str(m)
+        if v in ("match", "level_mismatch", "fp"):
+            return v
+    sev = getattr(a, "human_error_severity", None)
+    if sev is not None:
+        if sev == "none":
+            return "fp"
+        if sev == "minor":
+            return "level_mismatch"
+        if sev == "fatal":
+            return "match"
+    fp = getattr(a, "is_false_positive", None)
+    if fp is True:
+        return "fp"
+    if fp is False:
+        return "match"
+    return None
+
+
+def _judged_process_incorrect(r: EvalRecord, minor_as_error: bool = False) -> bool:
+    """系统是否判定该样本"过程有错"（误报率/定位率分母条件）。
+
+    主口径（minor_as_error=False）：verdict ∈ {PROCESS_INCORRECT, SILENT_FAILURE}。
+    副口径（minor_as_error=True）：若把 minor 也计为过程错误，则 verdict==CORRECT
+    但 findings 非空（reconcile 保留的 minor）的样本也算"被判过程有错"。
+    """
+    v = r.verification.verdict
+    if v in (Verdict.PROCESS_INCORRECT, Verdict.SILENT_FAILURE):
+        return True
+    if minor_as_error and v == Verdict.CORRECT and r.verification.findings:
+        return True
+    return False
+
+
+def audit_metrics(records: list[EvalRecord], audits: list,
+                  minor_as_error: bool = False) -> AuditMetrics | None:
+    """audits: list of objects with fields question_id / error_step_id / is_false_positive.
+
+    对齐任务书 P4 口径：利用标准答案（answer_correct）划分样本——
+    - 定位准确率：在"答案错误"的样本上，评估器能否判定过程有问题并定位到出错步骤。
+    - 误报率：在"答案正确"的样本上，被判过程有问题的样本经人工抽检确认真实/误报比例。
+
+    只纳入**人工已回填**的样本（verdict_human 非空）：抽检指标的分母必须
+    由人工核实过的样本构成，未回填的模板（如分批发出的 CF 抽检）不稀释分母。
+
+    ``minor_as_error=True``（副口径）：把 minor 瑕疵也计为过程错误后，误报率
+    分母如何扩大——用于报告口径敏感性说明（主口径 + 副口径并列）。
+    """
+    by_id = {r.question_id: r for r in records}
+    done = [
+        a for a in audits
+        if getattr(a, "verdict_human", None) is not None
+    ]
+    pairs: list[tuple[EvalRecord, object]] = [
+        (by_id[a.question_id], a) for a in done if a.question_id in by_id
+    ]
+    if not pairs:
+        return None
+
+    # ---- 定位准确率：分母 = 答案错误的样本 ----
+    wrong_answer = [r for r, _ in pairs if r.answer_correct is False]
+    loc_hits = 0
+    for r, a in pairs:
+        if r.answer_correct is not False:
+            continue
+        # 系统必须判定过程有错，且人工标注的真实出错步骤被 findings 覆盖
+        if not _judged_process_incorrect(r, minor_as_error):
+            continue
+        true_step = getattr(a, "error_step_id", None)
+        if true_step is None:
+            continue  # 人工未标注具体步骤，不计入命中
+        if true_step in _flagged_steps(r):
+            loc_hits += 1
+    localization_n = len(wrong_answer)
+    localization_hit_rate = loc_hits / localization_n if localization_n else 0.0
+
+    # ---- 误报率：分母 = 答案正确且被系统判过程有错的样本 ----
+    correct_judged_incorrect = [
+        (r, a) for r, a in pairs
+        if r.answer_correct is True
+        and _judged_process_incorrect(r, minor_as_error)
+    ]
+    fp_main = 0      # 主口径：LEVEL_MISMATCH + FP 视为误报（含层次不符）
+    fp_strict = 0    # 副口径：仅 FP（完全不符）视为误报
+    match_n = 0      # 三层：完全相符
+    level_mismatch_n = 0  # 三层：层次不符
+    fp_human_n = 0   # 三层：完全不符
+    for _, a in correct_judged_incorrect:
+        tw = _three_way(a)
+        if tw is None:
+            # 已回填但无三层/旧误报标记 → 无法归类，不进入分子分母
+            continue
+        if tw == "match":
+            match_n += 1
+        elif tw == "level_mismatch":
+            level_mismatch_n += 1
+            fp_main += 1            # 主口径误报（minor 不算过程错）
+        else:  # fp
+            fp_human_n += 1
+            fp_main += 1
+            fp_strict += 1
+    fp_n = match_n + level_mismatch_n + fp_human_n  # 分母=可归类样本数
+    false_positive_rate = fp_main / fp_n if fp_n else 0.0
+    false_positive_rate_strict = fp_strict / fp_n if fp_n else 0.0
+
+    return AuditMetrics(
+        n=len(pairs),
+        error_localization_hit_rate=localization_hit_rate,
+        false_positive_rate=false_positive_rate,
+        false_positive_rate_strict=false_positive_rate_strict,
+        localization_n=localization_n,
+        fp_n=fp_n,
+        match_n=match_n,
+        level_mismatch_n=level_mismatch_n,
+        fp_human_n=fp_human_n,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Refine comparison（修正前后对比，供 refine 报告章节）
+# ---------------------------------------------------------------------------
+@dataclass
+class RefineComparison:
+    n: int
+    before_correct: float       # 首轮过程正确率
+    after_correct: float        # 收敛轮过程正确率
+    converged: float            # 限轮内达成 CORRECT 比例
+    improved: float             # 由错误→正确 或 错误减少 的比例
+
+
+def refine_comparison(records: list) -> RefineComparison:
+    """records: list of RefineRecord.
+
+    注意：初始即 CORRECT 的样本 rounds 为空（不进入修正循环），
+    因此"修正前"一律取 record.initial，不能依赖 rounds[0]。
+    """
+    if not records:
+        return RefineComparison(0, 0.0, 0.0, 0.0, 0.0)
+    # 运行失败（initial/final 为 FAILED）样本无真实判定，不计入修正前后对比。
+    valid = [r for r in records
+             if r.initial.verdict != Verdict.FAILED and r.final.verdict != Verdict.FAILED]
+    if not valid:
+        return RefineComparison(0, 0.0, 0.0, 0.0, 0.0)
+    before = [r.initial.verdict == Verdict.CORRECT for r in valid]
+    after = [r.final.verdict == Verdict.CORRECT for r in valid]
+    improved = [
+        r for r in valid
+        if r.initial.verdict != Verdict.CORRECT and r.final.verdict == Verdict.CORRECT
+    ]
+    return RefineComparison(
+        n=len(valid),
+        before_correct=mean(before) if before else 0.0,
+        after_correct=mean(after) if after else 0.0,
+        converged=mean(after) if after else 0.0,
+        improved=len(improved) / len(valid),
+    )
