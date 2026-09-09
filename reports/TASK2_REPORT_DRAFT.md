@@ -15,7 +15,7 @@
 
 | 任务要求 | 本系统的对应 | 落点 |
 |---|---|---|
-| 题集要有标准答案、可自动校验、分难度、说明来源 | 每题含 AC 参考解 + 测试用例期望输出；difficulty 双轨分层；构建过程见 `docs/IMPL_LOG.md` | 题集 `data/questions/*.jsonl` |
+| 题集要有标准答案、可自动校验、分难度、说明来源 | 每题含 AC 参考解 + 测试用例期望输出；difficulty 双轨分层（题面分值 + Hy3 多专家评审） | 题集 `data/questions/*.jsonl` |
 | 过程正确性判定、错误定位、错误归类、"答案对但过程不成立"识别 | verdict 四值；findings 带 step_id；10 类错误；SILENT_FAILURE | `DESIGN.md` §6，`reports/PROCESS_EVAL_METHOD.md` |
 | 实现手段：规则校验、分步 LLM 审查、沙盒、多视角复核 | static_check（复杂度/死循环/递归）；V1+V2 两视角；Python/C++ 沙盒；ARBITER 总仲裁 | `src/rex/` |
 | 定位准确率（答案错样本）与误报率（答案对样本） | 22 个答案错样本全量人工复核，定位命中 22/22；18 个答案对样本三层复核 | 人工抽检 40/40，见 §5 |

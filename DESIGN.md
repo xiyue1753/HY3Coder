@@ -249,7 +249,7 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 
 ## 8. SILENT_FAILURE（答案正确但过程根本缺陷）留档
 
-自然评测中 verifier 检出的 `SILENT_FAILURE` 样本（data/golden/golden_real_algorithm.jsonl）：
+自然评测中 verifier 检出的 `SILENT_FAILURE` 样本（真实评测留档）：
 **沙盒答案全对但过程/实现存在根本缺陷**——即任务书"结果正确但过程不成立"的样本。
 每条含题目源、检测时间、定位缺陷与步骤、`flaw_answer`（当时模型真实输出）与来源说明，
 供逐条核验评估器不会因"答案对"而放行根本缺陷。检出机制与判定口径见 §6；
