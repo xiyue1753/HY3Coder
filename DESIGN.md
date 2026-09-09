@@ -322,8 +322,7 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 # .env 提供 HY3_API_KEY / HY3_BASE_URL / HY3_MODEL
 
 # 评估模式（数据纯净）
-python -m src.cli run-eval --scene algorithm --sample 5        # demo
-python -m src.cli run-eval --scene algorithm --sample 100      # 放大
+python -m src.cli run-eval --scene algorithm --sample 100      # 放大（样例验证）
 
 # 自建题（AtCoder 175 题）跑评估：直接指定题集文件
 python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --resume
@@ -347,10 +346,9 @@ python -m pytest tests/
   - 公开对照：algorithm.jsonl（TACO 350 活跃 + CF 350 deprecated + 自编）
   - 自建：abc_selfbuilt.jsonl（AtCoder ABC 175 题，含参考解/用例/SPJ，按难度分层）
   - 均含标准答案/参考解、分层依据（layer_basis）
-- SILENT_FAILURE 留档 data/golden/golden_real_algorithm.jsonl（真实评测检出的"答案对但过程根本缺陷"样本，含来源说明）
+- SILENT_FAILURE 留档：真实评测检出的「答案对但过程根本缺陷」样本（本地留档，不含模型输出细节）
 - 评估结果 data/outputs/（eval/refine 严格分离，可断点续跑）
 - 分析报告 reports/（分层退化、错误分布、case 归因、修正前后对比、能力画像）
 - 方法论文档 reports/：`DIFFICULTY_SCORING_METHOD.md`（题集统一难度分层）、
   `PROCESS_EVAL_METHOD.md`（过程评估器判定）、`REACT_METHOD.md`（ReAct 自我修正闭环）
-- 人工抽检记录 data/outputs/audit_records.jsonl
-- Demo 视频脚本 reports/demo_script.md
+- 人工抽检记录 data/audit/audit_records.jsonl

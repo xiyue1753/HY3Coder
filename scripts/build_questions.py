@@ -24,13 +24,6 @@ from rex.datasets.schema import dump_questions, load_questions  # noqa: E402
 from rex.models import QuestionItem  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-DEMO_ALGO = ROOT / "data" / "questions" / "demo_algorithm.jsonl"
-
-
-def _load_demo(path: Path) -> list[QuestionItem]:
-    if path.exists():
-        return load_questions(path)
-    return []
 
 
 def _renumber(items: list[QuestionItem], prefix: str) -> None:
@@ -41,26 +34,19 @@ def _renumber(items: list[QuestionItem], prefix: str) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tiny", action="store_true", help="build a tiny offline demo set")
     args = ap.parse_args()
 
     out_dir = ROOT / "data" / "questions"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    demo_algo = _load_demo(DEMO_ALGO)
-
-    if args.tiny:
-        algo = list(demo_algo)
-    else:
-        # loader 自身按设计优雅降级（HF 不可用时返回 []），这里不再吞异常：
-        # 若真因 bug 抛错，构建应显式失败，而不是静默生成不完整题库。
-        algo: list[QuestionItem] = []
-        for load in (load_taco, load_code_contests):
-            algo += load(limit=350)
-        algo += demo_algo
-        if not algo:
-            print("[fatal] 算法题库为空：HF 数据源不可用或解析失败", file=sys.stderr)
-            sys.exit(2)
+    # loader 自身按设计优雅降级（HF 不可用时返回 []），这里不再吞异常：
+    # 若真因 bug 抛错，构建应显式失败，而不是静默生成不完整题库。
+    algo: list[QuestionItem] = []
+    for load in (load_taco, load_code_contests):
+        algo += load(limit=350)
+    if not algo:
+        print("[fatal] 算法题库为空：HF 数据源不可用或解析失败", file=sys.stderr)
+        sys.exit(2)
 
     # 算法题重新编号（A 前缀统一）——避免 id 冲突
     _renumber(algo, "A")
