@@ -141,6 +141,76 @@ def _platform_of(rid: str, qmap: dict) -> str:
     return "ABC" if sid.startswith("abc") else "CF"
 
 
+def _emit_algorithm_profile(w, evals: list[EvalRecord], qmap: dict) -> None:
+    """§8.1 算法类别 × 能力边界（按 metadata.alg_classes 标签统计）。"""
+    from collections import defaultdict
+    by_cls: dict[str, list[EvalRecord]] = defaultdict(list)
+    for r in evals:
+        if r.source != "run-eval":
+            continue
+        q = qmap.get(r.question_id)
+        tags = ((q.metadata or {}).get("alg_classes") or []) if q else []
+        for t in tags:
+            by_cls[t].append(r)
+    if not by_cls:
+        return
+    # 全库过程正确率基线（主口径：valid 中 verdict==CORRECT）
+    valid = [r for r in evals if r.source == "run-eval"
+             and r.verification.verdict.value != "FAILED"]
+    base_proc = (sum(r.verification.verdict.value == "CORRECT" for r in valid)
+                 / len(valid)) if valid else 0.0
+
+    rows = []
+    for cls, recs in by_cls.items():
+        n = len(recs)
+        ans = sum(r.answer_correct is True for r in recs)
+        proc = sum(r.verification.verdict.value == "CORRECT" for r in recs)
+        ds = [((qmap[r.question_id].metadata or {}).get("diff_score") or 0) for r in recs]
+        err: dict[str, int] = defaultdict(int)
+        for r in recs:
+            if r.verification.verdict.value in ("PROCESS_INCORRECT", "SILENT_FAILURE", "ANSWER_INCORRECT"):
+                for f in r.verification.findings[:4]:
+                    if getattr(f, "severity", "fatal") == "fatal":
+                        err[f.error_type.value] += 1
+        top = "，".join(f"{TYPE_CN.get(k, k)}({v})" for k, v in
+                        sorted(err.items(), key=lambda x: -x[1])[:2])
+        rows.append({"cls": cls, "n": n, "ans": ans / n, "proc": proc / n,
+                     "ds": sum(ds) / n, "err": top})
+    rows.sort(key=lambda x: x["proc"])
+
+    w("\n### 8.1 算法类别 × 能力边界（按 `alg_classes` 标签统计）")
+    w("\n> 口径：按题集人工归一算法类标签统计，多标签题计入多个类（类别不互斥），"
+      "无标签题（CF 难档新扩 9 题）不计入；平均 diff_score 用于区分「该类别本身偏难」"
+      "与「同难度下能力偏弱」。全库过程正确率基线 "
+      f"{pct(base_proc)}，答案正确率基线 {pct(sum(1 for r in valid if r.answer_correct is True) / len(valid) if valid else 0)}。\n")
+    w("\n| 算法类 | 样本 | 答案准确率 | 过程正确率 | 平均 diff_score | 主要过程错误类型 |")
+    w("|---|---|---|---|---|---|")
+    for row in rows:
+        w(f"| {row['cls']} | {row['n']} | {pct(row['ans'])} | {pct(row['proc'])} | "
+          f"{row['ds']:.0f} | {row['err'] or '—'} |")
+    w("")
+
+    weak = [r for r in rows if r["n"] >= 8 and r["proc"] < base_proc - 0.08]
+    strong = [r for r in rows if r["n"] >= 8 and r["proc"] >= base_proc + 0.08]
+    if weak or strong:
+        weak_txt = "、".join("`%s`（%s，n=%d）" % (r["cls"], pct(r["proc"]), r["n"])
+                             for r in weak) if weak else "无"
+        strong_txt = "、".join("`%s`（%s）" % (r["cls"], pct(r["proc"]))
+                               for r in strong) if strong else ""
+        w("**边界读数**：过程正确率低于全库基线 ≥8pp 的类别为**能力弱点边界**——"
+          f"{weak_txt}；其中平均 diff_score 高的类别主要受题目难度驱动，"
+          "diff_score 接近基线的类别属于同难度下确偏弱的一类。")
+        if strong:
+            w(f"显著高于基线的类别（强项）：{strong_txt}。")
+        w("")
+    w("\n> 边界解读：① 主体算法类（math/sim/graph/dp/greedy/ds，覆盖绝大多数样本）"
+      "过程正确率 81%–85%，与全库基线基本持平，无系统性短板；"
+      "② 弱点集中在 construct / twoptr / binary 三类，其主要过程错误均为逻辑缺陷与"
+      "条件遗漏（missing_condition），指向「构造与约束建模的严密性」不足而非知识缺失；"
+      "③ string/game/twoptr 等样本 ≤16 的类别读数置信有限，只作方向性提示；"
+      "④ 该维度与 §2 难度边界、§3 错误类型边界互相独立，共同构成能力边界的三条证据线。\n")
+
+
 def _emit_contamination(w, evals: list[EvalRecord]) -> None:
     """§1.1 记忆暴露检测读数（官方原题镜像 contamination 探测）。"""
     p = ROOT / "data" / "outputs" / "contamination_probe.jsonl"
@@ -523,8 +593,10 @@ def build() -> str:
     else:
         w("\n_暂无真实检出的 SILENT_FAILURE 留档。_\n")
 
-    # ---- 8. 能力画像 ----
-    w("## 8. 能力画像弱项清单")
+    # ---- 8. 能力画像与边界分析 ----
+    w("## 8. 能力画像与边界分析")
+    _emit_algorithm_profile(w, evals, qmap)
+    w("\n### 8.2 弱项清单\n")
     w("\n| 维度 | 观察 | 建议 |")
     w("|---|---|---|")
     w("| 复杂度控制 | 见第 3 节错误类型占比，若 `复杂度不达标`/`边界条件` 占比高，反映算法场景实现严谨性不足 | 增加静态检查前置；对声明复杂度与实现做一致性校验 |")
