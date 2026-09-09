@@ -67,7 +67,7 @@ BOUNDARY_INPUTS: dict[str, list[str]] = {
     ],
     # 数论：N=1 / 大 N
     "abc290_d": [
-        "2\n1 1 1\n1 2 1\n5 8 5",
+        "2\n1 1 1\n2 2 1\n5 5 3",
         "1\n1000000000 999999937 1",
     ],
     # 贪心区间：全重叠 / 全分离 / D=1
@@ -88,7 +88,7 @@ BOUNDARY_INPUTS: dict[str, list[str]] = {
     ],
     # BFS：直接可达 / 不可达 / a=1 边界
     "abc235_d": [
-        "2 1",
+        "2 2",
         "3 3",
         "2 999999",
     ],
@@ -312,7 +312,7 @@ BOUNDARY_INPUTS: dict[str, list[str]] = {
     # 210_c Colorful Candies: 全同色 / 全不同
     "abc210_c": ["3 1\n1 1 1", "5 5\n1 2 3 4 5"],
     # 211_c chokudai: 最小串 / 无子序列
-    "abc211_c": ["c", "chokudai", "cccccccc"],
+    "abc211_c": ["chokudaic", "chokudai", "cccccccc"],
     # 214_c Distribution: 最小 / 全同速率
     "abc214_c": ["2\n1 1\n1 1", "1\n5\n7", "3\n2 2 2\n3 3 3"],
     # 220_d FG operation: 最小 / 全同
@@ -341,7 +341,7 @@ BOUNDARY_INPUTS: dict[str, list[str]] = {
     # 336_c Even Digits: 最小 / 进位边界
     "abc336_c": ["1", "5", "1000000000000"],
     # 342_c Many Replacement: 无替换 / 单替换
-    "abc342_c": ["1\na\n0", "2\nab\n1\nb a"],
+    "abc342_c": ["1\na\n1\na a", "2\nab\n1\nb a"],
     # 343_c 343: 单值 / 边界
     "abc343_c": ["1", "8", "1000000000000000000"],
     # 349_c Airport Code: 子序列匹配 / 含X规则 / 不匹配
@@ -349,11 +349,11 @@ BOUNDARY_INPUTS: dict[str, list[str]] = {
     # 351_c Merge the balls: 单球 / 全等
     "abc351_c": ["1\n1", "3\n2 2 2", "5\n1 1 1 1 1"],
     # 358_c Popcorn: 单选覆盖 / 全选
-    "abc358_c": ["1 1\no", "2 1\no\nx"],
+    "abc358_c": ["1 1\no", "2 2\noo\nxo"],
     # 360_c Move It: 单盒 / 已就位
-    "abc360_c": ["1\n1\n1", "2\n1 2\n0 0"],
+    "abc360_c": ["1\n1\n1", "2\n1 2\n1 1"],
     # 340_c Divide and Divide: 最小
-    "abc340_c": ["1", "2", "4"],
+    "abc340_c": ["3", "2", "4"],
     # 340_d Super Takahashi Bros: 最小链
     "abc340_d": ["2\n1 2 1", "3\n1 2 2\n2 3 1"],
     # 343_d Diversity of Scores: 单次 / 回零?
@@ -365,7 +365,7 @@ BOUNDARY_INPUTS: dict[str, list[str]] = {
     # 346_c Sigma: 单元素
     "abc346_c": ["1 1\n5", "2 1\n1 2"],
     # 349_d Divide Interval: 单点 / 最小
-    "abc349_d": ["1 1", "1 2", "2 3"],
+    "abc349_d": ["0 1", "1 2", "2 3"],
     # 350_d New Friends: 空图 / 单边
     "abc350_d": ["2 0", "3 1\n1 2"],
     # 336_e Digit Sum Divisible: 最小 / 边界
@@ -431,15 +431,15 @@ BOUNDARY_INPUTS: dict[str, list[str]] = {
     # 378_c Repeating: 全同/最小
     "abc378_c": ["3\n1 1 1", "1\n5", "4\n1 2 1 1"],
     # 380_c Move Segment: 最小
-    "abc380_c": ["3 1\n110", "4 2\n0110"],
+    "abc380_c": ["5 2\n10101", "6 2\n011001"],
     # 382_c Kaiten Sushi: 单调
     "abc382_c": ["2 1\n1 2\n1", "3 2\n3 2 1\n2 1"],
     # 384_c Perfect Standings: 单题
-    "abc384_c": ["1 2 3 4 5", "10 20 30 40 50"],
+    "abc384_c": ["100 110 120 130 140", "200 300 400 500 600"],
     # 388_c Kagamimochi: 全等
     "abc388_c": ["2\n1 1", "3\n1 1 1"],
     # 392_c Bib: 单选手
-    "abc392_c": ["1\n1\n1", "2\n1 2\n2 1"],
+    "abc392_c": ["2\n2 1\n1 2", "2\n1 2\n2 1"],
     # 389_c Snake Queue: 小队列（type2/3 需队非空）
     "abc389_c": ["3\n1 5\n3 1\n3 1", "4\n1 5\n1 3\n2\n3 1"],
     # 377_d Many Segments 2: 单区间 / 全覆盖
