@@ -29,6 +29,12 @@ data/cache/
 # 从 HF 数据源重建，不入公开仓库；完整数据保存在本地 dataset-full 分支）
 data/questions/algorithm.jsonl
 
+# 临时展示/归档（一次性展示页与中间 json，不入库）
+/archive/
+
+# 展示类 HTML 报告（由 scripts/make_*_html.py 可再生，不入库）
+/reports/*.html
+
 # OS / IDE
 .DS_Store
 Thumbs.db
