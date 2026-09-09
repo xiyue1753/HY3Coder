@@ -108,6 +108,10 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
       f"{q3} 题沙盒已修对但评估器未判收敛，是定位/接受滞后的另一侧证据。"
       "该节同时是过程评估定位质量的下游观察面——修正能否收敛、收敛是否对应真值修正，"
       "与第 6 节定位准确率相互印证。\n")
+    w("\n![fig4](figures/fig4_refine_outcome.png)")
+    w("\n**Fig. 3** 34 个答案错样本经 ReAct 修正后的四象限分布：柱顶为样本数，"
+      "色块含义见图例。真收敛（收敛且最终全对）21 题；文本收敛但 hidden 仍错与修对但"
+      "未获评估器认可各 5 题，构成文本判定与沙盒真值的两条边界。\n")
 
     w("\n**过程性修正记录（2026-09-09）**\n")
     w("- **编译错误反馈管道缺陷与修复**：首轮实现把运行/编译错误截断到 200 字符，"
@@ -212,6 +216,10 @@ def _emit_algorithm_profile(w, evals: list[EvalRecord], qmap: dict) -> None:
       "条件遗漏（missing_condition），指向「构造与约束建模的严密性」不足而非知识缺失；"
       "③ string/game/twoptr 等样本 ≤16 的类别读数置信有限，只作方向性提示；"
       "④ 该维度与 §2 难度边界、§3 错误类型边界互相独立，共同构成能力边界的三条证据线。\n")
+    w("\n![fig2](figures/fig2_alg_classes.png)")
+    w("\n**Fig. 4** 13 个算法类别的答案准确率（蓝色）与过程正确率（橙色），按过程正确率升序；"
+      "条形末端为百分数。construct / twoptr / binary 低于全库基线 ≥8pp，是算法类别维度的"
+      "能力边界。\n")
 
 
 def _emit_contamination(w, evals: list[EvalRecord]) -> None:
@@ -476,6 +484,10 @@ def build() -> str:
               f"（[60,100) 共 {hi_n} 题），子样本太小——temp0.9 与 temperature=0 两次"
               "求解在该子档答案分别为 3/5 与 5/5，读数被小样本支配，故合并进"
               "「难~极高难」一行解读，不作单独能力结论；临界点结论限定在入门~中等区间。")
+        w("\n![fig1](figures/fig1_diff_tiers.png)")
+        w("\n**Fig. 1** 统一难度分档下答案准确率（实线）与过程正确率（虚线）随 diff_score 的退化。"
+          "高难段 [60,100) 含 35 题（80+ 的 5 题并入）；过程正确率自中等档（73.0%）起显著跌落，"
+          "是高难能力边界的第一条证据线。\n")
         w("")
     else:
         w("\n_暂无 diff_score（先运行 score_difficulty.py）。_\n")
@@ -487,6 +499,9 @@ def build() -> str:
     total_inc = sum(m.error_type_dist.values()) or 1
     for k, v in sorted(m.error_type_dist.items(), key=lambda x: -x[1]):
         w(f"| {TYPE_CN.get(k, k)} | {v} | {v / total_inc * 100:.1f}% |")
+    w("\n![fig3](figures/fig3_error_types.png)")
+    w("\n**Fig. 2** 过程错误类型分布（占全部已报告错误的比例，条形末端给出条数与占比）。"
+      "逻辑缺陷与实现层错误（other/复杂度）合计过半，指向实现严谨性与建模正确性。\n")
     w("")
 
     # ---- 4. 典型 case 归因 ----

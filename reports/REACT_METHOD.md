@@ -69,4 +69,4 @@ python -m src.cli run-refine --questions abc_selfbuilt.jsonl --sample full \
 python scripts/make_report.py --out reports/REPORT.md
 ```
 
-一句话回顾：评估器定位出 step_id 加错误类型加证据后，不经人手直接映射成修订指令回流求解端，只处理 fatal、同步去重、无定位时给整体指令，每轮全量重写加独立重验证，CORRECT 即停、最多三轮；用修正前后的过程正确率对比证明检测被下游利用，评测与修正数据严格隔离，成本按调用次数透明可查。
+小结：评估器定位出 step_id、错误类型与证据后直接映射为修订指令回流求解端，只处理 fatal、同一步去重、无定位时给整体指令；每轮全量重写并独立重验证，CORRECT 即停、最多三轮。修正前后的过程正确率对比用于判断检测是否被求解侧利用；评测与修正数据严格隔离，成本按调用次数记录。
