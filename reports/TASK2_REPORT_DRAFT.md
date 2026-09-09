@@ -44,7 +44,7 @@
 1. **自动一致性**：每条 hidden 用当前参考解重跑并与期望比对（SPECIAL 题经 checker 验证），防止参考解改写后期望过期；
 2. **逐题约束核对**：对照题面 Constraints 逐条检查 hidden 输入的合法性（数值范围、互斥条件、结构约束）。
 
-全量复核 647 条 hidden 后修复 17 条违反题面约束的用例（详见 `reports/REPORT.md` 附录 B.4.4 与 `reports/PROCESS_EVAL_METHOD.md` §4.4），生成脚本的 BOUNDARY 清单已同步修正。修复实证表明此类坏用例确实会"错杀"正确解（A1124/A1025/A1155 三题模型在合法输入域全对，原判定 False 完全由非法 hidden 造成），修复后答案判定恢复正确。
+全量复核 647 条 hidden 后修复 17 条违反题面约束的用例（详见 `reports/REPORT.md` 附录 B.4.4 与 `reports/PROCESS_EVAL_METHOD.md` §4.4），生成脚本的 BOUNDARY 清单已同步修正。修复实证表明此类坏用例确实会"错杀"正确解——回验确认 A1124/A1155/C2011 三题模型在合法输入域全对、原答案判定 False 完全由非法 hidden 造成，修复后恢复 True；其余清除坏用例的题目判定前后一致，唯一例外 A1016（模型代码编译失败）为真实实现错误、与 hidden 无关。
 
 ### 3.3 难度分层
 
