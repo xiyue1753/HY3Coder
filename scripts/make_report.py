@@ -141,6 +141,60 @@ def _platform_of(rid: str, qmap: dict) -> str:
     return "ABC" if sid.startswith("abc") else "CF"
 
 
+def _emit_contamination(w, evals: list[EvalRecord]) -> None:
+    """§1.1 记忆暴露检测读数（官方原题镜像 contamination 探测）。"""
+    p = ROOT / "data" / "outputs" / "contamination_probe.jsonl"
+    if not p.exists():
+        return
+    rows = [json.loads(l) for l in p.open(encoding="utf-8") if l.strip()]
+    rows = [r for r in rows if not r.get("error")]
+    if not rows:
+        return
+    n = len(rows)
+    seen = sum(1 for r in rows if r.get("p1_verdict") == "seen")
+    hits = [r for r in rows if (r.get("match") or {}).get("level") == "hit"]
+    ev_by = {r.question_id: r for r in evals}
+
+    def _ok(r):
+        rec = ev_by.get(r["question_id"])
+        return rec.answer_correct is True if rec else None
+
+    hit_ok = sum(1 for r in hits if _ok(r) is True)
+    non = [r for r in rows if (r.get("match") or {}).get("level") != "hit"]
+    non_ok = sum(1 for r in non if _ok(r) is True)
+    lo, hi = wilson_interval(len(hits), n)
+    basic = sum(1 for r in hits if r.get("difficulty") == "basic")
+    mid = sum(1 for r in hits if r.get("difficulty") == "medium")
+    hit_ids = ", ".join(f"`{r['question_id']}`（{r['source_id']}）" for r in sorted(hits, key=lambda x: x['question_id']))
+
+    w("\n### 1.1 记忆暴露检测（官方原题镜像 contamination 探测，2026-09-09）")
+    w("\n> 题集为官方原题镜像，成绩是「能力＋记忆」的上界。本文用行为探测估计记忆暴露："
+      "分层抽样 30 题（ABC/CF × basic/medium/hard 每层 5，seed 42），每题两个 probe——"
+      "出处召回（是否记得竞赛/题号）＋解法盲答；判定见 `reports/CONTAMINATION_METHOD.md`，"
+      "原始数据 `data/outputs/contamination_probe.jsonl`。\n")
+    w("\n| 指标 | 数值 |")
+    w("|---|---|")
+    w(f"| 探测样本 | {n} |")
+    w(f"| 自称见过（P1=seen） | {seen}（{pct(seen / n)}）——迎合偏差高，不作暴露证据 |")
+    w(f"| 出处精确命中（强证据） | {len(hits)}（{pct(len(hits) / n)}，95% CI [{lo * 100:.0f}%, {hi * 100:.0f}%]） |")
+    w(f"| 命中难度分布 | basic {basic} / medium {mid} / hard 0 |")
+    if hits:
+        w(f"| 命中样本 | {hit_ids} |")
+    w("")
+    w("**与正式评测交叉（记忆红利近似）**：\n")
+    w("\n| 组 | 样本 | t0 答案正确 |")
+    w("|---|---|---|")
+    w(f"| 出处命中组 | {len(hits)} | {hit_ok}（{pct(hit_ok / len(hits)) if hits else '—'}） |")
+    w(f"| 未命中组 | {len(non)} | {non_ok}（{pct(non_ok / len(non)) if non else '—'}） |")
+    w("")
+    w("\n> 读数口径：① 模型对官方原题普遍自称熟悉（29/30），但精确出处记忆仅出现在"
+      "**入门~基础经典题**（Theatre Square、71A、719A、1730A、ABC300C 等），中等以上难度"
+      "未观察到背题式出处记忆；② 出处命中组与未命中组在 t0 评测的答案正确率无显著差异，"
+      "未观察到记忆显著抬高成绩；③ 反例 `C2149` 记得出处（568A）但正式评测仍答错——"
+      "记忆存在不等于解题能力；④ 局限：无法实证训练语料、行为探测有假阴假阳、命中集中于"
+      "超经典题所以暴露的“危险度”低。方法全文见 `reports/CONTAMINATION_METHOD.md`。\n")
+
+
 # 语义档位：diff_score 0-100 绝对刻度（与打分 prompt 的语义锚一致）。
 # 每档是固定分数区间（非样本均分），保证跨数据集可比、分数语义不丢失。
 SEMANTIC_TIERS = [
@@ -291,6 +345,8 @@ def build() -> str:
       "若需收紧指标，可对全量做多次求解取均值——本报告作为单次基线，"
       "Wilson 区间与抽样稳定性已给出不确定性上界。\n")
     w("")
+
+    _emit_contamination(w, evals)
 
     # ---- 2. 分层退化（平台难度轴）----
     w("## 2. 分层退化分析")
