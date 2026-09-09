@@ -1,0 +1,17 @@
+[
+ {
+  "input": "5 3\n3 R 5 B\n5 R 3 B\n4 R 2 B",
+  "output": "1 2",
+  "hidden": false
+ },
+ {
+  "input": "7 0",
+  "output": "0 7",
+  "hidden": false
+ },
+ {
+  "input": "7 6\n5 R 3 R\n7 R 4 R\n4 B 1 R\n2 R 3 B\n2 B 5 B\n1 B 7 B",
+  "output": "2 1",
+  "hidden": false
+ }
+]

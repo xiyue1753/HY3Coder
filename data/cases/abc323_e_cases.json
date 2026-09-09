@@ -1,0 +1,17 @@
+[
+ {
+  "input": "3 6\n3 5 6",
+  "output": "369720131",
+  "hidden": false
+ },
+ {
+  "input": "5 0\n1 2 1 2 1",
+  "output": "598946612",
+  "hidden": false
+ },
+ {
+  "input": "5 10000\n1 2 3 4 5",
+  "output": "586965467",
+  "hidden": false
+ }
+]

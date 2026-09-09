@@ -1,0 +1,17 @@
+[
+ {
+  "input": "adbe\nbcbc",
+  "output": "3\nacbe\nacbc\nbcbc",
+  "hidden": false
+ },
+ {
+  "input": "abcde\nabcde",
+  "output": "0",
+  "hidden": false
+ },
+ {
+  "input": "afwgebrw\noarbrenq",
+  "output": "8\naawgebrw\naargebrw\naarbebrw\naarbebnw\naarbebnq\naarbeenq\naarbrenq\noarbrenq",
+  "hidden": false
+ }
+]

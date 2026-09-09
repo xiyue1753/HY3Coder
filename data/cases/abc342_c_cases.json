@@ -1,0 +1,17 @@
+[
+ {
+  "input": "7\natcoder\n4\nr a\nt e\nd v\na r",
+  "output": "recover",
+  "hidden": false
+ },
+ {
+  "input": "3\nabc\n4\na a\ns k\nn n\nz b",
+  "output": "abc",
+  "hidden": false
+ },
+ {
+  "input": "34\nsupercalifragilisticexpialidocious\n20\ng c\nl g\ng m\nc m\nr o\ns e\na a\no f\nf s\ne t\nt l\nd v\np k\nv h\nx i\nh n\nn j\ni r\ns i\nu a",
+  "output": "laklimamriiamrmrllrmlrkramrjimrial",
+  "hidden": false
+ }
+]

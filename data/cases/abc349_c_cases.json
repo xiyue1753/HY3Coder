@@ -1,0 +1,17 @@
+[
+ {
+  "input": "narita\nNRT",
+  "output": "Yes",
+  "hidden": false
+ },
+ {
+  "input": "losangeles\nLAX",
+  "output": "Yes",
+  "hidden": false
+ },
+ {
+  "input": "snuke\nRNG",
+  "output": "No",
+  "hidden": false
+ }
+]

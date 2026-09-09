@@ -1,0 +1,5 @@
+[
+  {"input": "5\n8 3 7 2 5", "output": "13", "hidden": false},
+  {"input": "2\n1000 1", "output": "1000", "hidden": false},
+  {"input": "9\n3 14 15 9 26 5 35 89 79", "output": "138", "hidden": false}
+]

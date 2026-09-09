@@ -1,0 +1,8 @@
+[
+  {"input": "5 4 1\n1 2\n2 3\n3 4\n3 5", "output": "2", "hidden": false},
+  {"input": "5 4 5\n1 2\n1 3\n1 4\n1 5", "output": "1", "hidden": false},
+  {"input": "2 1 2\n1 2", "output": "0", "hidden": false},
+  {"input": "9 6 1\n1 2\n2 3\n3 4\n4 5\n5 6\n4 7\n7 8\n8 9", "output": "5", "hidden": false},
+  {"input": "3 1 2\n1 2\n2 3", "output": "0", "hidden": true},
+  {"input": "4 1 2\n1 2\n2 3\n3 4", "output": "0", "hidden": true}
+]

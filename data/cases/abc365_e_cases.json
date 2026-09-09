@@ -1,0 +1,12 @@
+[
+ {
+  "input": "3\n1 3 2",
+  "output": "3",
+  "hidden": false
+ },
+ {
+  "input": "7\n2 5 6 5 2 1 7",
+  "output": "83",
+  "hidden": false
+ }
+]

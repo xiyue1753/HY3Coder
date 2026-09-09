@@ -1,0 +1,17 @@
+[
+ {
+  "input": "abcde\n3\n3 ab abc abcd\n4 f c cd bcde\n2 e de",
+  "output": "2",
+  "hidden": false
+ },
+ {
+  "input": "abcde\n3\n2 ab abc\n3 f c bcde\n1 e",
+  "output": "-1",
+  "hidden": false
+ },
+ {
+  "input": "aaabbbbcccc\n6\n2 aa aaa\n2 dd ddd\n2 ab aabb\n4 bbaa bbbc bbb bbcc\n2 cc bcc\n3 ccc cccc ccccc",
+  "output": "4",
+  "hidden": false
+ }
+]

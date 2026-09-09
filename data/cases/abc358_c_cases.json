@@ -1,0 +1,17 @@
+[
+ {
+  "input": "3 5\noooxx\nxooox\nxxooo",
+  "output": "2",
+  "hidden": false
+ },
+ {
+  "input": "3 2\noo\nox\nxo",
+  "output": "1",
+  "hidden": false
+ },
+ {
+  "input": "8 6\nxxoxxo\nxxoxxx\nxoxxxx\nxxxoxx\nxxoooo\nxxxxox\nxoxxox\noxoxxo",
+  "output": "3",
+  "hidden": false
+ }
+]

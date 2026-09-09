@@ -1,0 +1,27 @@
+[
+ {
+  "input": "3 -1 1\n2 1 3",
+  "output": "Yes",
+  "hidden": false
+ },
+ {
+  "input": "5 2 0\n2 2 2 2 2",
+  "output": "Yes",
+  "hidden": false
+ },
+ {
+  "input": "4 5 5\n1 2 3 4",
+  "output": "No",
+  "hidden": false
+ },
+ {
+  "input": "3 2 7\n2 7 4",
+  "output": "No",
+  "hidden": false
+ },
+ {
+  "input": "10 8 -7\n6 10 4 1 5 9 8 6 5 1",
+  "output": "Yes",
+  "hidden": false
+ }
+]

@@ -1,0 +1,12 @@
+[
+ {
+  "input": "abc",
+  "output": "3",
+  "hidden": false
+ },
+ {
+  "input": "aaaaa",
+  "output": "1",
+  "hidden": false
+ }
+]

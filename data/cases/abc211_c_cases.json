@@ -1,0 +1,17 @@
+[
+ {
+  "input": "chchokudai",
+  "output": "3",
+  "hidden": false
+ },
+ {
+  "input": "atcoderrr",
+  "output": "0",
+  "hidden": false
+ },
+ {
+  "input": "chokudaichokudaichokudai",
+  "output": "45",
+  "hidden": false
+ }
+]

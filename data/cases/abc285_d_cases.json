@@ -1,0 +1,5 @@
+[
+  {"input": "2\nb m\nm d", "output": "Yes", "hidden": false},
+  {"input": "3\na b\nb c\nc a", "output": "No", "hidden": false},
+  {"input": "5\naaa bbb\nyyy zzz\nccc ddd\nxxx yyy\nbbb ccc", "output": "Yes", "hidden": false}
+]

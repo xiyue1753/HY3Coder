@@ -1,0 +1,17 @@
+[
+ {
+  "input": "400 500 600 700 800",
+  "output": "ABCDE\nBCDE\nACDE\nABDE\nABCE\nABCD\nCDE\nBDE\nADE\nBCE\nACE\nBCD\nABE\nACD\nABD\nABC\nDE\nCE\nBE\nCD\nAE\nBD\nAD\nBC\nAC\nAB\nE\nD\nC\nB\nA",
+  "hidden": false
+ },
+ {
+  "input": "800 800 900 900 1000",
+  "output": "ABCDE\nACDE\nBCDE\nABCE\nABDE\nABCD\nCDE\nACE\nADE\nBCE\nBDE\nABE\nACD\nBCD\nABC\nABD\nCE\nDE\nAE\nBE\nCD\nAC\nAD\nBC\nBD\nAB\nE\nC\nD\nA\nB",
+  "hidden": false
+ },
+ {
+  "input": "128 256 512 1024 2048",
+  "output": "ABCDE\nBCDE\nACDE\nCDE\nABDE\nBDE\nADE\nDE\nABCE\nBCE\nACE\nCE\nABE\nBE\nAE\nE\nABCD\nBCD\nACD\nCD\nABD\nBD\nAD\nD\nABC\nBC\nAC\nC\nAB\nB\nA",
+  "hidden": false
+ }
+]

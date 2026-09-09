@@ -1,0 +1,17 @@
+[
+ {
+  "input": "5 2\n3 1 5 4 9",
+  "output": "2",
+  "hidden": false
+ },
+ {
+  "input": "6 5\n1 1 1 1 1 1",
+  "output": "0",
+  "hidden": false
+ },
+ {
+  "input": "8 3\n31 43 26 6 18 36 22 13",
+  "output": "18",
+  "hidden": false
+ }
+]

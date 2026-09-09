@@ -1,0 +1,12 @@
+[
+ {
+  "input": "5 7\n....Sv.\n.>.....\n.......\n>..<.#<\n^G....>",
+  "output": "15",
+  "hidden": false
+ },
+ {
+  "input": "4 3\nS..\n.<.\n.>.\n..G",
+  "output": "-1",
+  "hidden": false
+ }
+]

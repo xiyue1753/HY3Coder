@@ -1,0 +1,17 @@
+[
+ {
+  "input": "ooo???xxxx",
+  "output": "108",
+  "hidden": false
+ },
+ {
+  "input": "o?oo?oxoxo",
+  "output": "0",
+  "hidden": false
+ },
+ {
+  "input": "xxxxx?xxxo",
+  "output": "15",
+  "hidden": false
+ }
+]

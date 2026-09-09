@@ -1,0 +1,17 @@
+[
+ {
+  "input": "catredo",
+  "output": "8",
+  "hidden": false
+ },
+ {
+  "input": "atcoder",
+  "output": "0",
+  "hidden": false
+ },
+ {
+  "input": "redocta",
+  "output": "21",
+  "hidden": false
+ }
+]

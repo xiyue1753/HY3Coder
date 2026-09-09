@@ -1,0 +1,17 @@
+[
+ {
+  "input": "3 3",
+  "output": "6",
+  "hidden": false
+ },
+ {
+  "input": "4 2",
+  "output": "2",
+  "hidden": false
+ },
+ {
+  "input": "987654 456789",
+  "output": "778634319",
+  "hidden": false
+ }
+]

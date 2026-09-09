@@ -1,0 +1,17 @@
+[
+ {
+  "input": "4 3\n1 2\n2 3\n1 4",
+  "output": "3",
+  "hidden": false
+ },
+ {
+  "input": "3 0",
+  "output": "0",
+  "hidden": false
+ },
+ {
+  "input": "10 8\n1 2\n2 3\n3 4\n4 5\n6 7\n7 8\n8 9\n9 10",
+  "output": "12",
+  "hidden": false
+ }
+]

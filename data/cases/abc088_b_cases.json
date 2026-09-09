@@ -1,0 +1,8 @@
+[
+  {"input": "2\n3 1", "output": "2", "hidden": false},
+  {"input": "3\n2 7 4", "output": "5", "hidden": false},
+  {"input": "4\n20 18 2 18", "output": "18", "hidden": false},
+  {"input": "1\n5", "output": "5", "hidden": true},
+  {"input": "5\n1 2 3 4 5", "output": "3", "hidden": true},
+  {"input": "6\n100 99 99 98 98 1", "output": "99", "hidden": true}
+]
