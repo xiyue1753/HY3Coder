@@ -9,8 +9,8 @@ make_report / 前端提示 / ingest 脚本）一律通过本模块的访问器�
     - 以**数据集 dataset** 为主维度：每个数据集是一道题池（题集文件 +
       评测输出文件 + refine 输出文件）。当前活跃数据集：abc_selfbuilt
       （AtCoder ABC 自建 175 题）、cf_selfbuilt（Codeforces 自建，抓取中）。
-    - 非数据集类 artifact 单独注册：golden（合成 + 真实）、audit、
-      demo 题集、cases 用例目录、交互评测输出。
+    - 非数据集类 artifact 单独注册：golden（真实）、audit、
+      cases 用例目录、交互评测输出。
 
 历史命名（无需再理解）：
     - eval_selfbuilt_all.jsonl  = abc_selfbuilt 数据集的正式评测输出
@@ -63,13 +63,15 @@ class Dataset:
     note: str = ""
 
 
+# 正式基线 = temperature=0（temperature=0.9 时代的旧主文件 eval_*_all.jsonl
+# 已归档至 data/outputs/_archived/，不再注册；REX_EVAL_SUFFIX 仅作读取侧兼容）。
 DATASETS: tuple[Dataset, ...] = (
     Dataset(
         key="abc_selfbuilt",
         label="ABC 自建（公开集 175 题）",
         enabled=True,
         questions="abc_selfbuilt.jsonl",
-        evals="eval_selfbuilt_all.jsonl",      # 正式评测主数据源（run-eval）
+        evals="eval_selfbuilt_all_t0.jsonl",   # 正式评测主数据源（temperature=0 全量重跑）
         refine="refine_selfbuilt_all.jsonl",
         note="AtCoder ABC 公开竞赛题自建转化，含题面/参考解/测试用例/分层依据。",
     ),
@@ -78,19 +80,9 @@ DATASETS: tuple[Dataset, ...] = (
         label="Codeforces 自建（175 题）",
         enabled=True,
         questions="cf_selfbuilt.jsonl",
-        evals="eval_cf_all.jsonl",             # 正式评测输出（run-eval --questions cf_selfbuilt）
+        evals="eval_cf_all_t0.jsonl",          # 正式评测输出（temperature=0 全量重跑）
         refine=None,
         note="Codeforces 公开题自建转化，含题面/参考解/测试用例/分层依据与 SPJ checker。",
-    ),
-    # demo：非正式数据集，仅供交互演示/示例，不进指标统计
-    Dataset(
-        key="demo",
-        label="Demo 演示题",
-        enabled=False,
-        questions="demo_algorithm.jsonl",
-        evals=None,
-        refine=None,
-        note="演示样例，不参与正式评测指标。",
     ),
 )
 
@@ -159,10 +151,8 @@ def questions_path(root: str | Path, ds: Dataset) -> Path:
 
 
 def evals_path(root: str | Path, ds: Dataset) -> Path | None:
-    """评测输出文件路径。环境变量 REX_EVAL_SUFFIX 可为读取侧追加文件名后缀
-    （如 _t0），用于 temperature=0 全量重跑的独立文件接入：生成侧用
-    ``--out eval_selfbuilt_all_t0.jsonl`` 等，读取侧 export REX_EVAL_SUFFIX=_t0
-    后 make_report/audit/仪表盘统一读重跑结果；不设时读默认注册文件。"""
+    """评测输出文件路径。注册文件即正式基线（temperature=0 的 eval_*_t0.jsonl）；
+    环境变量 REX_EVAL_SUFFIX 可追加额外后缀（旧版本兼容，正常流程不设置）。"""
     if not ds.evals:
         return None
     name = ds.evals
