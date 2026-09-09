@@ -1,6 +1,6 @@
 # 算法评测集的统一难度分层：做法与验证
 
-> 本文整理难度分层的思路和结果，面向"评测题集"章节。数据日期 2026-09-06，涉及 `abc_selfbuilt.jsonl`（175 题）与 `cf_selfbuilt.jsonl`（后续扩至 184 题）。执行脚本 `scripts/score_difficulty.py` / `analyze_diff_scores.py` / `apply_diff_score.py`。
+本文整理难度分层的思路和结果，面向"评测题集"章节。数据日期 2026-09-06，涉及 `abc_selfbuilt.jsonl`（175 题）与 `cf_selfbuilt.jsonl`（后续扩至 184 题）。执行脚本 `scripts/score_difficulty.py` / `analyze_diff_scores.py` / `apply_diff_score.py`。
 
 ## 1. 为什么需要统一难度分层
 

@@ -1,6 +1,6 @@
 # 过程评估器：做法、判定方法与验证
 
-> 本文整理过程评估器怎么搭、为什么这样搭、以及怎么验证它可靠，面向"过程评估设计"和"过程评估器有效性验证"两章。数据日期 2026-09-08；判定版本为 severity 语义（fatal/minor + 重建测试），模型 Hy3，相关代码在 `src/rex/verifier/`、`src/rex/executor/static_check.py`。姊妹篇：`reports/DIFFICULTY_SCORING_METHOD.md`（题集难度分层）。
+本文整理过程评估器怎么搭、为什么这样搭、以及怎么验证它可靠，面向"过程评估设计"和"过程评估器有效性验证"两章。数据日期 2026-09-08；判定版本为 severity 语义（fatal/minor + 重建测试），模型 Hy3，相关代码在 `src/rex/verifier/`、`src/rex/executor/static_check.py`。姊妹篇：`reports/DIFFICULTY_SCORING_METHOD.md`（题集难度分层）。
 
 ## 1. 要回答的问题
 

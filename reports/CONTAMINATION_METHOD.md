@@ -1,8 +1,8 @@
 # 数据集记忆暴露（Contamination）检测方案
 
-> 数据日期 2026-09-09。本文说明如何估计"官方原题镜像在求解模型训练语料中的暴露程度"。
-> 相关代码 `scripts/run_contamination_probe.py`，方法定稿前先做小批量 pilot 验证探测协议，
-> 再对全量样本执行。姊妹篇：`DIFFICULTY_SCORING_METHOD.md`、`PROCESS_EVAL_METHOD.md`。
+数据日期 2026-09-09。本文说明如何估计"官方原题镜像在求解模型训练语料中的暴露程度"。
+相关代码 `scripts/run_contamination_probe.py`，方法定稿前先做小批量 pilot 验证探测协议，
+再对全量样本执行。姊妹篇：`DIFFICULTY_SCORING_METHOD.md`、`PROCESS_EVAL_METHOD.md`。
 
 ## 1. 为什么做、做出来是什么
 

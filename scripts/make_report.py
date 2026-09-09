@@ -50,19 +50,19 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
     q4 = n - q1 - q2 - q3
 
     w("\n### 5.1 针对答案错样本的 ReAct 修正（真实度补偿，2026-09-09）")
-    w("\n> 对象：temperature=0 正式评测中 `answer_correct=False` 的全部题（34 题）。"
-      "与纯文本 refine 不同，每轮反馈 = verifier 审查文本（findings→修订指令，仅 fatal 驱动）"
-      "＋**非隐藏样例沙盒执行结果**（失败用例的输入/期望输出/实际输出），作为客观观察补偿"
-      "refine 无沙盒的真实度；重验证以 `execution_feedback` 喂给双视角与 ARBITER"
-      "（公开样例失败时不得判 CORRECT）。终局以**全部用例（含 hidden）**沙盒复核答案真值。"
-      "记录与复现：`data/outputs/refine_wrong_t0.jsonl`、`scripts/run_refine_wrong_t0.py`。\n")
+    w("\n测试对象是 temperature=0 正式评测中 `answer_correct=False` 的全部 34 题。"
+      "与纯文本 refine 相比，每轮反馈除 verifier 审查文本（findings→修订指令，仅 fatal 驱动）"
+      "外，还附上非隐藏样例的沙盒执行结果（失败用例的输入、期望输出与实际输出），"
+      "作为客观观察；重验证时通过 `execution_feedback` 喂给双视角与 ARBITER"
+      "（公开样例失败时不得判 CORRECT）。终局用全部用例（含 hidden）沙盒复核答案真值，"
+      "记录见 `data/outputs/refine_wrong_t0.jsonl`，脚本 `scripts/run_refine_wrong_t0.py`。\n")
     w("\n| 指标 | 数值 |")
     w("|---|---|")
     w(f"| 修正样本数（全部答案错） | {n} |")
     w(f"| 文本收敛（verdict → CORRECT） | {conv}（{pct(conv / n)}） |")
     w(f"| 最终答案修对（全量含 hidden 沙盒） | {ans_ok}（{pct(ans_ok / n)}） |")
     w("")
-    w("**文本收敛 × 沙盒真值四象限**（真收敛 / 边界样本的分界线）：\n")
+    w("\n文本收敛与沙盒真值交叉：两者一致为完全成功，其余三类是边界样本。\n")
     w("\n| | 最终答案修对 | 最终仍错 |")
     w("|---|---|---|")
     w(f"| 文本收敛 | {q1}（真收敛） | {q2}（假收敛：hidden 缺陷仍在） |")
@@ -72,8 +72,8 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
     plat = defaultdict(list)
     for r in done:
         plat["ABC" if r.get("question_id", "").startswith("A") else "CF"].append(r)
-    w("**按平台**：\n")
-    w("\n| 子集 | 样本 | 文本收敛 | 最终修对 |")
+    w("\n按平台（多标签题不重复计入）：\n")
+    w("| 子集 | 样本 | 文本收敛 | 最终修对 |")
     w("|---|---|---|---|")
     for name in ("ABC", "CF"):
         rows = plat[name]
@@ -86,8 +86,8 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
 
     tiers = ["basic", "medium", "hard"]
     diff = {t: [r for r in done if r.get("difficulty") == t] for t in tiers}
-    w("**按难度**：\n")
-    w("\n| 难度 | 样本 | 文本收敛 | 最终修对 |")
+    w("\n按难度：\n")
+    w("| 难度 | 样本 | 文本收敛 | 最终修对 |")
     w("|---|---|---|---|")
     for t in tiers:
         rows = diff[t]
@@ -101,26 +101,25 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
     rc = defaultdict(int)
     for r in done:
         rc[r.get("rounds_used")] += 1
-    w("**修正轮次分布**：" + "，".join(f"{k} 轮 {v} 题" for k, v in sorted(rc.items())) + "\n")
+    w("\n修正轮次分布：" + "，".join(f"{k} 轮 {v} 题" for k, v in sorted(rc.items())) + "\n")
 
-    w("\n> 读数口径：文本收敛与沙盒真值一致才是完全成功；"
-      f"{q2} 题文本收敛但 hidden 仍错（假收敛）反映「评估器只能看到公开用例」的固有边界；"
-      f"{q3} 题沙盒已修对但评估器未判收敛，是定位/接受滞后的另一侧证据。"
-      "该节同时是过程评估定位质量的下游观察面——修正能否收敛、收敛是否对应真值修正，"
-      "与第 6 节定位准确率相互印证。\n")
+    w("\n文本收敛与沙盒真值一致才算完全成功；"
+      f"{q2} 题文本收敛但 hidden 仍错（假收敛），反映评估器只能看到公开用例；"
+      f"{q3} 题沙盒已修对但评估器未判收敛，是定位与接受滞后的另一侧证据。"
+      "本节同时是过程评估定位质量的下游观察面，与第 6 节定位准确率相互印证。\n")
     w("\n![fig4](figures/fig4_refine_outcome.png)")
     w("\n**Fig. 3** 34 个答案错样本经 ReAct 修正后的四象限分布：柱顶为样本数，"
       "色块含义见图例。真收敛（收敛且最终全对）21 题；文本收敛但 hidden 仍错与修对但"
       "未获评估器认可各 5 题，构成文本判定与沙盒真值的两条边界。\n")
 
-    w("\n**过程性修正记录（2026-09-09）**\n")
-    w("- **编译错误反馈管道缺陷与修复**：首轮实现把运行/编译错误截断到 200 字符，"
-      "编译器真正的诊断行（如 `shadows a parameter`、`no match for 'operator<'`）被丢在"
-      "模板堆栈之外，模型只见 `error: declaration` 无法定位 → C2070/C2082 连续三轮修不好"
-      "同一编译错误。本地手动编译确认沙盒判定正确（代码确不可编译）。修复为从完整 stderr"
-      "提取含 `error` 的诊断行后，两题均**首轮收敛且最终全量通过**。此记录说明：给求解端的"
-      "执行反馈必须保留原始诊断，截断会结构性削弱「真实度补偿」。\n")
-    w("- **三轮未收敛样本人工校验**（8 题，逐条核对每轮 findings 与沙盒事实，未发现评估器误报）：\n")
+    w("\n过程性修正记录（2026-09-09）：\n")
+    w("- 编译错误反馈管道缺陷与修复。首轮实现把运行/编译错误截断到 200 字符，"
+      "编译器真正的诊断行（如 `shadows a parameter`、`no match for 'operator<'`）在"
+      "模板堆栈之外，模型只见 `error: declaration` 无法定位，C2070/C2082 连续三轮修不好"
+      "同一编译错误。本地手动编译确认沙盒判定正确（代码确不可编译）。改为从完整 stderr"
+      "提取含 `error` 的诊断行后，两题均首轮收敛且最终全量通过。执行反馈应保留原始诊断，"
+      "截断会削弱真实度补偿。\n")
+    w("- 三轮未收敛样本人工校验。共 8 题，逐条核对每轮 findings 与沙盒事实，未发现评估器误报。\n")
     w("  - 修正能力不足（终局仍错 3 题）：`C2049`（组合计数公式三轮反复换仍错、自测虚报）、"
       "`C2085`（只删最右 vs 删任意位置、输出索引 vs 计数等概念反复错）、"
       "`C2121`（DP 截断/最短结尾维护反复错）。\n")
@@ -129,7 +128,7 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
       "`C2060`（p,q 范围 ±1e18 下小范围枚举无保证、最坏复杂度 4e9 必超时）、"
       "`C2143`（分段公式存在边界反例）、`C2145`（贪心正确性引理被可验证反例击破）、"
       "`C2149`（扫描上界不足，isp[1] 曾误把 1 当素数）。"
-      "这类缺陷公开小样例永远触发不了，恰说明过程评估的文本审查不可被沙盒替代。\n")
+      "这类缺陷公开小样例不会触发，过程评估的文本审查无法被沙盒替代。\n")
 
 
 def _diff_score_of(r: EvalRecord, qmap: dict) -> float | None:
@@ -185,8 +184,8 @@ def _emit_algorithm_profile(w, evals: list[EvalRecord], qmap: dict) -> None:
     w("\n### 8.1 算法类别 × 能力边界（按 `alg_classes` 标签统计）")
     n_tagged = sum(1 for r in valid
                    if (qmap.get(r.question_id).metadata or {}).get("alg_classes"))
-    w("\n> 口径：按题集人工归一算法类标签统计，多标签题计入多个类（类别不互斥）；"
-      "平均 diff_score 用于区分「该类别本身偏难」与「同难度下能力偏弱」。"
+    w("\n统计按题集人工归一的算法类标签进行，多标签题计入多个类（类别不互斥）；"
+      "平均 diff_score 用于区分该类别本身偏难，还是同难度下能力偏弱。"
       f"全库过程正确率基线 {pct(base_proc)}，答案正确率基线 "
       f"{pct(sum(1 for r in valid if r.answer_correct is True) / len(valid) if valid else 0)}"
       f"（{n_tagged}/{len(valid)} 题有标签）。\n")
@@ -210,12 +209,12 @@ def _emit_algorithm_profile(w, evals: list[EvalRecord], qmap: dict) -> None:
         if strong:
             w(f"显著高于基线的类别（强项）：{strong_txt}。")
         w("")
-    w("\n> 边界解读：① 主体算法类（math/sim/graph/dp/greedy/ds，覆盖绝大多数样本）"
-      "过程正确率 81%–85%，与全库基线基本持平，无系统性短板；"
-      "② 弱点集中在 construct / twoptr / binary 三类，其主要过程错误均为逻辑缺陷与"
-      "条件遗漏（missing_condition），指向「构造与约束建模的严密性」不足而非知识缺失；"
-      "③ string/game/twoptr 等样本 ≤16 的类别读数置信有限，只作方向性提示；"
-      "④ 该维度与 §2 难度边界、§3 错误类型边界互相独立，共同构成能力边界的三条证据线。\n")
+    w("\n边界解读：主体算法类（math/sim/graph/dp/greedy/ds，覆盖绝大多数样本）"
+      "过程正确率 81%–85%，与全库基线基本持平，无系统性短板。"
+      "弱点集中在 construct / twoptr / binary 三类，其主要过程错误均为逻辑缺陷与"
+      "条件遗漏（missing_condition），指向构造与约束建模的严密性不足，而非知识缺失。"
+      "string / game / twoptr 等样本不超过 16 的类别读数置信有限，只作方向性提示。"
+      "该维度与 §2 难度边界、§3 错误类型边界互相独立，构成能力边界的三条证据线。\n")
     w("\n![fig2](figures/fig2_alg_classes.png)")
     w("\n**Fig. 4** 13 个算法类别的答案准确率（蓝色）与过程正确率（橙色），按过程正确率升序；"
       "条形末端为百分数。construct / twoptr / binary 低于全库基线 ≥8pp，是算法类别维度的"
@@ -249,31 +248,31 @@ def _emit_contamination(w, evals: list[EvalRecord]) -> None:
     hit_ids = ", ".join(f"`{r['question_id']}`（{r['source_id']}）" for r in sorted(hits, key=lambda x: x['question_id']))
 
     w("\n### 1.1 记忆暴露检测（官方原题镜像 contamination 探测，2026-09-09）")
-    w("\n> 题集为官方原题镜像，成绩是「能力＋记忆」的上界。本文用行为探测估计记忆暴露："
-      "分层抽样 30 题（ABC/CF × basic/medium/hard 每层 5，seed 42），每题两个 probe——"
-      "出处召回（是否记得竞赛/题号）＋解法盲答；判定见 `reports/CONTAMINATION_METHOD.md`，"
+    w("\n题集为官方原题镜像，成绩是能力加记忆的上界。本节用行为探测估计记忆暴露："
+      "分层抽样 30 题（ABC/CF × basic/medium/hard 每层 5，seed 42），每题两个 probe，"
+      "分别是出处召回（是否记得竞赛/题号）与解法盲答；判定见 `reports/CONTAMINATION_METHOD.md`，"
       "原始数据 `data/outputs/contamination_probe.jsonl`。\n")
     w("\n| 指标 | 数值 |")
     w("|---|---|")
     w(f"| 探测样本 | {n} |")
-    w(f"| 自称见过（P1=seen） | {seen}（{pct(seen / n)}）——迎合偏差高，不作暴露证据 |")
+    w(f"| 自称见过（P1=seen） | {seen}（{pct(seen / n)}），迎合偏差高，不作暴露证据 |")
     w(f"| 出处精确命中（强证据） | {len(hits)}（{pct(len(hits) / n)}，95% CI [{lo * 100:.0f}%, {hi * 100:.0f}%]） |")
     w(f"| 命中难度分布 | basic {basic} / medium {mid} / hard 0 |")
     if hits:
         w(f"| 命中样本 | {hit_ids} |")
     w("")
-    w("**与正式评测交叉（记忆红利近似）**：\n")
+    w("\n与正式评测交叉（记忆红利近似）：\n")
     w("\n| 组 | 样本 | t0 答案正确 |")
     w("|---|---|---|")
     w(f"| 出处命中组 | {len(hits)} | {hit_ok}（{pct(hit_ok / len(hits)) if hits else '—'}） |")
     w(f"| 未命中组 | {len(non)} | {non_ok}（{pct(non_ok / len(non)) if non else '—'}） |")
     w("")
-    w("\n> 读数口径：① 模型对官方原题普遍自称熟悉（29/30），但精确出处记忆仅出现在"
-      "**入门~基础经典题**（Theatre Square、71A、719A、1730A、ABC300C 等），中等以上难度"
-      "未观察到背题式出处记忆；② 出处命中组与未命中组在 t0 评测的答案正确率无显著差异，"
-      "未观察到记忆显著抬高成绩；③ 反例 `C2149` 记得出处（568A）但正式评测仍答错——"
-      "记忆存在不等于解题能力；④ 局限：无法实证训练语料、行为探测有假阴假阳、命中集中于"
-      "超经典题所以暴露的“危险度”低。方法全文见 `reports/CONTAMINATION_METHOD.md`。\n")
+    w("\n读数：模型对官方原题普遍自称熟悉（29/30），但精确出处记忆只出现在入门~基础经典题"
+      "（Theatre Square、71A、719A、1730A、ABC300C 等），中等以上难度未观察到背题式出处记忆。"
+      "出处命中组与未命中组在 t0 评测的答案正确率无显著差异，未观察到记忆显著抬高成绩。"
+      "反例 `C2149` 记得出处（568A）但正式评测仍答错，说明记忆存在不等于解题能力。"
+      "局限：无法实证训练语料，行为探测有假阴假阳，且命中集中于超经典题，暴露的威胁度低。"
+      "方法全文见 `reports/CONTAMINATION_METHOD.md`。\n")
 
 
 # 语义档位：diff_score 0-100 绝对刻度（与打分 prompt 的语义锚一致）。
@@ -442,9 +441,9 @@ def build() -> str:
     w("\n### 2.2 统一难度轴（Hy3 多专家评审 diff_score，0-100 语义档跨平台可比）\n")
     ut = unified_tier_table(evals, qmap)
     if ut:
-        w("\n> 难度分 `diff_score` 由 Hy3 三专家盲打+仲裁给出（0-100，与平台无关），"
-          "见 §A 方法与验证。切档按**绝对语义刻度**（0-20 入门/20-40 基础套路/"
-          "40-60 中等/60-100 难~极高难），与打分语义锚一致——"
+        w("\n难度分 `diff_score` 由 Hy3 三专家盲打加仲裁给出（0-100，与平台无关），"
+          "见 §A 方法与验证。切档按绝对语义刻度（0-20 入门/20-40 基础套路/"
+          "40-60 中等/60-100 难~极高难），与打分语义锚一致，"
           "不做样本均分，保证档位含义跨数据集稳定。\n")
         w("\n| 语义档 | diff_score 区间 | 样本 | 答案准确率 | 过程正确率 | 95% CI |")
         w("|---|---|---|---|---|---|")
@@ -480,10 +479,10 @@ def build() -> str:
                    if r.source == "run-eval"
                    and (_diff_score_of(r, qmap) or 0) >= 60)
         if 0 < n_hi80 < 10:
-            w(f"\n> **高难段说明**：diff_score≥80 的极高档仅 {n_hi80} 题"
-              f"（[60,100) 共 {hi_n} 题），子样本太小——temp0.9 与 temperature=0 两次"
-              "求解在该子档答案分别为 3/5 与 5/5，读数被小样本支配，故合并进"
-              "「难~极高难」一行解读，不作单独能力结论；临界点结论限定在入门~中等区间。")
+            w(f"\ndiff_score≥80 的极高档仅 {n_hi80} 题（[60,100) 共 {hi_n} 题），"
+              f"样本太小——temp0.9 与 temperature=0 两次求解在该子档答案分别为 3/5 与 5/5，"
+              "读数被小样本支配，故并入「难~极高难」一行解读，不作单独能力结论；"
+              "临界点结论限定在入门~中等区间。")
         w("\n![fig1](figures/fig1_diff_tiers.png)")
         w("\n**Fig. 1** 统一难度分档下答案准确率（实线）与过程正确率（虚线）随 diff_score 的退化。"
           "高难段 [60,100) 含 35 题（80+ 的 5 题并入）；过程正确率自中等档（73.0%）起显著跌落，"
@@ -579,12 +578,11 @@ def build() -> str:
               f"{pct(am.false_positive_rate_strict)}（仅完全不符）～ "
               f"{pct(am.false_positive_rate)}（含层次不符） |")
         w("")
-        w("> 口径说明：定位准确率分母为「答案错误」样本（用标准答案判定）；"
-          "误报率分母为「答案正确」样本中被评估器判过程有错者（经人工抽检确认）。"
-          "三层复核针对系统 fatal/minor 分级是否属实：完全相符=分级正确；"
-          "层次不符=分级打反（系统把 minor 判 fatal，属误报侧）；完全不符=系统说有错但"
-          "实际过程正确。误报率区间=仅完全不符（下界，minor 也算过程错）～ 含层次不符"
-          "（上界，minor 不算过程错）。\n")
+        w("口径：定位准确率的分母是答案错误样本（用标准答案判定），误报率的分母是答案正确"
+          "样本中被评估器判为过程有错者（经人工抽检确认）。三层复核针对系统对 fatal/minor "
+          "的分级是否属实：完全相符即分级正确；层次不符即分级打反（系统把 minor 判成 "
+          "fatal，属误报侧）；完全不符即系统认为有错而实际过程正确。误报率区间取两个端点："
+          "仅完全不符（下界，minor 也算过程错）到含层次不符（上界，minor 不算过程错）。\n")
     else:
         w(f"\n_暂无抽检标注，运行 `python -m src.cli audit --results {ds.evals_path(ROOT, next(d for d in ds.active_datasets() if d.evals))}` 生成模板。_\n")
 
@@ -593,10 +591,10 @@ def build() -> str:
     golden_real = (load_jsonl(ds.golden_real_path(ROOT), GoldenSample)
                    if ds.golden_real_path(ROOT).exists() else [])
     w("## 7. 真实评测检出的 SILENT_FAILURE 样本留档")
-    w(f"\n> 真实 Hy3 评测中 verifier 检出 `SILENT_FAILURE`（{len(golden_real)} 条：答案正确但过程"
-      "存在根本缺陷）的样本留档。每条含题目源（contest）、检测时间、定位缺陷与步骤、沙盒通过率；"
+    w(f"\n真实 Hy3 评测中 verifier 检出 `SILENT_FAILURE`（{len(golden_real)} 条：答案正确但过程"
+      "存在根本缺陷），逐条留档如下。每条含题目源（contest）、检测时间、定位缺陷与步骤、沙盒通过率；"
       "flaw_answer 为当时模型的真实求解输出（含代码），非人工编造。"
-      "检出计数已计入第 1 节判定分布，本节供逐条核验。\n")
+      "检出计数已计入第 1 节判定分布。\n")
     if golden_real:
         for g in golden_real:
             q = g.question
@@ -630,8 +628,8 @@ def build() -> str:
     method_path = ROOT / "reports" / "DIFFICULTY_SCORING_METHOD.md"
     if method_path.exists():
         w("\n---\n\n# 附录 A：评测集构造与统一难度分层方法\n")
-        w("\n> 评测题集的构建与统一难度分层（Hy3 多专家评审工作流）方法全文如下"
-          "（源自 `reports/DIFFICULTY_SCORING_METHOD.md`）。\n")
+        w("\n以下为评测题集构建与统一难度分层（Hy3 多专家评审工作流）的方法说明，"
+          "源自 `reports/DIFFICULTY_SCORING_METHOD.md`。\n")
         body = method_path.read_text(encoding="utf-8")
         # 去掉原标题行（避免与附录标题重复），并把方法文档子标题 ## N 降为 ### A.N
         lines_ = body.split("\n")
@@ -655,18 +653,18 @@ def build() -> str:
     pe_path = ROOT / "reports" / "PROCESS_EVAL_METHOD.md"
     if pe_path.exists():
         w("\n---\n\n# 附录 B：过程评估方法与新旧版本对比\n")
-        w("\n> 过程评估器的判定方法（severity 分层 + 重建测试 + 程序化一致性裁决 + "
-          "静态规则校验补盲）全文如下（源自 `reports/PROCESS_EVAL_METHOD.md`，2026-09-09 更新定稿）。\n")
-        w("\n**与旧版评估器的对比（增强说服力的关键证据）**：\n")
-        w("- **旧版**（2026-09-03 定稿，双视角 LLM 审查 + 仲裁、无 severity）：任何 finding "
-          "都驱动“过程有错” → 误报率被结构性推高；verdict 无程序化兜底 → 出现漏检"
+        w("\n以下为过程评估器的判定方法说明（severity 分层、重建测试、程序化一致性裁决、"
+          "静态规则校验补盲），源自 `reports/PROCESS_EVAL_METHOD.md`（2026-09-09 更新定稿）。\n")
+        w("\n与旧版评估器的对比：\n")
+        w("- 旧版（2026-09-03 定稿，双视角 LLM 审查加仲裁、无 severity）：任何 finding "
+          "都驱动“过程有错”，误报率被结构性推高；verdict 无程序化兜底，出现漏检"
           "（曾修复“答案错却判 CORRECT”，见 `docs/IMPL_LOG.md` hard-eval 任务）；规则校验仅支持 "
           "Python，CF/ABC 主场景（C++）全部失效。旧版抽检产物：`data/outputs/audit_review.md`"
           "（27 题模板）、`data/outputs/audit_records_full.jsonl`（40 条回填，双视角口径）。\n")
-        w("- **本版**（2026-09-07 severity v1）：在**同一判定标准**下对难题区间 28 条 "
+        w("- 本版（2026-09-07 severity v1）：在相同判定标准下对难题区间 28 条 "
           "re-verify，10 条判定变化——误报剥离 2 条、漏检补抓 3 条（C2084/C2102/C2119，"
-          "人工核验全为真 fatal）、语义细化 5 条；小样本误报率 **0/4**。证明 severity 版"
-          "不是靠放宽判定压误报，而是同一标准下更精准。\n")
+          "人工核验全为真 fatal）、语义细化 5 条；小样本误报率 0/4。"
+          "说明 severity 版并非靠放宽判定压误报，而是在同一标准下更精确。\n")
         w("- **全量人工抽检**（本报告第 6 节，温度 0 全量复跑版，2026-09-09 定稿）：48 条全部"
           "回填——答案错误样本 29 条定位准确率 96.6%（唯一 miss 为 C2077，根因步骤与系统定位"
           "不一致）；误报率 5.3%（仅完全不符）～10.5%（含层次不符），三层复核 match 17、"
