@@ -33,6 +33,18 @@ def test_store_append_and_load(tmp_path) -> None:
     assert all(e.created_at for e in evals)
 
 
+def test_store_cache_invalidates_when_file_removed(tmp_path) -> None:
+    """回归：清空交互记录后，缓存不能还返回已经被删掉的记录。"""
+    from rex.datasource import INTERACTIVE_EVAL
+    st = _store(tmp_path)
+    st.append_eval(_rec("A001"))
+    st.append_eval(_rec("IX0001", source="interactive"))
+    assert len(st.load_evals()) == 2          # 首次读入并缓存
+    assert len(st.load_evals()) == 2          # 命中缓存
+    (tmp_path / "outputs" / INTERACTIVE_EVAL).unlink()   # 模拟"删掉演示记录"
+    assert len(st.load_evals()) == 1          # 缓存必须失效
+
+
 def test_store_query_filters(tmp_path) -> None:
     st = _store(tmp_path)
     st.append_eval(_rec("A001", verdict=Verdict.CORRECT, difficulty=Difficulty.BASIC))

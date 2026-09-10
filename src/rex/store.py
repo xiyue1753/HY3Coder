@@ -66,7 +66,8 @@ class RecordStore:
         self.root = Path(root) if root is not None else self.outputs_dir.parent.parent
         self._eval_files = tuple(eval_files) if eval_files else active_eval_filenames()
         self._eval_cache: list[EvalRecord] | None = None
-        self._eval_mtime: float = 0.0
+        #: 缓存指纹：[(路径, 是否存在, mtime), ...]，含存在性以支持"文件被删除"失效
+        self._eval_fingerprint: tuple | None = None
 
     # -- file paths ---------------------------------------------------------
     def eval_path(self, scene: str) -> Path:
@@ -80,16 +81,17 @@ class RecordStore:
         return [self.outputs_dir / f for f in self._eval_files]
 
     def load_evals(self, scene: str | None = None) -> list[EvalRecord]:
-        # 缓存（带 mtime 失效）：避免重复请求时全量重读文件，显著提速
+        # 缓存（带指纹失效）：避免重复请求时全量重读文件，显著提速。
+        # 指纹含"文件是否存在 + mtime"——只比 mtime 的话，文件被删除（例如清空
+        # 交互演示记录）不会让缓存失效，界面会一直显示已经不存在的记录。
         paths = self._formal_eval_paths()
-        if self._eval_cache is not None:
-            newest_mtime = max(
-                (p.stat().st_mtime for p in paths if p.exists()), default=0.0
-            )
-            if newest_mtime <= self._eval_mtime:
-                if scene is None:
-                    return self._eval_cache
-                return [r for r in self._eval_cache if r.scene == scene]
+        fingerprint = tuple(
+            (str(p), p.exists(), p.stat().st_mtime if p.exists() else 0.0) for p in paths
+        )
+        if self._eval_cache is not None and fingerprint == self._eval_fingerprint:
+            if scene is None:
+                return self._eval_cache
+            return [r for r in self._eval_cache if r.scene == scene]
 
         out: list[EvalRecord] = []
         for p in paths:
@@ -99,9 +101,7 @@ class RecordStore:
                         out.append(EvalRecord.model_validate_json(line))
         if scene is None:
             self._eval_cache = out
-            self._eval_mtime = max(
-                (p.stat().st_mtime for p in paths if p.exists()), default=0.0
-            )
+            self._eval_fingerprint = fingerprint
         return out
 
     #: refine 记录场景（数学/MATH 已放弃，仅算法）
