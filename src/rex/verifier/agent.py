@@ -27,6 +27,16 @@ from rex.verifier.prompts import (
 log = logging.getLogger(__name__)
 
 
+def _say(cb, message: str) -> None:
+    """进度回调：异常一律吞掉——展示层的问题不该影响判定。"""
+    if cb is None:
+        return
+    try:
+        cb(message)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class VerifierAgent:
     def __init__(
         self,
@@ -44,6 +54,7 @@ class VerifierAgent:
         answer: Answer,
         static_evidence: str | None = None,
         execution_feedback: str | None = None,
+        on_phase=None,
     ) -> VerificationResult:
         """Two perspectives judged, then a mandatory ARBITER issues the final verdict.
 
@@ -59,13 +70,19 @@ class VerifierAgent:
         (e.g. answer is provably wrong on hidden tests). It is fed to both
         views and the arbiter as factual evidence; when it shows the answer is
         wrong, the verdict must not be CORRECT.
+
+        ``on_phase``: optional ``callable(message: str)``，逐个视角/仲裁回调，
+        供交互界面在长时间评估期间显示进度（回调异常不影响判定）。
         """
         t0 = time.time()
+        _say(on_phase, "V1 自含性审查…")
         v1 = self._verify_view("A", question, answer, static_evidence, execution_feedback)
+        _say(on_phase, "V2 全局回溯…")
         v2 = self._verify_view("B", question, answer, static_evidence, execution_feedback)
 
         log.info("verifier views done (%s vs %s), calling arbiter (mandatory)",
                  v1.verdict.value, v2.verdict.value)
+        _say(on_phase, f"双视角 {v1.verdict.value} / {v2.verdict.value} → ARBITER 仲裁…")
         try:
             verdict = self._arbitrate(question, answer, v1, v2, execution_feedback)
         except Hy3Error as e:

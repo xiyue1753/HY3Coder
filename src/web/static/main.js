@@ -257,6 +257,13 @@ const PHASE_CN={
   solve:'求解', answer:'已生成过程', execute:'沙盒执行', static:'静态校验',
   verify:'过程评估', revise:'修正', done:'完成'
 };
+// 过程快照指纹：步骤数 + 每步正文/结论长度 + 末尾字段 + 是否生成中。
+// 只有指纹变化才重绘——否则 300ms 轮询会把没变化的 DOM 反复重建，页面一直在闪。
+function answerSig(ans, generating){
+  const steps=(ans.steps)||[];
+  return steps.map(s=>`${s.id??''}:${s.kind||''}:${(s.content||'').length}:${(s.conclusion||'').length}`).join(',')
+    +`|${ans.final_answer?1:0}${ans.code?1:0}|${generating?1:0}|${steps.length}`;
+}
 function renderInterimAnswer(ans, streaming){
   const body=$('#iResultBody');
   if(!ans)return;
@@ -427,29 +434,45 @@ async function interact(){
     const jobId=d.job_id;
     setPhaseUI('solve', d.mode, '');
     // 轮询状态（SSE 端点存在但轮询更简单稳定；两个端点可任选）
-    let finalPayload=null;
-    for(let tries=0; tries<900; tries++){
+    let finalPayload=null, lastSig=null, lastPhaseKey=null, lastQid=null;
+    // 时间预算而非次数预算：推理强度调高后单次求解可达数分钟，
+    // 之前按"900 次 × 300ms"计数，等于 4.5 分钟硬上限，很容易误判超时。
+    const deadline=Date.now()+20*60*1000;
+    while(Date.now()<deadline){
       // 300ms 轮询：流式逐步出现更顺，请求本身只是读内存快照，代价很低
       await new Promise(res=>setTimeout(res,300));
       let st;
       try{ st=await (await fetch('/api/interact/job/'+jobId)).json(); }
       catch(e){ continue; }
+      if(st.question_id)lastQid=st.question_id;
       // 阶段按序推进：即使 execute/static 毫秒级被轮询跳过，
       // 用"已到达阶段 → 之前的全部点亮"保证徽章顺序完整
       if(st.phase && st.phase!=='done' && st.phase!=='failed'){
-        advancePhaseUI(st.phase, d.mode, st.elapsed, st.message);
+        const key=st.phase+'|'+d.mode;
+        if(key!==lastPhaseKey){
+          lastPhaseKey=key;advancePhaseUI(st.phase, d.mode, st.elapsed, st.message);
+        }else{
+          // 同阶段只刷新文案与计时（textContent，不重建 DOM），否则阶段条也会跟着闪
+          if(st.message)$('#iProgressMsg').textContent=st.message;
+          if(st.elapsed)$('#iProgressElapsed').textContent=st.elapsed+'s';
+        }
       }
-      // 逐 Step 出现：每次拿到新快照就重渲染（后端流式推部分过程，末步带光标）。
+      // 逐 Step 出现：只有内容真的变了才重绘——否则内容没变化时每 300ms 重建一次
+      // DOM，页面会一直闪（过程评估阶段就是这个症状）。
       // generating 只在"正在生成正文"的阶段为真：solve（首解）与 revise-N（修订轮），
       // 否则 execute/verify 阶段会一直挂着光标和"生成中"文案。
       if(st.answer){
         const generating=st.status==='running'&&(st.phase==='solve'||st.phase.startsWith('revise-'));
-        renderInterimAnswer(st.answer, generating);
+        const sig=answerSig(st.answer, generating);
+        if(sig!==lastSig){ lastSig=sig;renderInterimAnswer(st.answer, generating); }
       }
       if(st.result){ finalPayload=st.result; break; }
       if(st.status==='failed'){ throw new Error(st.error||'运行失败'); }
     }
-    if(!finalPayload) throw new Error('等待超时：求解未在预期时间内完成');
+    if(!finalPayload){
+      throw new Error('等待超过 20 分钟仍未完成。任务可能还在后台跑，跑完会自动留档'
+        +(lastQid?`（题号 ${lastQid}）`:'')+'，可稍后在「单题回放」（来源筛 interactive）里查看。');
+    }
     setPhaseUI('done', d.mode, finalPayload.elapsed);
     renderFinalResult(finalPayload);
     renderArchiveNote(finalPayload);

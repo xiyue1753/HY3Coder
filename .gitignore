@@ -83,3 +83,4 @@ Thumbs.db
 # 本地浏览器自动化调试产物（Playwright CLI）
 /.playwright-cli/
 /pick*.yml
+*.tmp

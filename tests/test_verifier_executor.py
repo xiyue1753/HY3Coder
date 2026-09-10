@@ -75,6 +75,34 @@ def test_verifier_always_arbitrates_agreed_views() -> None:
     assert len(agent._client.calls) == 3
 
 
+def test_verifier_reports_phase_progress() -> None:
+    """交互界面靠 on_phase 显示"评估进行到哪一步"，顺序与回调数量必须稳定。"""
+    seen: list[str] = []
+    agent = VerifierAgent(FakeHy3([
+        _verdict_json("CORRECT", 0.9),
+        _verdict_json("CORRECT", 0.9),
+        _verdict_json("CORRECT", 0.9),
+    ]))
+    agent.verify(Q, OK_ANSWER, on_phase=seen.append)
+    assert len(seen) == 3
+    assert seen[0].startswith("V1") and seen[1].startswith("V2")
+    assert "ARBITER" in seen[2]
+
+
+def test_verifier_phase_callback_errors_are_ignored() -> None:
+    """进度回调是展示层：它抛异常不能影响判定。"""
+    def boom(_msg: str) -> None:
+        raise RuntimeError("界面炸了")
+
+    agent = VerifierAgent(FakeHy3([
+        _verdict_json("CORRECT", 0.9),
+        _verdict_json("CORRECT", 0.9),
+        _verdict_json("CORRECT", 0.9),
+    ]))
+    res = agent.verify(Q, OK_ANSWER, on_phase=boom)
+    assert res.verdict == Verdict.CORRECT and res.arbiter == "ARBITER"
+
+
 def test_verifier_fatal_finding_forces_non_correct() -> None:
     """fatal finding + CORRECT 自相矛盾 → agent 层程序化强制 PROCESS_INCORRECT。
 

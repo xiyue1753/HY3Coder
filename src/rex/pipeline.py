@@ -62,6 +62,25 @@ _LATEX_SYM = {
 _FRAC_SIMPLE_RE = re.compile(r"^[0-9a-z√.]+$")
 
 
+def _emit(progress, phase: str, payload=None, message: str | None = None) -> None:
+    """阶段回调兼容层：`progress(phase, payload[, message])`。
+
+    老回调只接受两个参数（测试里的 lambda 就是），带 message 的新回调走三参；
+    异常一律吞掉——进度展示不该影响评测结果。
+    """
+    if progress is None:
+        return
+    try:
+        progress(phase, payload, message)
+    except TypeError:
+        try:
+            progress(phase, payload)
+        except Exception:  # noqa: BLE001
+            pass
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _frac_text(num: str, den: str) -> str:
     """Render a fraction, adding parens only when needed to preserve structure.
 
@@ -256,8 +275,9 @@ class Pipeline:
         exec_fb = _execution_feedback(q, answer_correct, pass_rate, exec_err)
         if progress:
             progress("verify", None)
-        verification = self.verifier.verify(q, answer, static_evidence=evidence,
-                                            execution_feedback=exec_fb)
+        verification = self.verifier.verify(
+            q, answer, static_evidence=evidence, execution_feedback=exec_fb,
+            on_phase=lambda m: _emit(progress, "verify", None, f"过程交叉审查 · {m}"))
         # 程序化一致性裁决（有沙盒客观信号，是最终兜底层）：
         #   - 答案对 + fatal → SILENT_FAILURE；答案对 + 无 fatal → CORRECT（剥离 minor）
         #   - 答案错 → 绝不可能是 CORRECT/SILENT_FAILURE

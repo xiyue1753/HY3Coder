@@ -805,11 +805,14 @@ def _start_interact_job(req: InteractRequest) -> dict:
                 """Hy3 的思考阶段不产出正文，这里给界面一个"模型在动"的信号。"""
                 job["message"] = f"模型推理中…（已思考 {n_reason} 字）"
 
+            def _progress(p, payload=None, message=None):
+                """阶段回调（三参兼容）：pipeline 会带上更细的文案（如 过程交叉审查 · V2 …）。"""
+                _report(p, payload, message or _PHASE_MSG.get(p) or _phase_default_msg(p))
+
             store = STORE
             if job["mode"] == "eval":
-                rec = pipe._eval_one(q, progress=lambda p, payload=None: (
-                    _report(p, payload, _PHASE_MSG.get(p) or _phase_default_msg(p))),
-                    on_step=_on_step, on_reasoning=_on_reasoning)
+                rec = pipe._eval_one(q, progress=_progress,
+                                     on_step=_on_step, on_reasoning=_on_reasoning)
                 rec.source = "interactive"
                 store.append_eval(rec)
                 # 单独重跑一次沙盒执行，拿到 exec 细节（错误信息）供前端展示
@@ -827,9 +830,8 @@ def _start_interact_job(req: InteractRequest) -> dict:
                     "exec": {"test_pass_rate": pass_rate, "error": exec_error},
                 }
             else:
-                rrec = pipe.refiner.refine(q, progress=lambda p, payload=None: (
-                    _report(p, payload, _PHASE_MSG.get(p) or _phase_default_msg(p))),
-                    on_step=_on_step, on_reasoning=_on_reasoning)
+                rrec = pipe.refiner.refine(q, progress=_progress,
+                                           on_step=_on_step, on_reasoning=_on_reasoning)
                 rrec.source = "interactive"
                 store.append_refine(rrec)
                 result = InteractResult(
