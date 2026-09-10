@@ -1,16 +1,16 @@
 # ReAct 自我修正闭环：验证反馈如何回流求解
 
-本文说明过程评估器定位出的错误如何转成求解智能体可执行的修订指令，形成 ReAct 闭环，以及用什么指标判断闭环是否有效、何时收敛、何时停止。数据日期 2026-09-08，判定版本 severity v1（仅 fatal 驱动修正）。相关代码 `src/rex/refine/{agent,prompts}.py`，指标 `src/rex/metrics/compute.py::refine_comparison`。姊妹篇：`DIFFICULTY_SCORING_METHOD.md`（题集分层）、`PROCESS_EVAL_METHOD.md`（评估器判定）。
+本文说明过程评估器定位出的错误如何转成求解智能体可执行的修订指令、形成 ReAct 闭环，以及用什么指标判断闭环是否有效、何时收敛、何时停止。数据日期 2026-09-08，判定版本 severity v1，只有 fatal 驱动修正。相关代码 `src/rex/refine/{agent,prompts}.py`，指标 `src/rex/metrics/compute.py::refine_comparison`。姊妹篇是 `DIFFICULTY_SCORING_METHOD.md` 与 `PROCESS_EVAL_METHOD.md`。
 
 ## 1. 为什么需要修正闭环
 
-评估器把过程判为有错、定位到步骤、归好类，这只是完成了检测。检测结果若不回流，就只是一张体检报告。ReAct 的思路是把"检测"升级成"治疗"：评估器给出判定（verdict 加 findings，每条带 step_id、错误类型、说明和证据），求解智能体据此重写解题过程，再重新验证，直到收敛或达到轮数上限。
+评估器把过程判为有错、定位到步骤、归好类，这只是完成了检测。检测结果若不回流，就只是一张体检报告。ReAct 的思路是把检测升级成治疗：评估器给出判定，也就是 verdict 加 findings，每条带 step_id、错误类型、说明和证据，求解智能体据此重写解题过程，再重新验证，直到收敛或达到轮数上限。
 
-闭环还有一层反证的作用：修正能不能收敛，本身反映了评估器定位是否准确。定位偏了，指令就偏，修正不会收敛；把 minor 当 fatal 报，修正会空转。所以收敛率是评估器定位质量的一个下游观察面。
+闭环还有一层反证的作用：修正能不能收敛，本身就反映评估器定位得准不准。定位偏了，指令就偏，修正不会收敛；把 minor 当 fatal 报，修正会空转。所以收敛率是评估器定位质量的一个下游观察面。
 
 ## 2. 循环是怎么搭的
 
-首轮和评测模式走同一条路径：独立求解再独立验证，得到 initial，保证"修正前"状态可复现、和评测基线可比。initial 已经是 CORRECT 就不进修正轮。否则进入最多 max_rounds（默认 3）轮的循环：
+首轮和评测模式走同一条路径：独立求解再独立验证，得到 initial，保证修正前的状态可复现，与评测基线可比。initial 已经是 CORRECT 就不进修正轮。否则进入最多 max_rounds 轮的循环，默认 3 轮：
 
 ```
 findings → 修订指令 → 求解智能体 revise（题目 + 上一版完整答案 + 反馈）
@@ -18,21 +18,21 @@ findings → 修订指令 → 求解智能体 revise（题目 + 上一版完整�
   → 若 verdict 为 CORRECT 即停
 ```
 
-两个设计细节。一是 revise 收到的是上一版完整答案，输出也是完整新过程而不是补丁，避免局部修补引入不一致。二是每轮全量留痕，可以回放逐轮轨迹。
+两个设计细节。一是 revise 收到的是上一版完整答案，输出也是完整的新过程而不是补丁，避免局部修补引入不一致。二是每轮全量留痕，可以回放逐轮轨迹。
 
 ## 3. 反馈怎么变成指令
 
 评估器的 finding 不只是给人看的描述，它直接映射成指令。映射规则有四条。
 
-只对 severity 为 fatal 的 finding 生成指令。minor 不破坏推理链成立性，驱动修正只会空转，这和评测侧"无 fatal 不判过程错"的语义一致。
+只对 severity 为 fatal 的 finding 生成指令。minor 不破坏推理链的成立性，驱动修正只会空转，这和评测侧无 fatal 不判过程错的语义一致。
 
-指令的格式是"第 N 步存在某类问题（类型说明）：具体问题。请修正该步及相关联步骤，并重新输出完整解题过程"，指步、点类型、给原因、明确动作。
+指令的格式是“第 N 步存在某类问题（类型说明）：具体问题。请修正该步及相关联步骤，并重新输出完整解题过程”，指步、点类型、给原因、明确动作。
 
 同一步同一类型只保留第一条，避免同一步被同质指令反复轰炸。
 
-兜底：verdict 不是 CORRECT 但没有具体 finding 时（比如纯答案错且没定位），生成一条整体指令，让模型重新完整推导并核对答案。
+兜底：verdict 不是 CORRECT 但没有具体 finding 时，比如纯答案错且没定位，生成一条整体指令，让模型重新完整推导并核对答案。
 
-refine 模式没有沙盒执行，只有文本判定。为避免"只有 minor 也进修正轮"的空转，refine 沿用评测侧的 severity 语义：全部 findings 是 minor 就强制置 CORRECT 即停。
+refine 模式没有沙盒执行，只有文本判定。为避免只有 minor 也进修正轮的空转，refine 沿用评测侧的 severity 语义：全部 findings 是 minor 就强制置 CORRECT 即停。
 
 ## 4. 修正为什么不容易越改越差
 
@@ -40,15 +40,15 @@ refine 模式没有沙盒执行，只有文本判定。为避免"只有 minor �
 
 ## 5. 怎么判断闭环有效
 
-用 refine_comparison 的四组读数：before_correct（首轮 CORRECT 比例，基线）、after_correct（最终 CORRECT 比例）、improved（首轮错转最终对的比例，直接回答闭环修好了多少）、converged（限轮内达到 CORRECT 的比例）。成本方面，每条记录累计的模型调用次数可以看修正一道题的代价。
+用 refine_comparison 的四组读数：before_correct 是首轮 CORRECT 比例，作为基线；after_correct 是最终 CORRECT 比例；improved 是首轮错、最终对的比例，直接回答闭环修好了多少；converged 是限轮内达到 CORRECT 的比例。成本方面，每条记录累计的模型调用次数可以看出修正一道题的代价。
 
-组合起来判断：improved 明显大于零说明修正有效，评估器定位被下游用上了；after_correct 远高于 before_correct 说明闭环整体有增益；improved 接近零但 after_correct 很高，说明基线本来就高、没有修正空间；普遍不收敛，就要回头查评估器定位质量或反馈可执行性。
+组合起来判断：improved 明显大于零，说明修正有效，评估器的定位被下游用上了；after_correct 远高于 before_correct，说明闭环整体有增益；improved 接近零但 after_correct 很高，说明基线本来就高、没有修正空间；普遍不收敛，就要回头查评估器的定位质量或反馈的可执行性。
 
 ## 6. 收敛与停止
 
-收敛的判定是 verdict 为 CORRECT 且没有 fatal（refine 侧经过 minor 归一化），含义是评估器不再认为过程有实质缺陷。停止条件三个，先到先停：收敛、达到 max_rounds（默认 3）、没有反馈可生成。
+收敛的判定是 verdict 为 CORRECT 且没有 fatal，refine 侧经过 minor 归一化，含义是评估器不再认为过程有实质缺陷。停止条件三个，先到先停：收敛、达到 max_rounds 默认 3 轮、没有反馈可生成。
 
-看收敛是否有效，不只看停没停。结合每轮 verdict 轨迹判断：从 PROCESS_INCORRECT 到 CORRECT 是真实收敛；中间换过判定路径的，抽查修订 diff 看有没有偏离题意。同时看成本，收敛轮数均值和调用次数给出修正代价。要说明的是 refine 没有沙盒，收敛到 CORRECT 是"评估器认为过程成立"，不等于沙盒证明答案对，需要在评测侧对 final 做复核才能闭环确认。
+看收敛是否有效，不只看停没停，还要结合每轮 verdict 轨迹判断：从 PROCESS_INCORRECT 到 CORRECT 是真实收敛；中间换过判定路径的，抽查修订 diff 看有没有偏离题意。同时看成本，收敛轮数均值和调用次数给出修正代价。要说明的是 refine 没有沙盒，收敛到 CORRECT 只代表评估器认为过程成立，不等于沙盒证明答案对，需要在评测侧对 final 做复核才能闭环确认。
 
 ## 7. 数据纯净与成本
 
@@ -56,7 +56,7 @@ refine 模式没有沙盒执行，只有文本判定。为避免"只有 minor �
 
 ## 8. 边界
 
-refine 的收敛判据依赖评估器的文本判定，不含执行事实。评估器如果漏检（把真 fatal 当 minor）表现为假收敛，误报（把可重建省略当 fatal）表现为空转修正。缓解靠两条：severity 判定质量由真实检出留档和人工抽检监控，见 PROCESS_EVAL_METHOD；refine 的 final 可以再作为一次评测输入，用沙盒对答案下最终结论。修正有效性还受求解模型执行能力影响，模型采样有随机性，所以修正前后对比应该基于样本统计而不是单个例子。本文定稿时 refine 数据还没跑，指标公式和代码一致，跑通 run-refine 后 make_report 会自动输出该节读数。
+refine 的收敛判据依赖评估器的文本判定，不含执行事实。评估器如果漏检，把真 fatal 当 minor，表现为假收敛；如果误报，把可重建的省略当 fatal，表现为空转修正。缓解靠两条：severity 判定质量由真实检出留档和人工抽检监控，见 `PROCESS_EVAL_METHOD.md`；refine 的 final 可以再作为一次评测输入，用沙盒对答案下最终结论。修正有效性还受求解模型的执行能力影响，模型采样有随机性，所以修正前后的对比应该基于样本统计而不是单个例子。本文定稿时 refine 数据还没跑，指标公式与代码一致，跑通 run-refine 后 make_report 会自动输出该节读数。
 
 ## 附：执行
 
@@ -69,4 +69,4 @@ python -m src.cli run-refine --questions abc_selfbuilt.jsonl --sample full \
 python scripts/make_report.py --out reports/REPORT.md
 ```
 
-小结：评估器定位出 step_id、错误类型与证据后直接映射为修订指令回流求解端，只处理 fatal、同一步去重、无定位时给整体指令；每轮全量重写并独立重验证，CORRECT 即停、最多三轮。修正前后的过程正确率对比用于判断检测是否被求解侧利用；评测与修正数据严格隔离，成本按调用次数记录。
+小结：评估器定位出 step_id、错误类型与证据后，直接映射为修订指令回流求解端，只处理 fatal、同一步去重、没有定位时给整体指令；每轮全量重写并独立重验证，CORRECT 即停，最多三轮。修正前后的过程正确率对比用于判断检测是否被求解侧利用；评测与修正数据严格隔离，成本按调用次数记录。

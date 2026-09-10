@@ -721,86 +721,46 @@ def build() -> str:
     w("\n_以上指标全部来自正式评测结果；修正数据只用于第 5 节的对比，不混入任何指标。_\n")
 
     # ---- 附录 A：评测集构造与统一难度分层方法 ----
-    method_path = ROOT / "reports" / "DIFFICULTY_SCORING_METHOD.md"
-    if method_path.exists():
-        w("\n---\n\n# 附录 A：评测集构造与统一难度分层方法\n")
-        w("\n以下为评测题集构建与统一难度分层（Hy3 多专家评审工作流）的方法说明，"
-          "源自 `reports/DIFFICULTY_SCORING_METHOD.md`。\n")
-        body = method_path.read_text(encoding="utf-8")
-        # 去掉原标题行（避免与附录标题重复），并把方法文档子标题 ## N 降为 ### A.N
-        lines_ = body.split("\n")
-        out_lines: list[str] = []
-        for ln in lines_:
-            if ln.startswith("# "):
-                continue
-            mm = re.match(r"^## (\d+)\.\s*(.*)$", ln)
-            if mm:
-                out_lines.append(f"### A.{mm.group(1)} {mm.group(2)}")
-                continue
-            mf = re.match(r"^## (附.*)$", ln)
-            if mf:
-                out_lines.append(f"### A.{mf.group(1)}")
-                continue
-            out_lines.append(ln)
-        w("\n".join(out_lines).rstrip())
-        w("\n")
+    _emit_appendix(w, ROOT / "reports" / "DIFFICULTY_SCORING_METHOD.md", "A",
+                   "评测集构造与统一难度分层方法",
+                   "以下为评测题集构建与统一难度分层（Hy3 多专家评审工作流）的方法说明，"
+                   "源自 `reports/DIFFICULTY_SCORING_METHOD.md`。")
 
     # ---- 附录 B：过程评估方法与新旧版本对比 ----
-    pe_path = ROOT / "reports" / "PROCESS_EVAL_METHOD.md"
-    if pe_path.exists():
-        w("\n---\n\n# 附录 B：过程评估方法与新旧版本对比\n")
-        w("\n以下为过程评估器的判定方法说明（severity 分层、重建测试、程序化一致性裁决、"
-          "静态规则校验补盲），源自 `reports/PROCESS_EVAL_METHOD.md`（2026-09-09 更新定稿）。\n")
-        w("\n与旧版评估器的对比：\n")
-        w("- 旧版（2026-09-03 定稿，双视角 LLM 审查加仲裁、无 severity）：任何 finding "
-          "都驱动\u201c过程有错\u201d，误报率被结构性推高；verdict 无程序化兜底，出现漏检"
-          "（曾修复\u201c答案错却判 CORRECT\u201d的漏检）；规则校验仅支持 "
-          "Python，CF/ABC 主场景（C++）全部失效。旧版抽检产物：`data/outputs/audit_review.md`"
-          "（27 题模板）、`data/outputs/audit_records_full.jsonl`（40 条回填，双视角口径）。\n")
-        w("- 本版（2026-09-07 severity v1）：在相同判定标准下对难题区间 28 条 "
-          "re-verify，10 条判定变化——误报剥离 2 条、漏检补抓 3 条（C2084/C2102/C2119，"
-          "人工核验全为真 fatal）、语义细化 5 条；小样本误报率 0/4。"
-          "说明 severity 版并非靠放宽判定压误报，而是在同一标准下更精确。\n")
-        w("- **全量人工抽检**（本报告第 6 节，温度 0 全量复跑版，2026-09-09 定稿）：48 条全部"
-          "回填——答案错误样本 29 条定位准确率 96.6%（唯一 miss 为 C2077，根因步骤与系统定位"
-          "不一致）；误报率 5.3%（仅完全不符）～10.5%（含层次不符），三层复核 match 17、"
-          "level_mismatch 1（C2104，推导缺陷被步骤 5 自纠仍判 fatal）、fp 1（A1124，overflow"
-          "指控在合法输入域不可达，沙盒 20% 失败源于违反 `N≠M` 约束的非法 hidden 用例，已修题库并"
-          "留档，详见下方 B.4.3）。此前 6 条 fatal/minor 争议（C2029/C2062/C2094/C2095 维持 "
-          "fatal、C2118/C2140 判 minor）裁决结果已并入本版分层。\n")
-        body = pe_path.read_text(encoding="utf-8")
-        lines_ = body.split("\n")
-        out_lines: list[str] = []
-        for ln in lines_:
-            if ln.startswith("# "):
-                continue
-            mm = re.match(r"^## (\d+)\.\s*(.*)$", ln)
-            if mm:
-                out_lines.append(f"### B.{mm.group(1)} {mm.group(2)}")
-                continue
-            mf = re.match(r"^## (附.*)$", ln)
-            if mf:
-                out_lines.append(f"### B.{mf.group(1)}")
-                continue
-            md = re.match(r"^### (\d+)\.(\d+)\s*(.*)$", ln)
-            if md:
-                out_lines.append(f"#### B.{md.group(1)}.{md.group(2)} {md.group(3)}")
-                continue
-            out_lines.append(ln)
-        w("\n".join(out_lines).rstrip())
-        w("\n")
+    _emit_appendix(
+        w, ROOT / "reports" / "PROCESS_EVAL_METHOD.md", "B",
+        "过程评估方法与新旧版本对比",
+        "以下为过程评估器的判定方法说明（severity 分层、重建测试、程序化一致性裁决、"
+        "静态规则校验补盲），源自 `reports/PROCESS_EVAL_METHOD.md`（2026-09-09 更新定稿）。"
+        "\n\n与旧版评估器的对比：\n"
+        "\n- 旧版定稿于 2026-09-03，做法是双视角 LLM 审查加仲裁，没有 severity："
+        "任何 finding 都驱动“过程有错”，误报率被结构性推高；verdict 没有程序化兜底，"
+        "出现过“答案错却判 CORRECT”的漏检；规则校验只支持 Python，"
+        "CF/ABC 主场景是 C++，规则全部失效。旧版抽检产物为 `data/outputs/audit_review.md`"
+        "的 27 题模板与 `data/outputs/audit_records_full.jsonl` 的 40 条回填，口径为双视角。"
+        "\n- 本版是 2026-09-07 的 severity v1：在相同判定标准下对难题区间 28 条 re-verify，"
+        "10 条判定变化，误报剥离 2 条、漏检补抓 3 条即 C2084/C2102/C2119，"
+        "人工核验全为真 fatal、语义细化 5 条；小样本误报率 0/4。"
+        "severity 版不是靠放宽判定压误报，而是在同一标准下更精确。"
+        "\n- **全量人工抽检**：本报告第 6 节，温度 0 全量复跑版，2026-09-09 定稿，"
+        "48 条全部回填。答案错的 29 条定位准确率 96.6%，唯一 miss 是 C2077，"
+        "根因步骤与系统定位不一致；误报率 5.3% 到 10.5%，三层复核 match 17、"
+        "level_mismatch 1 即 C2104、fp 1 即 A1124。A1124 的 overflow 指控在合法输入域"
+        "不可达，沙盒 20% 失败源于违反 `N≠M` 约束的非法 hidden 用例，题库已修并留档，"
+        "详见下方 B.4.3 与 B.4.4。此前 6 条 fatal/minor 争议中，C2029/C2062/C2094/C2095 维持 fatal，"
+        "C2118/C2140 判 minor，裁决结果已并入本版分层。")
 
     # ---- 附录 C：ReAct 自我修正闭环方法 ----
     _emit_appendix(w, ROOT / "reports" / "REACT_METHOD.md", "C",
                    "ReAct 自我修正闭环方法",
-                   "以下为过程评估结果回流求解端的闭环方法说明（fatal 驱动修订指令、逐轮全量重写并"
-                   "独立重验证、收敛与停止判据、评测与修正数据严格隔离），"
+                   "以下为过程评估结果回流求解端的闭环方法说明，覆盖 fatal 驱动的修订指令、"
+                   "逐轮全量重写与独立重验证、收敛与停止判据、评测与修正数据隔离，"
                    "源自 `reports/REACT_METHOD.md`。")
-    # ---- 附录 D：数据集记忆暴露（contamination）检测方法 ----
+    # ---- 附录 D：数据集记忆暴露检测方法 ----
     _emit_appendix(w, ROOT / "reports" / "CONTAMINATION_METHOD.md", "D",
-                   "数据集记忆暴露（contamination）检测方法",
-                   "以下为记忆暴露行为探测的方法与结果全文（分层抽样、两个 probe 的协议、"
-                   "两级暴露判定、与正式评测的交叉读数），源自 `reports/CONTAMINATION_METHOD.md`。")
+                   "数据集记忆暴露检测方法",
+                   "以下为记忆暴露行为探测的方法与结果全文，覆盖分层抽样、两个 probe 的协议、"
+                   "两级暴露判定与正式评测的交叉读数，源自 `reports/CONTAMINATION_METHOD.md`。")
 
     return "\n".join(L)
 
