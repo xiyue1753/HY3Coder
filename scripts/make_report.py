@@ -295,8 +295,8 @@ def _emit_contamination(w, evals: list[EvalRecord]) -> None:
     w("\n| 指标 | 数值 |")
     w("|---|---|")
     w(f"| 探测样本 | {n} |")
-    w(f"| 自称见过（P1 = seen） | {seen}，{pct(seen / n)}；迎合偏差高，不作暴露证据 |")
-    w(f"| 出处精确命中（强证据） | {len(hits)}，{pct(len(hits) / n)}；"
+    w(f"| 自称见过 | {seen}，{pct(seen / n)}；迎合偏差高，不作暴露证据 |")
+    w(f"| 出处精确命中 | {len(hits)}，{pct(len(hits) / n)}；"
       f"95% CI [{lo * 100:.0f}%, {hi * 100:.0f}%] |")
     w(f"| 命中样本的平台分档 | basic {basic} / medium {mid} / hard 0 |")
     if hits:
@@ -334,7 +334,7 @@ def _emit_task_mapping(w) -> None:
       "`static_check` 的规则校验作为补充诊断证据；"
       "多视角 Agent 复核：V1 自含性审查与 V2 全局回溯各自给出 verdict 与 findings，"
       "再由 ARBITER 总仲裁 | 附录 B；代码 `src/rex/` |")
-    w("| 定位准确率（答案错样本）与误报率（答案对样本） | "
+    w("| 答案错样本的定位准确率与答案对样本的误报率 | "
       "答案错的 29 条全量人工复核，定位命中 28 条，96.6%；"
       "答案对却被判过程有错的 19 条做三层复核 | 本报告 §6，48 条全部抽检 |")
     w("| 分析报告：设计依据、错误分类、典型案例、能力边界 | "
@@ -599,7 +599,7 @@ def build() -> str:
               "入门到中等区间成立。")
         w("\n![fig1](figures/fig1_diff_tiers.png)")
         _crit = filled[drop] if drop else filled[-1]
-        w(f"\n**Fig. 1** 统一难度分档下答案准确率（实线）与过程正确率（虚线）。"
+        w(f"\n**Fig. 1** 统一难度分档下答案准确率与过程正确率的变化。"
           f"难档覆盖 `diff_score` 60 以上共 {hi_n} 题，其中 80 以上的 {n_hi80} 题并入。"
           f"过程正确率从{_crit['name']}档开始显著跌落，降到 {pct(_crit['process'])}，"
           "这是高难能力边界的第一条证据。\n")
