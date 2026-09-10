@@ -138,7 +138,11 @@
 - 难度：语义档 中等，diff_score 46
 - 判定：SILENT_FAILURE，置信度 0.95
 - 答案正确：True，用例通过率 1.0
-- 定位：第2步 逻辑缺陷，并查集设计未考虑线性探测的环形回绕：parent[pos] = find(pos+1) 在 pos = N-1 时指向哨兵 N，而非回绕到…；第4步 边界条件，代码在 pos=N 时访问 parent[N+1]（数组大小 N+1，合法下标 0..N），且写 A[N]（有效仅 0..N-1），属于未处…
+- 定位：
+  - 逻辑缺陷 · 第2步 · fatal：并查集设计未考虑线性探测的环形回绕：parent[pos] = find(pos+1) 在 pos = N-1 时指向哨兵 N，而非回绕到 0，导致当探测需要从末尾绕回开头时 find 返回 N（越界下标），错误写入 A[N] 且未正确占用应占的 0..N-1 空位，未能正确模拟题目要求的 h mod N 环形语义。
+    - 证据：步骤2内容：'parent[pos] = find(pos + 1)'，未处理 pos+1 == N 时回绕到 0；题目明确 While A_{h mod N} != -1, keep adding 1 to h（环形）。
+  - 边界条件 · 第4步 · fatal：代码在 pos=N 时访问 parent[N+1]（数组大小 N+1，合法下标 0..N），且写 A[N]（有效仅 0..N-1），属于未处理环形边界与满环情况的越界。当 find 返回 N（哨兵）时，pos=N，执行 parent[pos]=find(pos+1) 即 parent[N]=find(N+1) 越界。
+    - 证据：步骤4代码：'parent[pos] = find(pos + 1);' 当 pos = N 时 pos+1 = N+1 超出 parent 数组边界（声明为 N+1 大小，最大下标 N）。
 
 
 题面全文（原始题面，取自 `data/questions/`）：
@@ -311,7 +315,11 @@ Note that, in this problem, $N = 2^{20} = 1048576$ is a constant and not given i
 - 难度：语义档 基础~套路，diff_score 22
 - 判定：SILENT_FAILURE，置信度 0.93
 - 答案正确：True，用例通过率 1.0
-- 定位：第2步 概念理解错误，错误断言节点必须保留当且仅当本身是关键点或子树（以1为根）含关键点。反例：链1-2-3, K={3}，代码输出3，正确最小为1，因根1非关键…；第2步 逻辑缺陷，算法等价条件逻辑错误：仅依子树含关键点计数会保留非必要桥接祖先。正确需节点是关键点，或≥2子树枝含关键点，或子树含且父侧含。反例同上。
+- 定位：
+  - 概念理解错误 · 第2步 · fatal：错误断言节点必须保留当且仅当本身是关键点或子树（以1为根）含关键点。反例：链1-2-3, K={3}，代码输出3，正确最小为1，因根1非关键点且关键点仅在某子树时多余计数祖先。
+    - 证据：'一个节点必须保留当且仅当它本身是关键点，或者其子树（以1为根）中至少包含一个关键点'；重建测试确认错误
+  - 逻辑缺陷 · 第2步 · fatal：算法等价条件逻辑错误：仅依子树含关键点计数会保留非必要桥接祖先。正确需节点是关键点，或≥2子树枝含关键点，或子树含且父侧含。反例同上。
+    - 证据：step2 same quote; 沙盒虽100%通过但测试集可能均含顶点1为关键点致碰巧正确
 
 
 题面全文（原始题面，取自 `data/questions/`）：
@@ -410,7 +418,9 @@ The given tree is shown on the left in the figure below. The tree with the minim
 - 难度：语义档 中等，diff_score 50
 - 判定：SILENT_FAILURE，置信度 0.90
 - 答案正确：True，用例通过率 1.0
-- 定位：第3步 复杂度不达标，步骤3断言算法总复杂度为O(M log M)时间、O(M)空间，但实际步骤4代码中对每个约束列c遍历所有压缩段segs（cols最多M个，s…
+- 定位：
+  - 复杂度不达标 · 第3步 · fatal：步骤3断言算法总复杂度为O(M log M)时间、O(M)空间，但实际步骤4代码中对每个约束列c遍历所有压缩段segs（cols最多M个，segs最多O(M)个），形成O(M^2)双重循环，对M≤2e5的极端数据会超时，超出题目数据范围允许的上限。
+    - 证据：步骤4代码：'for c in cols:' 内嵌 'for (length, h, l) in segs:'，cols大小≤M，segs长度≈2*len(rows)+1≤2M+1，总迭代≤2M^2。步骤3结论'检查每列遍历段O(M)（总O(M)）'及'算法复杂度O(M log M)时间'与实际不符。
 
 
 题面全文（原始题面，取自 `data/questions/`）：
@@ -691,7 +701,9 @@ No
 - 难度：语义档 中等，diff_score 50
 - 判定：SILENT_FAILURE，置信度 0.90
 - 答案正确：True，用例通过率 1.0
-- 定位：第4步 逻辑缺陷，构造实现中盲目顺序消耗spare边，且用 fu == y（y为弹出的未连通分量代表整数，未做dsu.find）决定是否将边连到已连通分量co…
+- 定位：
+  - 逻辑缺陷 · 第4步 · fatal：构造实现中盲目顺序消耗spare边，且用 fu == y（y为弹出的未连通分量代表整数，未做dsu.find）决定是否将边连到已连通分量connected。当spare边均来自同一非connected分量（如全为某节点自环）时，可能导致最后一步 orig == newserv（自连，违反操作必须连到不同服务器的要求）且connected分量始终未参与合并，最终全图不连通。示例：N=4, M=3, 边全为(2,2)自环，comps=[1,2,3,4]，代码依次将2连4、2连3，最后y=2时 fu≠2 而 newserv=2，输出“* 2 2”自连，节点1孤立，未达成连通。
+    - 证据：代码段：while(!unconnected.empty()){ auto [id,u,v]=spare[idx++]; int y=unconnected.back(); unconnected.pop_back(); int fu=dsu.find(u); int orig=u; int newserv=(fu==y)?connected:y; cout<<id<<' '<<orig<<' '<<newserv<<'\n'; dsu.unite(orig,newserv); connected=dsu.find(comps[0]); } 当 y==orig 且 fu!=y 时 newserv==orig 导致非法自连且connected孤立。
 
 
 题面全文（原始题面，取自 `data/questions/`）：
@@ -940,7 +952,9 @@ No operation may be necessary.
 - 难度：语义档 基础~套路，diff_score 35
 - 判定：SILENT_FAILURE，置信度 0.95
 - 答案正确：True，用例通过率 1.0
-- 定位：第2步 跳步推导，步骤2给出充要条件：总逆序对奇或存在分割点k使前缀1奇且后缀0奇则Alice赢，否则Bob必胜。前置推理仅证明了充分性（存在k可删对应子序列…
+- 定位：
+  - 跳步推导 · 第2步 · fatal：步骤2给出充要条件：总逆序对奇或存在分割点k使前缀1奇且后缀0奇则Alice赢，否则Bob必胜。前置推理仅证明了充分性（存在k可删对应子序列留非递减串这一P态而胜；inv奇全删胜），未证明必要性（不存在k时Alice任何合法移动均无法抵达必胜态，从而Bob有必胜策略）。结论中的“否则Bob必胜”及iff的逆向缺乏推导，属推理跳跃/断言未证。
+    - 证据：步骤2原文结论：'胜负判定条件：inv%2==1 或 存在 k 使 pref1(k) 奇且 suf0(k) 奇则 Alice 赢，否则 Bob'。前述内容只说明非递减串是必败态且能一步到达则赢，未论证不能一步到达非递减态时即输。移除'否则 Bob'及iff反向后，剩余链条无法重建无k时Bob胜，故为fatal缺口。沙盒执行全部用例通过表明最终答案正确，符合沉默失败。
 
 
 题面全文（原始题面，取自 `data/questions/`）：
