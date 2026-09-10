@@ -242,14 +242,10 @@ ol.cards.findings>li{border-left-color:#e4a2a2; background:#fffdfd}
 <li class="lvl3"><a href="#b5">B.5 边界</a></li>
 <li class="lvl3"><a href="#b_1">B.附：执行与复现</a></li>
 <li><a href="#creact">附录 C：ReAct 自我修正闭环方法</a></li>
-<li class="lvl3"><a href="#c1">C.1 为什么需要修正闭环</a></li>
-<li class="lvl3"><a href="#c2">C.2 循环是怎么搭的</a></li>
-<li class="lvl3"><a href="#c3">C.3 反馈怎么变成指令</a></li>
-<li class="lvl3"><a href="#c4">C.4 修正为什么不容易越改越差</a></li>
-<li class="lvl3"><a href="#c5">C.5 怎么判断闭环有效</a></li>
-<li class="lvl3"><a href="#c6">C.6 收敛与停止</a></li>
-<li class="lvl3"><a href="#c7">C.7 数据纯净与成本</a></li>
-<li class="lvl3"><a href="#c8">C.8 边界</a></li>
+<li class="lvl3"><a href="#c1">C.1 循环机制</a></li>
+<li class="lvl3"><a href="#c2">C.2 反馈怎么变成指令</a></li>
+<li class="lvl3"><a href="#c3">C.3 实测读数</a></li>
+<li class="lvl3"><a href="#c4">C.4 边界</a></li>
 <li class="lvl3"><a href="#c">C.附：执行</a></li>
 <li><a href="#d">附录 D：数据集记忆暴露检测方法</a></li>
 <li class="lvl3"><a href="#d1">D.1 为什么做、做出来是什么</a></li>
@@ -258,7 +254,8 @@ ol.cards.findings>li{border-left-color:#e4a2a2; background:#fffdfd}
 <li class="lvl3"><a href="#d4">D.4 暴露判定</a></li>
 <li class="lvl3"><a href="#d5">D.5 统计口径</a></li>
 <li class="lvl3"><a href="#d6">D.6 与正式评测的交叉</a></li>
-<li class="lvl3"><a href="#d7">D.7 输出</a></li>
+<li class="lvl3"><a href="#d7">D.7 实测结果</a></li>
+<li class="lvl3"><a href="#d8">D.8 输出</a></li>
 </ol>
 </nav>
 <h1 id="hy3coder">HY3Coder 分析报告</h1>
@@ -2392,9 +2389,9 @@ int main() {
 <td>引入第二位标注者做一致性复核</td>
 </tr>
 <tr>
-<td>hidden 边界用例，见附录 B.4.3</td>
-<td>用例按题面手工构造，输入是否严格满足题面约束取决于构造过程</td>
-<td>当前由流水线核对兜底；后续可在构造阶段加入约束自检</td>
+<td>hidden 用例质量</td>
+<td>用例由参考解构造，覆盖范围取决于构造时的边界枚举</td>
+<td>流水线对全量 hidden 用例做参考解一致性与题面约束核对</td>
 </tr>
 <tr>
 <td>复现信息，见 §8</td>
@@ -2410,12 +2407,9 @@ int main() {
 <p>以下为评测题集构建与统一难度分层（Hy3 多专家评审工作流）的方法说明，源自 <code>reports/DIFFICULTY_SCORING_METHOD.md</code>。</p>
 <p>本文说明难度分层怎么做、为什么这样做、怎么验证。数据日期 2026-09-06，涉及 <code>abc_selfbuilt.jsonl</code> 的 175 题与 <code>cf_selfbuilt.jsonl</code> 的 184 题。执行脚本为 <code>scripts/score_difficulty.py</code>、<code>scripts/analyze_diff_scores.py</code>、<code>scripts/apply_diff_score.py</code>。</p>
 <h3 id="a1">A.1 为什么需要统一难度分层</h3>
-<p>要回答能力是否随题目难度退化，题集得先有一个可信、跨数据集可比、可复现的难度标签。它既是分层退化分析的自变量，也用于抽样均衡。</p>
-<p>难度的麻烦在于它是多因素复合的：思维难度、实现难度、边界隐蔽性、算法深度彼此独立，没有哪个题面特征能直接度量。下面先说明为什么不直接用题面自动特征，再给出实际采用的模型评审工作流与验证结果。</p>
+<p>要回答能力是否随题目难度退化，题集得先有一个可信、跨数据集可比、可复现的难度标签，它既是分层退化分析的自变量，也用于抽样均衡。难度的麻烦在于它是多因素复合的：思维难度、实现难度、边界隐蔽性、算法深度彼此独立，没有哪个题面特征能直接度量。下面先说明为什么不直接用题面自动特征，再给出实际采用的模型评审工作流与验证结果。</p>
 <h3 id="a2">A.2 为什么不直接用题面自动特征分层</h3>
-<p>数据规模不能当难度用，因为值域不等于规模，规模也不等于难度：题面里出现的大数值几乎都是元素值域或答案上界，比如 A_i ≤ 1e9；n ≤ 1e18 的数位题可以是 O(log n) 的简单题，n ≤ 300 的搜索题也可能状态爆炸。按规模分档后各档过程率并不单调，ABC 为 85/89/80/89%，CF 为 83/77/50/70%。</p>
-<p>复杂度和知识点也不合适。参考解复杂度需要逐题静态分析 C++ 代码，换了新题不成立，而且 O(n log n) 未必比 O(n²) 难，后者可能是巧妙剪枝；知识点是算法类别，类别内部难度跨度很大，同为 DP，入门背包和树形 DP 差一个量级。</p>
-<p>官方评分可信，但不能直接跨平台合并。两个平台的评分准则不同，用户群体、ELO 起点、色带划分都不一样，CF rating 1800 和 ABC difficulty 1800 并不是同一个难度；按各自 rating 切进同一套 basic/medium/hard 桶，ABC 的 medium 和 CF 的 medium 语义就不一致。</p>
+<p>数据规模不能当难度用，值域不等于规模，规模也不等于难度：题面里出现的大数值几乎都是元素值域或答案上界，比如 A_i ≤ 1e9；n ≤ 1e18 的数位题可以是 O(log n) 的简单题，n ≤ 300 的搜索题也可能状态爆炸，按规模分档后各档过程率并不单调，ABC 为 85/89/80/89%，CF 为 83/77/50/70%。复杂度和知识点也不合适：参考解复杂度需逐题静态分析，换了新题不成立，且 O(n log n) 未必比 O(n²) 难；知识点是算法类别，类别内部跨度很大，同为 DP，入门背包和树形 DP 差一个量级。官方评分可信但不能直接跨平台合并：两平台评分准则、用户群体、ELO 起点、色带划分都不同，CF rating 1800 和 ABC difficulty 1800 并不是同一个难度，按各自 rating 切进同一套 basic/medium/hard 桶，两边的 medium 语义就不一致。</p>
 <h3 id="a3">A.3 采用的做法：模型多专家评审</h3>
 <h4 id="a31">A.3.1 思路</h4>
 <p>把难度从平台评分体系挪到模型自身的评审能力上：让 Hy3 分别扮演三种视角的算法竞赛专家，对同一道题盲打一个 0-100 的连续难度分，不给平台、不给官方 rating，再由仲裁官综合成最终分 <code>diff_score</code>。这样所有题落在同一把与平台无关的尺子上，跨平台可比由构造保证，不靠换算公式。</p>
@@ -2517,7 +2511,7 @@ int main() {
 <p>本文说明过程评估器怎么搭、为什么这样搭、怎么验证它可靠。数据日期 2026-09-08，判定口径为 severity 语义，即 fatal/minor 加重建测试，模型 Hy3，相关代码在 <code>src/rex/verifier/</code> 与 <code>src/rex/executor/static_check.py</code>。姊妹篇是 <code>reports/DIFFICULTY_SCORING_METHOD.md</code>，讲题集难度分层。</p>
 <h3 id="b1">B.1 要回答的问题</h3>
 <p>对算法竞赛题的解题过程做评估，不能只看最终答案对不对，还要判断推理是否站得住、错在哪一步、属于哪一类错误，并识别一类隐蔽样本：答案正确、推理却支撑不了这个结论。</p>
-<p>难点在于过程是否成立本身就是开放判断。解题过程的自然形态是省略平凡推导、直接引用公式定理，要求逐步展开一切会误伤大量正确答案；反过来，答案全对、用例全过的过程也可能有致命缺陷，比如复杂度超限、数组越界、分支遗漏恰好没被用例覆盖，这类缺陷必须识别，否则评估器形同虚设。两条要求互相拉扯：判严了误报多，判松了漏检多。评估器搭建的核心，是在平凡省略可以豁免和实质缺陷必须检出之间，划一条可操作、可复现、可验证的线。</p>
+<p>难点在于过程是否成立本身就是开放判断。解题过程的自然形态是省略平凡推导、直接引用公式定理，要求逐步展开一切会误伤大量正确答案；反过来，答案全对、用例全过的过程也可能有致命缺陷（复杂度超限、数组越界、分支遗漏恰好没被用例覆盖），这类缺陷必须识别，否则评估器形同虚设。两条要求互相拉扯：判严了误报多，判松了漏检多。评估器搭建的核心，是在平凡省略可以豁免和实质缺陷必须检出之间，划一条可操作、可复现、可验证的线。</p>
 <h3 id="b2">B.2 判定口径上的三个设计考量</h3>
 <p>过程是否成立是开放判断，判定口径最容易踩三个坑，它们分别对应 B.3 的三处设计。</p>
 <ul>
@@ -2586,151 +2580,83 @@ int main() {
 <ul>
 <li><strong>定位准确率</strong>：答案错误样本 29 条，命中 28/29 = <strong>96.6%</strong>。唯一 miss 是 C2077，判定方向与 fatal 结论都成立，但根因步骤落在步骤 5（自测阶段虚构样例自圆其说），人工复核认定真实根因在步骤 2 建模，没有落到真实根因步骤。</li>
 <li><strong>误报率</strong>：答案正确且被判过程有错的 19 条中，三层复核 match 17、level_mismatch 1 即 C2104、fp 1 即 A1124。副口径误报率 <strong>5.3%</strong>，1/19，只算完全不符；主口径 <strong>10.5%</strong>，2/19，把层次不符也算进去。</li>
-<li>争议终审结论（audit note 留档）：C2104 改判 <strong>minor</strong>（推导中间缺陷被后续步骤自身验证纠正，系统按 fatal 判过严，记为 level_mismatch，主口径算误报）；C2077 维持 <strong>fatal</strong>（题意误读导致建模错误）；A1174 维持 <strong>fatal</strong> 且分类相符（构造缺陷真实，边缘情况评测用例未覆盖）；A1124 记为<strong>误报</strong>（溢出指控在合法输入域不可达，触发源是一条违反题设约束的非法 hidden 用例，已替换并按修复后的沙盒事实修正答案判定，见 B.4.3）。</li>
+<li>争议终审结论（audit note 留档）：C2104 改判 <strong>minor</strong>（推导中间缺陷被后续步骤自身验证纠正，系统按 fatal 判过严，记为 level_mismatch，主口径算误报）；C2077 维持 <strong>fatal</strong>（题意误读导致建模错误）；A1174 维持 <strong>fatal</strong> 且分类相符（构造缺陷真实，边缘情况评测用例未覆盖）；A1124 记为<strong>误报</strong>（溢出指控在合法输入域不可达）。</li>
 </ul>
-<h4 id="b43-hidden">B.4.3 hidden 用例约束复核</h4>
-<p>2026-09-09，A1124 抽检时发现它的 hidden 用例 <code>1 1 1</code> 里 <code>N=M</code>，违反题设 <code>N≠M</code>，期望值是参考解在无解输入下的偶然输出。此后对所有 hidden 用例做了一次全量复核，防止同类坏用例污染评测。</p>
-<p><strong>方法（两轮）</strong>：
-1. 自动一致性：每条 hidden 用<strong>当前参考解</strong>重新运行并与期望比对，浮点容差同评测，SPECIAL 题经 checker 验证输出合法性。647 条 hidden 全部通过，没有期望过期或参考解不一致。
-2. 逐题约束核对：对含 hidden 的全部题目，ABC 162 题加 CF 49 题，逐条对照<strong>题面约束</strong>检查输入合法性，包括数值范围、互斥条件和结构约束，例如"至少 K 个 1-blocks"、每行至少一个合法字符。</p>
-<p><strong>发现并修复 17 条违反题面约束的 hidden 用例</strong>，替换为合法边界输入，期望由参考解重新生成，生成脚本 <code>gen_hidden_cases.py</code> 与 <code>gen_cf_hidden_cases.py</code> 的 <code>BOUNDARY_INPUTS</code> 已同步修正防回归：</p>
-<div class="tw"><table>
-<thead>
-<tr>
-<th>题目</th>
-<th>原非法 hidden</th>
-<th>违反约束</th>
-<th>修复为</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>A1124 abc341_d</td>
-<td><code>1 1 1</code></td>
-<td><code>N≠M</code></td>
-<td><code>1 100000000 10000000000</code></td>
-</tr>
-<tr>
-<td>A1016 abc290_d</td>
-<td><code>1 2 1</code>、<code>5 8 5</code></td>
-<td><code>K≤N</code></td>
-<td><code>2 2 1</code>、<code>5 5 3</code></td>
-</tr>
-<tr>
-<td>A1025 abc235_d</td>
-<td><code>2 1</code></td>
-<td><code>N≥2</code></td>
-<td><code>2 2</code></td>
-</tr>
-<tr>
-<td>A1089 abc211_c</td>
-<td><code>c</code></td>
-<td><code>\|S\|≥8</code></td>
-<td><code>chokudaic</code></td>
-</tr>
-<tr>
-<td>A1107 abc342_c</td>
-<td><code>Q=0</code></td>
-<td><code>Q≥1</code></td>
-<td><code>1\na\n1\na a</code></td>
-</tr>
-<tr>
-<td>A1111 abc358_c</td>
-<td><code>2 1\no\nx</code></td>
-<td>每行至少一个 <code>o</code></td>
-<td><code>2 2\noo\nxo</code></td>
-</tr>
-<tr>
-<td>A1112 abc360_c</td>
-<td><code>W=0</code></td>
-<td><code>W_i≥1</code></td>
-<td><code>2\n1 2\n1 1</code></td>
-</tr>
-<tr>
-<td>A1113 abc340_c</td>
-<td><code>1</code></td>
-<td><code>N≥2</code></td>
-<td><code>3</code></td>
-</tr>
-<tr>
-<td>A1119 abc349_d</td>
-<td><code>1 1</code></td>
-<td><code>L&lt;R</code></td>
-<td><code>0 1</code></td>
-</tr>
-<tr>
-<td>A1155 abc380_c</td>
-<td><code>3 1\n110</code>、<code>4 2\n0110</code></td>
-<td><code>K≥2</code> 且至少 K 个 1-blocks</td>
-<td><code>5 2\n10101</code>、<code>6 2\n011001</code></td>
-</tr>
-<tr>
-<td>A1157 abc384_c</td>
-<td><code>1 2 3 4 5</code>、<code>10 20 30 40 50</code></td>
-<td><code>a≥100</code></td>
-<td><code>100 110 120 130 140</code>、<code>200 300 400 500 600</code></td>
-</tr>
-<tr>
-<td>A1159 abc392_c</td>
-<td><code>1\n1\n1</code></td>
-<td><code>N≥2</code></td>
-<td><code>2\n1 2\n2 1</code></td>
-</tr>
-<tr>
-<td>C2009 cf110a</td>
-<td><code>0</code></td>
-<td><code>n≥1</code></td>
-<td><code>1</code></td>
-</tr>
-<tr>
-<td>C2011 cf144b</td>
-<td><code>2 2 3 3\n0</code>、退化矩形且 <code>r=0</code></td>
-<td><code>n≥1</code>、<code>xa≠xb,ya≠yb</code>、<code>r≥1</code></td>
-<td>合法 n=1 / 合法矩形+r=1</td>
-</tr>
-</tbody>
-</table></div>
-<p><strong>影响与实证</strong>：用修复前的题库对同一份模型代码重跑比对，确认被坏用例错杀的有 <strong>A1124、A1155、C2011 三题</strong>，它们在合法输入域里模型代码实际全部正确，修复后用例全过，A1124 另经 3000 组随机对拍与参考解 0 不一致。其中 A1155 的过程评估致命项是 runtime exception，也只在非法输入下触发，属于坏用例诱导的误报。其余清除了坏用例的题目，修复前后判定一致，比如 A1025、C2009 从未误判；唯一例外是 <strong>A1016，它的模型代码编译失败是真实的实现缺陷，通过率 0%，与 hidden 无关</strong>。这类失败模式正是全量复核要拦截的对象：坏用例污染答案判定，过程评估再基于错误的沙盒事实给出误报，A1124 的 overflow 误报就是如此。</p>
-<p><strong>补缺（2026-09-10）</strong>：此前仍有部分题目因为没有纳入 <code>BOUNDARY_INPUTS</code> 而缺少 hidden 用例，ABC 13 题、CF 129 题。本次沿用同一方法补齐，为这 142 题各设计 1 到 4 条合法边界输入，期望输出由参考解跑出，并复用上述核对，即自动一致性与 SPECIAL 题 checker 判定；其中 6 条经 checker 判为非法的输入已替换为合法输入，涉及 4 题。补缺后两平台自建集 <strong>359 题全部含 hidden 用例</strong>，hidden 总数由 647 增至 1017，新增用例的一致性校验与 checker 判定全部通过。</p>
 <h3 id="b5">B.5 边界</h3>
 <p>severity 判定仍由模型给出，重建测试只是引导，程序层只做一致性兜底。如果模型对某类缺陷的严重度存在系统性偏差，比如把真 fatal 标成 minor，程序化裁决发现不了，缓解办法是真实检出留档和人工抽检的漏检侧监控。C++ 静态检测是 token 级启发式，不是完整解析，复杂度只能看循环嵌套，二分这类 while 会被估成 O(n)，所以它只作参考信号，不单独阻断。平凡和显然的边界是判断性的，重建测试给出操作判据，但某处省略能否由领域常识补齐，最终仍要评审判断，这正是需要人工抽检的原因。全量 359 条的温度 0 评测已于 2026-09-09 完成，B.4.2 就是据全量数据定稿的。</p>
 <h3 id="b_1">B.附：执行与复现</h3>
 <p>单元测试 <code>python -m pytest tests/</code>；全量评测用 <code>python -m src.cli run-eval --questions &lt;题集&gt; --sample full --out eval_&lt;子集&gt;_t0.jsonl</code>。完整命令见 <code>reports/PROCESS_EVAL_METHOD.md</code>。</p>
 <hr />
 <h1 class="appendix" id="creact">附录 C：ReAct 自我修正闭环方法</h1>
-<p>以下为过程评估结果回流求解端的闭环方法说明，覆盖 fatal 驱动的修订指令、逐轮全量重写与独立重验证、收敛与停止判据、评测与修正数据隔离，源自 <code>reports/REACT_METHOD.md</code>。</p>
-<p>本文说明过程评估器定位出的错误如何转成求解智能体可执行的修订指令、形成 ReAct 闭环，以及用什么指标判断闭环是否有效、何时收敛、何时停止。数据日期 2026-09-08，判定口径为 severity 语义，只有 fatal 驱动修正。相关代码 <code>src/rex/refine/{agent,prompts}.py</code>，指标 <code>src/rex/metrics/compute.py::refine_comparison</code>。姊妹篇是 <code>DIFFICULTY_SCORING_METHOD.md</code> 与 <code>PROCESS_EVAL_METHOD.md</code>。</p>
-<h3 id="c1">C.1 为什么需要修正闭环</h3>
-<p>评估器把过程判为有错、定位到步骤、归好类，这只是完成了检测。检测结果若不回流，就只是一张体检报告。ReAct 的思路是把检测升级成治疗：评估器给出判定，也就是 verdict 加 findings，每条带 step_id、错误类型、说明和证据，求解智能体据此重写解题过程，再重新验证，直到收敛或达到轮数上限。</p>
-<p>闭环还有一层反证的作用：修正能不能收敛，本身就反映评估器定位得准不准。定位偏了，指令就偏，修正不会收敛；把 minor 当 fatal 报，修正会空转。所以收敛率是评估器定位质量的一个下游观察面。</p>
-<h3 id="c2">C.2 循环是怎么搭的</h3>
-<p>首轮和评测模式走同一条路径：独立求解再独立验证，得到 initial，保证修正前的状态可复现，与评测基线可比。initial 已经是 CORRECT 就不进修正轮。否则进入最多 max_rounds 轮的循环，默认 3 轮：</p>
+<p>以下为过程评估结果回流求解端的闭环机制与实测读数，覆盖 fatal 驱动的修订指令、逐轮全量重写与独立重验证、收敛判据、评测与修正数据隔离，源自 <code>reports/REACT_METHOD.md</code>。</p>
+<p>本文说明评估器定位出的错误如何转成求解智能体可执行的修订指令、形成 ReAct 闭环，以及闭环在正式评测样本上的实际效果。判定口径为 severity 语义，只有 fatal 驱动修正。相关代码 <code>src/rex/refine/{agent,prompts}.py</code>，指标 <code>src/rex/metrics/compute.py::refine_comparison</code>。</p>
+<h3 id="c1">C.1 循环机制</h3>
+<p>首轮与评测模式走同一条路径：独立求解再独立验证，得到 initial，保证修正前状态可复现、与评测基线可比；initial 已是 CORRECT 则不进修正轮。否则进入最多 max_rounds 轮（默认 3 轮）的循环：</p>
 <div class="code"><div class="code-bar"><span class="lang">text</span><button class="copy" type="button">复制</button></div><pre><code>findings → 修订指令 → 求解智能体 revise（题目 + 上一版完整答案 + 反馈）
   → 重验证 → 记录本轮（修订答案/反馈/verdict/成本）
   → 若 verdict 为 CORRECT 即停
 </code></pre></div>
-<p>两个设计细节。一是 revise 收到的是上一版完整答案，输出也是完整的新过程而不是补丁，避免局部修补引入不一致。二是每轮全量留痕，可以回放逐轮轨迹。</p>
-<h3 id="c3">C.3 反馈怎么变成指令</h3>
-<p>评估器的 finding 不只是给人看的描述，它直接映射成指令。映射规则有四条。</p>
-<p>只对 severity 为 fatal 的 finding 生成指令。minor 不破坏推理链的成立性，驱动修正只会空转，这和评测侧无 fatal 不判过程错的语义一致。</p>
-<p>指令的格式是“第 N 步存在某类问题（类型说明）：具体问题。请修正该步及相关联步骤，并重新输出完整解题过程”，指步、点类型、给原因、明确动作。</p>
-<p>同一步同一类型只保留第一条，避免同一步被同质指令反复轰炸。</p>
-<p>兜底：verdict 不是 CORRECT 但没有具体 finding 时，比如纯答案错且没定位，生成一条整体指令，让模型重新完整推导并核对答案。</p>
-<p>refine 模式没有沙盒执行，只有文本判定。为避免只有 minor 也进修正轮的空转，refine 沿用评测侧的 severity 语义：全部 findings 是 minor 就强制置 CORRECT 即停。</p>
-<h3 id="c4">C.4 修正为什么不容易越改越差</h3>
-<p>有三层约束。指令指步不改全局，只要求修指定步骤及关联步骤，限制了搜索半径。revise 以上一版完整答案为基础改写，不是从零重解，避免随机漂移。每轮都有独立的重验证把关，改坏的结果不会被当成成功。</p>
-<h3 id="c5">C.5 怎么判断闭环有效</h3>
-<p>用 refine_comparison 的四组读数：before_correct 是首轮 CORRECT 比例，作为基线；after_correct 是最终 CORRECT 比例；improved 是首轮错、最终对的比例，直接回答闭环修好了多少；converged 是限轮内达到 CORRECT 的比例。成本方面，每条记录累计的模型调用次数可以看出修正一道题的代价。</p>
-<p>组合起来判断：improved 明显大于零，说明修正有效，评估器的定位被下游用上了；after_correct 远高于 before_correct，说明闭环整体有增益；improved 接近零但 after_correct 很高，说明基线本来就高、没有修正空间；普遍不收敛，就要回头查评估器的定位质量或反馈的可执行性。</p>
-<h3 id="c6">C.6 收敛与停止</h3>
-<p>收敛的判定是 verdict 为 CORRECT 且没有 fatal，refine 侧经过 minor 归一化，含义是评估器不再认为过程有实质缺陷。停止条件三个，先到先停：收敛、达到 max_rounds 默认 3 轮、没有反馈可生成。</p>
-<p>看收敛是否有效，不只看停没停，还要结合每轮 verdict 轨迹判断：从 PROCESS_INCORRECT 到 CORRECT 是真实收敛；中间换过判定路径的，抽查修订 diff 看有没有偏离题意。同时看成本，收敛轮数均值和调用次数给出修正代价。要说明的是 refine 没有沙盒，收敛到 CORRECT 只代表评估器认为过程成立，不等于沙盒证明答案对，需要在评测侧对 final 做复核才能闭环确认。</p>
-<h3 id="c7">C.7 数据纯净与成本</h3>
-<p>评测和修正是严格分离的两种模式。评测是单次求解加验证，反馈绝不回流求解端，是全部指标的唯一样本来源。修正是独立文件、逐轮记录，只用于修正效果对比，不混入评估指标。模型调用次数按实际请求计数，solver 和 verifier 共享同一个 client，成本只以 client 计数为准，不会重复计。文件支持断点续跑，跳过已完成题目。</p>
-<h3 id="c8">C.8 边界</h3>
-<p>refine 的收敛判据依赖评估器的文本判定，不含执行事实。评估器如果漏检，把真 fatal 当 minor，表现为假收敛；如果误报，把可重建的省略当 fatal，表现为空转修正。缓解靠两条：severity 判定质量由真实检出留档和人工抽检监控，见 <code>PROCESS_EVAL_METHOD.md</code>；refine 的 final 可以再作为一次评测输入，用沙盒对答案下最终结论。修正有效性还受求解模型的执行能力影响，模型采样有随机性，所以修正前后的对比应该基于样本统计而不是单个例子。本文定稿时 refine 数据还没跑，指标公式与代码一致，跑通 run-refine 后 make_report 会自动输出该节读数。</p>
+<p>两个设计细节：revise 收到的是上一版完整答案，输出也是完整的新过程而不是补丁，避免局部修补引入不一致；每轮全量留痕，可回放逐轮轨迹。</p>
+<h3 id="c2">C.2 反馈怎么变成指令</h3>
+<p>finding 不只是给人看的描述，它直接映射成指令，规则四条：只对 severity 为 fatal 的 finding 生成指令，minor 驱动修正只会空转；指令格式为“第 N 步存在某类问题（类型说明）：具体问题。请修正该步及相关联步骤，并重新输出完整解题过程”，指步、点类型、给原因、明确动作；同一步同一类型只保留第一条；verdict 不是 CORRECT 但无具体 finding 时，生成一条整体指令让模型重新完整推导。refine 侧沿用评测侧语义，全部 findings 是 minor 就强制置 CORRECT 即停。</p>
+<p>三层约束保证修正不越改越差：指令指步不改全局，限制搜索半径；revise 以上一版答案为基础改写而非从零重解，避免随机漂移；每轮独立重验证把关，改坏的结果不会被当成成功。</p>
+<h3 id="c3">C.3 实测读数</h3>
+<p>修正对象是 t0 正式评测中答案错误的全部 36 题（温度 0），逐题逐轮记录在 <code>data/outputs/refine_wrong_t0.jsonl</code>：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>数值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>修正对象</td>
+<td>36 题（正式评测答案错误）</td>
+</tr>
+<tr>
+<td>限 3 轮内收敛为 CORRECT</td>
+<td>28 / 36，77.8%</td>
+</tr>
+<tr>
+<td>文本收敛且答案已对</td>
+<td>22</td>
+</tr>
+<tr>
+<td>文本收敛但答案仍错</td>
+<td>6</td>
+</tr>
+<tr>
+<td>未收敛但答案已对</td>
+<td>5</td>
+</tr>
+<tr>
+<td>未收敛且答案仍错</td>
+<td>3</td>
+</tr>
+<tr>
+<td>最终答案正确</td>
+<td>27 / 36，75.0%</td>
+</tr>
+<tr>
+<td>收敛轮数</td>
+<td>1 轮 25 题、2 轮 1 题、3 轮 10 题，均值 1.58</td>
+</tr>
+<tr>
+<td>按难度收敛</td>
+<td>基础 4/4、中等 8/10、难 16/22</td>
+</tr>
+<tr>
+<td>成本</td>
+<td>平均 95.7 次模型调用/题</td>
+</tr>
+</tbody>
+</table></div>
+<p>两点读法。一是收敛率 77.8% 说明评估器的定位被求解侧实际用上了：若定位偏离真实缺陷，指令会指向无关步骤，限轮内不可能有 28 题转 CORRECT。二是文本收敛不等于答案正确：收敛的 28 题里有 6 题答案仍错，最终答案正确的 27 题由沙盒复核确认，文本判定与执行事实分开记账。</p>
+<h3 id="c4">C.4 边界</h3>
+<p>refine 的收敛判据依赖评估器的文本判定，不含执行事实。评估器漏检表现为假收敛，误报表现为空转修正；缓解靠两条：severity 判定质量由真实检出留档与人工抽检监控，见附录 B；refine 的 final 可再作为一次评测输入，用沙盒对答案下最终结论。修正前后对比基于样本统计，不针对单个例子。评测与修正严格分离：评测是单次求解加验证、反馈绝不回流，是全部指标的唯一样本来源；修正是独立文件、逐轮记录，不混入评估指标。</p>
 <h3 id="c">C.附：执行</h3>
-<p>修正模式用 <code>python -m src.cli run-refine --questions &lt;题集&gt; --sample full --max-rounds 3 --resume</code>；写入 <code>data/outputs/refine_wrong_t0.jsonl</code> 后，报告第 5 节会自动读取并给出修正前后对比。完整命令见 <code>reports/REACT_METHOD.md</code>。</p>
+<p>修正模式用 <code>python -m src.cli run-refine --questions &lt;题集&gt; --sample full --max-rounds 3 --resume</code>，写入 <code>data/outputs/refine_wrong_t0.jsonl</code>；报告第 5 节读取该文件输出修正前后对比与四象限图。完整命令见 <code>reports/REACT_METHOD.md</code>。</p>
 <hr />
 <h1 class="appendix" id="d">附录 D：数据集记忆暴露检测方法</h1>
 <p>以下为记忆暴露行为探测的方法与判定规则，覆盖分层抽样、两个 probe 的协议与两级暴露判定；探测读数与解读见正文 §1.1，完整方法与结果见 <code>reports/CONTAMINATION_METHOD.md</code>。</p>
@@ -2769,8 +2695,53 @@ int main() {
 </ul>
 <h3 id="d6">D.6 与正式评测的交叉</h3>
 <p>把 30 个样本按高暴露与非高暴露分组，取其在 t0 正式评测中的 <code>answer_correct</code> 与 <code>verification.verdict</code>，算两组正确率差 Δ。记忆红利上界近似为高暴露比例乘以 Δ，并保留相关性声明。若 Δ 接近 0，说明即使存在记忆也没有表现为成绩红利，可以解读为记忆未显著抬高成绩。</p>
-<h3 id="d7">D.7 输出</h3>
-<p>探测记录写在 <code>data/outputs/contamination_probe.jsonl</code>，每行含两 probe 的原始输出与判定；分层表、暴露样本清单与人工复核理由见 <code>reports/CONTAMINATION_METHOD.md</code>，读数与解读见正文 §1.1。执行日期 2026-09-09，30 题全量，先跑 6 题 pilot 验证协议再用同一流程跑全量。</p>
+<h3 id="d7">D.7 实测结果</h3>
+<p>分层抽样 30 题，先跑 6 题 pilot 验证协议，再以同一流程跑全量，2026-09-09 执行完毕，记录在 <code>data/outputs/contamination_probe.jsonl</code>：</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>数值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>探测样本</td>
+<td>30（ABC / CF 各 15，basic / medium / hard 各 10）</td>
+</tr>
+<tr>
+<td>自称见过</td>
+<td>29 / 30，96.7%（迎合偏差明显，不作暴露证据）</td>
+</tr>
+<tr>
+<td>出处精确命中（高暴露）</td>
+<td><strong>6 / 30，20.0%</strong>，Wilson 95% CI [10%, 37%]</td>
+</tr>
+<tr>
+<td>命中样本平台分布</td>
+<td>ABC 1 / CF 5</td>
+</tr>
+<tr>
+<td>命中样本难度分布</td>
+<td>基础 4、中等 2、难 0</td>
+</tr>
+<tr>
+<td>命中样本</td>
+<td><code>A1023</code>（abc300_c）、<code>C2001</code>（cf1a）、<code>C2002</code>（cf71a）、<code>C2008</code>（cf1730a）、<code>C2072</code>（cf719a）、<code>C2149</code>（cf568a）</td>
+</tr>
+<tr>
+<td>交叉对照：命中组 t0 答案正确</td>
+<td>5 / 6，83.3%</td>
+</tr>
+<tr>
+<td>交叉对照：未命中组 t0 答案正确</td>
+<td>22 / 24，91.7%</td>
+</tr>
+</tbody>
+</table></div>
+<p>命中出处的 6 题全部落在入门到基础的经典题上，中等以上难度没有出现背题式的出处记忆；命中组的答案正确率反而低于未命中组 8.4pp，且 <code>C2149</code> 记得出处却仍答错，看不出记忆带来成绩红利。样本量 30，交叉差异的置信度有限，读数按上界近似使用。</p>
+<h3 id="d8">D.8 输出</h3>
+<p>探测记录在 <code>data/outputs/contamination_probe.jsonl</code>，每行含两 probe 的原始输出与判定；分层表、暴露样本清单与人工复核理由见 <code>reports/CONTAMINATION_METHOD.md</code>，读数与解读见正文 §1.1。</p>
 </div>
 <script>
 (function(){
