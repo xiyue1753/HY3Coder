@@ -81,12 +81,24 @@ nav.toc h2{margin:0 0 .6em; font-size:1em; border:none; padding:0; color:var(--m
 nav.toc ol{list-style:none; margin:0; padding:0; columns:2; column-gap:34px}
 nav.toc ol li{margin:.18em 0; break-inside:avoid}
 nav.toc .lvl3{padding-left:1.1em; color:var(--muted); font-size:.95em}
-/* 题面：与应用侧同一套容器样式（md-bound），数学块横向可滚 */
+/* 题面：与应用侧同一套容器样式（md-bound），默认收成滑动窗口压缩占位 */
 .prompt{
-  margin:1.1em 0; padding:14px 20px 18px; background:#fbfcfe;
+  margin:1.1em 0 0; padding:14px 20px 18px; background:#fbfcfe;
   border:1px solid var(--line-soft); border-left:3px solid var(--accent); border-radius:6px;
   font-size:.95em; line-height:1.72;
+  max-height:340px; overflow:auto; overscroll-behavior:contain;
 }
+.prompt.expanded{max-height:none}
+.prompt::-webkit-scrollbar{width:10px; height:10px}
+.prompt::-webkit-scrollbar-thumb{background:#cdd6e0; border-radius:6px;
+  border:2px solid transparent; background-clip:content-box}
+.prompt::-webkit-scrollbar-thumb:hover{background:#aebbc9; background-clip:content-box}
+.prompt-toggle{
+  display:block; margin:.45em 0 1.2em auto; padding:3px 14px; cursor:pointer;
+  font:inherit; font-size:.85em; color:var(--accent); background:#fff;
+  border:1px solid var(--line); border-radius:999px;
+}
+.prompt-toggle:hover{background:var(--accent-soft)}
 .md-bound{word-break:break-word}
 .md-bound p{margin:.55em 0}
 .md-bound h1,.md-bound h2,.md-bound h3,.md-bound h4{
@@ -105,6 +117,8 @@ nav.toc .lvl3{padding-left:1.1em; color:var(--muted); font-size:.95em}
   h2,h3{break-after:avoid}
   table,img,pre{break-inside:avoid}
   a{color:inherit; text-decoration:none}
+  .prompt{max-height:none; overflow:visible}   /* 打印时展开，不留半截题面 */
+  .prompt-toggle{display:none}
 }
 """
 
@@ -135,9 +149,23 @@ PROMPT_JS = r"""
     catch(e){ out = escapeHtml(safe).replace(/\n/g,'<br>'); }
     return out.replace(/\u0000K(\d+)\u0000/g, function(m, i){ return katexHtml[+i] || ''; });
   }
+  function addToggle(el){
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'prompt-toggle';
+    btn.textContent = '展开全文';
+    btn.addEventListener('click', function(){
+      var open = el.classList.toggle('expanded');
+      btn.textContent = open ? '收起题面' : '展开全文';
+    });
+    el.parentNode.insertBefore(btn, el.nextSibling);
+  }
   var nodes = document.querySelectorAll('.prompt[data-prompt]');
   for (var i = 0; i < nodes.length; i++) {
-    nodes[i].innerHTML = renderMath(nodes[i].textContent);
+    var el = nodes[i];
+    el.innerHTML = renderMath(el.textContent);
+    // 内容超出窗口高度才给展开按钮，短题面不出现多余控件
+    if (el.scrollHeight > el.clientHeight + 8) addToggle(el);
   }
 })();
 """
