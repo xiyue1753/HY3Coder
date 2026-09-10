@@ -194,6 +194,85 @@ class RefineRecord(BaseModel):
     error: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# 交互式解题会话快照（data/outputs/interact_sessions.jsonl）
+# ---------------------------------------------------------------------------
+class InteractTrialCase(BaseModel):
+    """参考解试运行的单用例结果。"""
+
+    index: int
+    passed: bool
+    input: str = ""
+    expected: str = ""
+    got: str = ""
+    duration: float = 0.0                 # 秒
+    error: str | None = None
+
+
+class InteractTrial(BaseModel):
+    """参考解试运行汇总：沙盒真实执行结果，作为会话证据留档。"""
+
+    ran: bool = False
+    language: str | None = None
+    judge: str | None = None
+    total: int = 0
+    passed: int = 0
+    elapsed: float = 0.0
+    cases: list[InteractTrialCase] = Field(default_factory=list)
+    error: str | None = None
+
+
+class InteractResult(BaseModel):
+    """求解与判定的精简摘要；完整记录仍在 eval_interactive / refine_interactive 里。"""
+
+    mode: Literal["eval", "refine"] = "eval"
+    verdict: str | None = None
+    answer_correct: bool | None = None
+    test_pass_rate: float | None = None
+    confidence: float | None = None
+    findings: int = 0
+    converged: bool | None = None         # refine 模式是否在限轮内收敛
+    rounds: int = 0
+
+
+class InteractSession(BaseModel):
+    """一次交互式解题的完整会话快照。
+
+    交互题是现场输入的（题集里原本没有），所以这里把「题目来源 / 题面 / 用例 /
+    参考解 / 命中模型 / 参考解试运行 / 求解与判定」一并留档：事后只凭这一条记录
+    就能还原当时问了什么、用的哪个模型、用例长什么样、判定结论怎么来的。
+    题目本体同时写入交互题池（data/questions/interactive.jsonl），单题回放按
+    ``question_id`` 检索即可看到题面与分步过程。
+    """
+
+    session_id: str                          # IJ<时间戳>_<短随机>
+    question_id: str                         # 新建的交互题号（回放主键）
+    origin: Literal["dataset", "manual"] = "manual"  # 题集载入 / 手动输入
+    origin_question_id: str | None = None    # 题集载入时的原题号（如 A1001）
+    origin_title: str | None = None
+    scene: str = "algorithm"
+    title: str = ""
+    prompt: str = ""
+    difficulty: str = "basic"
+    source_id: str | None = None             # 原题在平台侧的 id（如 abc161_d）
+    standard_answer: str = ""
+    reference_solution: str | None = None
+    reference_language: str | None = None
+    judge: str = "exact"
+    n_public_cases: int = 0
+    n_hidden_cases: int = 0
+    model: str | None = None                 # 本次调用命中的模型（演示/复现要看）
+    base_url: str | None = None
+    reasoning: str | None = None
+    temperature: float | None = None
+    trial: InteractTrial = Field(default_factory=InteractTrial)
+    result: InteractResult = Field(default_factory=InteractResult)
+    cost_calls: int = 0
+    elapsed: float = 0.0                     # 秒
+    created_at: str | None = None            # ISO 时间戳
+    error: str | None = None                 # 失败原因（失败会话同样留档）
+
+
 class HumanSeverityMatch(str, Enum):
     """人工抽检对「系统 fatal/minor 分级」的三层复核结论。
 

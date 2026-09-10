@@ -16,6 +16,9 @@ make_report / 前端提示）一律通过本模块的访问器取路径，
       （已归档 data/outputs/_archived/；现正式文件为 eval_abc_selfbuilt_t0.jsonl）
     - refine_selfbuilt_all.jsonl = abc_selfbuilt 数据集的正式 refine 输出
     - eval_interactive.jsonl   = 交互演示记录（source=interactive）
+    - interactive.jsonl        = 交互题池（交互式解题现场输入的题，按题号可回放）
+    - interact_sessions.jsonl  = 交互解题完整会话快照（题面/用例/参考解/模型/试运行）
+    - refine_interactive.jsonl = 交互演示的 refine 记录（与正式 refine 严格分离）
     - golden_algorithm.jsonl   = 合成 golden（已删除，2026-09-08；常量注册保留兼容）
     - golden_real_algorithm.jsonl = 真实评测检出 golden
     - audit_records.jsonl      = 人工抽检标注
@@ -37,6 +40,7 @@ from rex.models import (
     AuditRecord,
     EvalRecord,
     GoldenSample,
+    InteractSession,
     QuestionItem,
     RefineRecord,
 )
@@ -95,6 +99,13 @@ DEPRECATED_KEYS = ("algorithm", "taco", "math")
 # ---------------------------------------------------------------------------
 #: 交互评测记录（source="interactive"），独立于正式评测，供单题回放检索。
 INTERACTIVE_EVAL = "eval_interactive.jsonl"
+#: 交互题池（data/questions）：交互式解题现场输入的题，每次求解分配一个新题号写入，
+#: 单题回放按题号检索题面与用例；不参与正式统计。
+INTERACTIVE_QUESTIONS = "interactive.jsonl"
+#: 交互解题完整会话快照（data/outputs）：题面/用例/参考解/命中模型/试运行/判定摘要。
+INTERACTIVE_SESSIONS = "interact_sessions.jsonl"
+#: 交互演示的 refine 记录（data/outputs）：与正式 refine 严格分离，不进修正对比统计。
+INTERACTIVE_REFINE = "refine_interactive.jsonl"
 #: 人工抽检标注记录。
 AUDIT_FILE = "audit_records.jsonl"
 #: 真实评测检出 golden 文件名（合成 golden_algorithm.jsonl 已删除，常量保留兼容读取，文件不存在时自然为空）。
@@ -165,6 +176,18 @@ def interactive_evals_path(root: str | Path) -> Path:
     return outputs_dir(root) / INTERACTIVE_EVAL
 
 
+def interactive_questions_path(root: str | Path) -> Path:
+    return questions_dir(root) / INTERACTIVE_QUESTIONS
+
+
+def interact_sessions_path(root: str | Path) -> Path:
+    return outputs_dir(root) / INTERACTIVE_SESSIONS
+
+
+def interactive_refines_path(root: str | Path) -> Path:
+    return outputs_dir(root) / INTERACTIVE_REFINE
+
+
 def golden_real_path(root: str | Path) -> Path:
     return golden_dir(root) / GOLDEN_REAL_FILE
 
@@ -183,12 +206,18 @@ def audit_path(root: str | Path) -> Path:
 
 # -- 读取集合（供展示/报告统一消费） -----------------------------------------
 def load_active_questions(root: str | Path) -> list[QuestionItem]:
-    """合并所有启用数据集的题集（保持注册顺序）。"""
+    """合并所有启用数据集的题集 + 交互题池（保持注册顺序，交互题排在最后）。
+
+    交互题池只用于单题回放展示（按题号取题面/用例），不参与抽样与指标统计。
+    """
     qs: list[QuestionItem] = []
     for ds in active_datasets():
         p = questions_path(root, ds)
         if p.exists():
             qs += _read_jsonl(p, QuestionItem)
+    ip = interactive_questions_path(root)
+    if ip.exists():
+        qs += _read_jsonl(ip, QuestionItem)
     return qs
 
 
@@ -213,12 +242,25 @@ def active_eval_filenames() -> tuple[str, ...]:
 
 
 def load_active_refines(root: str | Path) -> list[RefineRecord]:
+    """正式 refine 记录（只含启用数据集，交互演示的 refine 不进这里）。"""
     refs: list[RefineRecord] = []
     for ds in active_datasets():
         p = refine_path(root, ds)
         if p is not None and p.exists():
             refs += _read_jsonl(p, RefineRecord)
     return refs
+
+
+def load_interactive_refines(root: str | Path) -> list[RefineRecord]:
+    """交互演示的 refine 记录（单独文件，只供单题回放检索）。"""
+    p = interactive_refines_path(root)
+    return _read_jsonl(p, RefineRecord) if p.exists() else []
+
+
+def load_interact_sessions(root: str | Path) -> list[InteractSession]:
+    """交互解题会话快照（追加式，最新在后）。"""
+    p = interact_sessions_path(root)
+    return _read_jsonl(p, InteractSession) if p.exists() else []
 
 
 def load_golden(root: str | Path) -> list[GoldenSample]:
@@ -247,12 +289,16 @@ def _read_jsonl(path: Path, model) -> list:
 # ---------------------------------------------------------------------------
 __all__ = [
     "Dataset", "DATASETS", "DEPRECATED_KEYS",
-    "INTERACTIVE_EVAL", "GOLDEN_FILES", "AUDIT_FILE",
+    "INTERACTIVE_EVAL", "INTERACTIVE_QUESTIONS", "INTERACTIVE_SESSIONS",
+    "INTERACTIVE_REFINE", "GOLDEN_FILES", "AUDIT_FILE",
     "active_datasets", "dataset", "dataset_by_questions",
     "questions_dir", "outputs_dir", "golden_dir",
     "questions_path", "evals_path", "refine_path",
-    "interactive_evals_path", "golden_paths", "audit_path",
+    "interactive_evals_path", "interactive_questions_path",
+    "interact_sessions_path", "interactive_refines_path",
+    "golden_paths", "audit_path",
     "active_eval_filenames",
     "load_active_questions", "load_active_evals", "load_active_refines",
+    "load_interactive_refines", "load_interact_sessions",
     "load_golden", "load_audits",
 ]

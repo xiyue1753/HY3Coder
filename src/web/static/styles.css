@@ -183,6 +183,10 @@
   .testres.ok{color:var(--ok)}
   .testres.bad{color:var(--bad)}
 
+  /* 回放页：交互解题会话块（来源/模型/参考解试运行） */
+  .ref-note{margin-top:10px;border:1px solid var(--line);border-left:3px solid var(--pri2);
+    border-radius:8px;padding:10px 12px;background:var(--panel-tint)}
+
   /* ===== 题集选择弹窗 ===== */
   .pick-list{max-height:52vh;overflow-y:auto;display:grid;
     grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px}

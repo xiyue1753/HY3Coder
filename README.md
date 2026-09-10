@@ -88,6 +88,11 @@ copy .env.example .env
   可「测试连接」探活。默认 Hy3（腾讯 TokenHub）；Key 只写本地 `.env`（已 gitignore），接口只回显掩码、留空即保持原值。
   页面顶部与求解进度里都会显示**本次调用的是哪个模型**，方便录屏与复现；未配置时求解入口直接拦住并提示。
 - **过程评估**：求解完成后展示逐步骤卡片（出错步骤标红）、verdict 与 findings；勾选「演示修正闭环」则走 ReAct 多轮修正。
+- **永久留档**：每次求解都会分配一个新题号（`IX0001`…）并留档——题面/用例/参考解落
+  `data/questions/interactive.jsonl`，完整会话快照（含命中模型、参考解试运行逐用例结果、判定摘要）
+  落 `data/outputs/interact_sessions.jsonl`，判定记录落 `data/outputs/eval_interactive.jsonl`。
+  求解完成后页面上直接给出题号与链接，可在「单题回放」（来源筛选 `interactive`）里按题号回看；
+  这些记录与正式评测物理分离，不进任何统计口径。
 
 ## 双模式与数据纯净性
 

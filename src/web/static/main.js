@@ -139,7 +139,8 @@ async function loadDetail(qid){
   $('#dMeta').innerHTML=`<div class="muted text-sm">标准答案：<span class="mono">${q?q.standard_answer:'—'}</span></div>
     <div class="muted text-sm mt-1">模型答案：<span class="mono">${e.answer.final_answer||'—'}</span></div>
     <div class="muted text-sm mt-1">测试通过率：${e.test_pass_rate==null?'—':e.test_pass_rate}</div>
-    <div class="muted text-sm mt-1">置信度：<span class="mono">${e.verification.confidence.toFixed(2)}</span> · 仲裁：${e.verification.arbiter}</div>`;
+    <div class="muted text-sm mt-1">置信度：<span class="mono">${e.verification.confidence.toFixed(2)}</span> · 仲裁：${e.verification.arbiter}</div>`
+    + (d.session?sessionBlock(d.session):'');
   // findings
   $('#dFindings').innerHTML=(e.verification.findings||[]).map(f=>`<div class="finding"><b>${TYPE_CN[f.error_type]||f.error_type}</b> · 第${f.step_id??'—'}步：${f.detail}</div>`).join('');
   // refine rounds
@@ -402,6 +403,17 @@ async function interact(){
     const samples=parseSamples($('#iSamples').value);
     body.samples = samples;
     if($('#iAnswer').value) body.answer = $('#iAnswer').value;
+    // 交给后端留档：题目来源 + 参考解（参考解试运行由服务端自己再跑一遍作为证据）
+    if(REF.qid){
+      body.origin_question_id=REF.qid;
+      if(REF.title)body.origin_title=REF.title;
+      if(REF.sourceId)body.source_id=REF.sourceId;
+    }
+    if($('#iRefCode').value.trim()){
+      body.reference_solution=$('#iRefCode').value;
+      const lang=$('#iRefLang').value;
+      if(lang&&lang!=='auto')body.reference_language=lang;
+    }
     // 异步 job：提交后轮询阶段，过程先渲染（answer 阶段即展示步骤）
     const r=await fetch('/api/interact/job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
@@ -427,12 +439,52 @@ async function interact(){
     if(!finalPayload) throw new Error('等待超时：求解未在预期时间内完成');
     setPhaseUI('done', d.mode, finalPayload.elapsed);
     renderFinalResult(finalPayload);
+    renderArchiveNote(finalPayload);
   }catch(e){
     const body=$('#iResultBody');
     body.style.alignItems='center';body.style.justifyContent='center';
     body.innerHTML=`<div class="finding"><b>出错：</b>${escapeHtml(e.message||String(e))}</div>`;
   }
   finally{btn.textContent='开始求解';renderModelInfo()}
+}
+
+// ---------- 交互会话留档：求解完当场给出题号，回放页展示会话上下文 ----------
+function renderArchiveNote(p){
+  const s=p&&p.session; if(!s)return;
+  const body=$('#iResultBody'); if(!body)return;
+  const el=document.createElement('div');
+  el.className='muted text-sm';
+  el.style.cssText='margin-top:12px;border-top:1px dashed var(--line);padding-top:8px';
+  el.innerHTML=`已留档 · 题号 <b class="mono" style="color:var(--pri)">${escapeHtml(s.question_id)}</b>
+    · 会话 ${escapeHtml(s.session_id)} · 模型 <span class="mono">${escapeHtml(s.model||'—')}</span>
+    · ${s.origin==='dataset'?'来源题集 '+escapeHtml(s.origin_question_id||''):'手动输入'}
+    · <a href="javascript:openDetail('${escapeHtml(s.question_id)}')" style="color:var(--pri)">在单题回放里查看</a>`;
+  body.appendChild(el);
+}
+
+function sessionBlock(s){
+  const t=s.trial||{}, r=s.result||{};
+  const trialLine=t.ran
+    ? `<span style="color:${t.passed===t.total?'var(--ok)':'var(--bad)'}">${t.passed}/${t.total} 通过</span> · ${escapeHtml(t.language||'')} · ${t.elapsed}s`
+    : '（本次未跑试运行）';
+  const cases=(t.cases||[]).map(c=>`<div class="case-run ${c.passed?'pass':'fail'}">
+      <div class="hd"><b>用例 ${c.index+1}</b>
+        <span style="color:${c.passed?'var(--ok)':'var(--bad)'}">${c.passed?'PASS':'FAIL'}</span>
+        <span style="margin-left:auto">${c.duration}s</span></div>
+      <pre>输入：\n${escapeHtml(c.input)}\n期望：${escapeHtml(c.expected)}\n实际：${escapeHtml((c.got||'').replace(/\s+$/,'')||'(无输出)')}</pre></div>`).join('');
+  const ref=s.reference_solution
+    ? `<details style="margin-top:8px"><summary class="text-sm muted cursor-pointer">参考解（${escapeHtml(s.reference_language||'参考')}）</summary>
+        <div class="code"><pre><code>${escapeHtml(s.reference_solution)}</code></pre></div></details>`
+    : '';
+  return `<div class="ref-note">
+    <div class="flex items-center gap-2 flex-wrap text-sm"><b>交互解题会话</b>
+      <span class="tag">${r.mode==='refine'?'修正闭环演示':'一次性求解'}</span>
+      <span class="tag">${s.origin==='dataset'?'题集载入 · '+escapeHtml(s.origin_question_id||''):'手动输入'}</span></div>
+    <div class="muted text-sm mt-1">命中模型 <span class="mono">${escapeHtml(s.model||'—')}</span> · ${escapeHtml(s.base_url||'')}
+      · 推理强度 ${escapeHtml(s.reasoning||'—')} · 温度 ${s.temperature} · 调用 ${s.cost_calls} 次 · 耗时 ${s.elapsed}s · ${escapeHtml(s.created_at||'')}</div>
+    <div class="muted text-sm mt-1">用例：公开 ${s.n_public_cases} / 隐藏 ${s.n_hidden_cases} · 参考解试运行：${trialLine}</div>
+    ${cases}${ref}
+  </div>`;
 }
 
 // ---------- 模型调用配置（弹窗布局与逻辑对齐 Hy3_APP 的「模型接入设置」） ----------
@@ -538,7 +590,7 @@ function showModelInProgress(){
 // ---------- 从题集载入题目（只含公开用例；隐藏用例只给数量） ----------
 let PICK={total:0};
 // 当前载入的题目（题目来源标签、试运行走题集用例还是手填样例，都看这个）
-let REF={qid:null,title:null,nPublic:0,nHidden:0};
+let REF={qid:null,title:null,sourceId:null,nPublic:0,nHidden:0};
 function openPicker(){$('#pickModal').classList.add('show');loadPickList()}
 function closePicker(){$('#pickModal').classList.remove('show')}
 async function loadPickList(){
@@ -570,7 +622,7 @@ async function pickQuestion(qid){
   $('#iAnswer').value=q.standard_answer||'';
   $('#iRefCode').value=q.reference_solution||'';
   if(q.reference_language)$('#iRefLang').value=q.reference_language;
-  REF={qid:q.id,title:q.title,nPublic:q.n_public||0,nHidden:q.n_hidden||0};
+  REF={qid:q.id,title:q.title,sourceId:q.source_id||null,nPublic:q.n_public||0,nHidden:q.n_hidden||0};
   $('#iSrcTag').textContent='题集载入 · '+q.id;
   $('#iRefTag').textContent=q.reference_solution
     ?`题集自带参考解 · ${q.reference_language==='cpp'?'C++':'Python'}`:'该题未提供参考解';
@@ -584,7 +636,7 @@ async function pickQuestion(qid){
   if(col)col.scrollTop=0;   // 回到题面，别让滚动位置停在样例区
 }
 function clearQuestion(){
-  REF={qid:null,title:null,nPublic:0,nHidden:0};
+  REF={qid:null,title:null,sourceId:null,nPublic:0,nHidden:0};
   $('#iPrompt2').value='';$('#iSamples').value='';$('#iAnswer').value='';$('#iRefCode').value='';
   $('#iSrcTag').textContent='手动输入';
   $('#iRefTag').textContent='未载入';

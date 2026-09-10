@@ -6,7 +6,10 @@ are tagged ``source="interactive"`` and can be filtered out of metric runs.
 Storage layout — 文件位置由数据源注册中心 :mod:`rex.datasource` 声明
 (RecordStore 只接收 eval 文件白名单，不绑定文件名)：
     启用数据集的正式评测文件（如 abc → eval_selfbuilt_all.jsonl）
-    eval_interactive.jsonl                     -- 交互演示记录
+    eval_interactive.jsonl                     -- 交互演示的判定记录
+    refine_interactive.jsonl                   -- 交互演示的 refine 记录
+    data/questions/interactive.jsonl           -- 交互题池（回放用）
+    interact_sessions.jsonl                    -- 交互解题完整会话快照
 
 Retention: records keep their ``created_at``; a manual ``cleanup(days)`` is
 provided (never auto-deletes). ``expired(days)`` lists stale records so the
@@ -19,7 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Sequence, TypeVar
 
-from rex.models import EvalRecord, RefineRecord
+from rex.models import EvalRecord, InteractSession, QuestionItem, RefineRecord
 
 log = logging.getLogger(__name__)
 
@@ -53,10 +56,14 @@ class RecordStore:
     """
 
     def __init__(self, outputs_dir: str | Path,
-                 eval_files: tuple[str, ...] | None = None) -> None:
+                 eval_files: tuple[str, ...] | None = None,
+                 root: str | Path | None = None) -> None:
         # 默认文件白名单从数据源注册中心派生：启用数据集的正式评测 + 交互文件
         from rex.datasource import active_eval_filenames
         self.outputs_dir = Path(outputs_dir)
+        # 项目根：交互题池在 <root>/data/questions，需要它来定位。
+        # 默认按约定 "outputs_dir = <root>/data/outputs" 反推。
+        self.root = Path(root) if root is not None else self.outputs_dir.parent.parent
         self._eval_files = tuple(eval_files) if eval_files else active_eval_filenames()
         self._eval_cache: list[EvalRecord] | None = None
         self._eval_mtime: float = 0.0
@@ -132,12 +139,48 @@ class RecordStore:
         self._eval_cache = None  # 失效缓存
 
     def append_refine(self, rec: RefineRecord) -> None:
+        """落盘一条 refine 记录。
+
+        正式 refine（source="run-eval"）写数据集注册的 refine 文件；交互演示
+        （source="interactive"）写独立的 ``refine_interactive.jsonl``——正式文件是
+        报告修正闭环章节的数据源，必须保持纯净，不能被演示记录混入。
+        """
         if rec.created_at is None:
             rec.created_at = _now_iso()
-        p = self.refine_path(rec.scene)
+        if rec.source == "interactive":
+            from rex.datasource import interactive_refines_path
+            p = interactive_refines_path(self.root)
+        else:
+            p = self.refine_path(rec.scene)
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
             f.write(rec.model_dump_json() + "\n")
+
+    # -- 交互式解题工作台：题池 + 会话快照 -----------------------------------
+    def append_interactive_question(self, q: QuestionItem) -> None:
+        """把交互题写入交互题池（data/questions/interactive.jsonl）。
+
+        交互题是现场输入的，不落池的话单题回放取不到题面与用例。
+        """
+        from rex.datasource import interactive_questions_path
+        p = interactive_questions_path(self.root)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(q.model_dump_json() + "\n")
+
+    def append_interact_session(self, session: InteractSession) -> None:
+        """把交互解题会话快照追加到 ``interact_sessions.jsonl``（完整留档）。"""
+        from rex.datasource import interact_sessions_path
+        if session.created_at is None:
+            session.created_at = _now_iso()
+        p = interact_sessions_path(self.root)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(session.model_dump_json() + "\n")
+
+    def load_interact_sessions(self) -> list[InteractSession]:
+        from rex.datasource import load_interact_sessions
+        return load_interact_sessions(self.root)
 
     # -- rich query ---------------------------------------------------------
     def query_evals(

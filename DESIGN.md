@@ -235,6 +235,22 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 - 断点续跑：JSONL 追加写，重启跳过已完成 question_id。
 - 成本核算：`Hy3Client.call_count` 每实际请求自增（含重试），逐轮/累计可查。
 
+### 7.2 交互式解题（仪表盘演示）的留档与数据隔离
+
+交互演示（现场输入题目 → HY3 求解 → 过程评估）与正式评测**物理分离**，不进入任何统计口径：
+
+| 产物 | 文件 | 说明 |
+|---|---|---|
+| 交互题池 | `data/questions/interactive.jsonl` | 每次求解分配一个新题号（`IX0001`…）写入；单题回放按题号取题面与用例 |
+| 会话快照 | `data/outputs/interact_sessions.jsonl` | 题面/用例/参考解/命中模型/参考解试运行/判定摘要；失败会话同样留档 |
+| 判定记录 | `data/outputs/eval_interactive.jsonl` | `source="interactive"`，指标侧 `formal_only` 直接过滤掉 |
+| 修正记录 | `data/outputs/refine_interactive.jsonl` | 交互 refine 单独存放，**不写入**数据集注册的正式 refine 文件 |
+
+- 参考解试运行由**服务端**在沙盒里自己跑一遍（不采信前端上传的结果），逐用例留档输入/期望/实际输出；
+  C++ 只编译一次后复用到各用例。
+- 交互记录在「单题回放」里按题号回看（列表来源筛选项：`run-eval` / `interactive`）；refine 演示的会话
+  额外补一条"终局判定"记录，否则回放列表（按 eval 记录组织）看不到它。
+
 ### 7.1 ReAct 自我修正闭环（方法论与收敛判据）
 
 - 首轮与 eval 同路径（solve→verify，initial 可比）；initial==CORRECT 不进修正轮。
@@ -351,6 +367,7 @@ python -m pytest tests/
   - `refine_wrong_t0.jsonl`（36 条）：答案错样本的 ReAct 修正逐轮记录
   - `contamination_probe.jsonl`（30 题）+ `contamination_probe_pilot.jsonl`（6 题）：记忆暴露行为探测
   - `diff_scores.jsonl`（359 条）：统一难度分与三专家盲打明细
+  - `eval_interactive.jsonl` / `interact_sessions.jsonl` / `interactive.jsonl`：交互演示留档（判定记录 / 会话快照 / 交互题池），属演示产物，不进任何统计
   - 不入库：`_archived/`（历史分片）、运行日志（`*.log`/`*.err`）、`audit_records*.jsonl` 与 `audit_rules.md`（以 `data/audit/` 为权威版）
 - 分析报告 reports/（分层退化、错误分布、case 归因、修正前后对比、能力画像）
 - 方法论文档 reports/：`DIFFICULTY_SCORING_METHOD.md`（题集统一难度分层）、

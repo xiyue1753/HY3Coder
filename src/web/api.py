@@ -22,6 +22,7 @@ Endpoints (all data under Hy3_APP2/data/):
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 import time
@@ -38,16 +39,26 @@ from rex.config import Config
 from rex.executor.sandbox import detect_language
 from rex.hy3_client import Hy3Client
 from rex.metrics.compute import audit_metrics, compute_metrics, refine_comparison
-from rex.models import EvalRecord, GoldenSample, QuestionItem, RefineRecord
+from rex.models import (
+    EvalRecord,
+    GoldenSample,
+    InteractResult,
+    InteractSession,
+    InteractTrial,
+    InteractTrialCase,
+    QuestionItem,
+    RefineRecord,
+)
 from rex.pipeline import load_jsonl
 
 ROOT = Path(__file__).resolve().parents[2]
 CFG = Config.from_env(ROOT)
 STATIC = ROOT / "src" / "web" / "static"
+log = logging.getLogger(__name__)
 
 # 共享的 RecordStore 实例（带缓存）：所有请求复用，避免每次全量读文件
 from rex.store import RecordStore
-STORE = RecordStore(CFG.outputs_dir)
+STORE = RecordStore(CFG.outputs_dir, root=ROOT)
 
 app = FastAPI(title="HY3Coder 评估仪表盘", version="2.1.0")
 app.add_middleware(
@@ -69,6 +80,18 @@ def _load_refines() -> list[RefineRecord]:
     """启用数据集的正式 refine 记录（无则返回空，展示『暂无 refine』）。"""
     from rex.datasource import load_active_refines
     return load_active_refines(ROOT)
+
+
+def _load_interactive_refines() -> list[RefineRecord]:
+    """交互演示的 refine 记录（独立文件，只供单题回放，不进正式统计）。"""
+    from rex.datasource import load_interactive_refines
+    return load_interactive_refines(ROOT)
+
+
+def _load_interact_sessions() -> list[InteractSession]:
+    """交互解题会话快照（题面/用例/参考解/模型/试运行）。"""
+    from rex.datasource import load_interact_sessions
+    return load_interact_sessions(ROOT)
 
 
 def _dump(o):
@@ -143,6 +166,8 @@ def meta() -> dict:
         "audit_file": rel(datasource.audit_path(ROOT)),
         "golden_files": [rel(p) for p in datasource.golden_paths(ROOT)],
         "interactive_eval": rel(datasource.interactive_evals_path(ROOT)),
+        "interactive_sessions": rel(datasource.interact_sessions_path(ROOT)),
+        "interactive_questions": rel(datasource.interactive_questions_path(ROOT)),
         "audit_command": "python -m src.cli audit --results "
                          + rel(datasource.evals_path(ROOT, next(d for d in datasource.active_datasets() if d.evals))),
     }
@@ -366,12 +391,17 @@ def question_detail(qid: str) -> dict:
         raise HTTPException(404, f"question {qid} not evaluated")
     qmap = {q.id: q for q in _load_questions()}
     q = qmap.get(qid)
-    refines = _load_refines()
+    # 交互演示的 refine 单独存放（不混进正式 refine 文件），回放时两处都查
+    refines = _load_refines() + _load_interactive_refines()
     refine_rec = next((r for r in refines if r.question_id == qid), None)
+    sessions = _load_interact_sessions()
+    session = next((s for s in sessions if s.question_id == qid), None)
     return {
         "question": q.model_dump() if q else None,
         "eval": rec.model_dump(),
         "refine": refine_rec.model_dump() if refine_rec else None,
+        # 交互解题会话快照（题面来源/命中模型/参考解试运行），正式评测题为 None
+        "session": session.model_dump() if session else None,
     }
 
 
@@ -514,6 +544,12 @@ class InteractRequest(BaseModel):
     samples: list[InteractSample] = []   # 算法场景输入输出样例（可选）
     refine: bool = False                 # 是否演示修正闭环
     max_rounds: int = 2
+    # 从题集载入时一并带上：留档要记清"这题是从哪来的、参考解长什么样"
+    origin_question_id: str | None = None   # 题集原题号（如 A1001）
+    origin_title: str | None = None
+    source_id: str | None = None            # 平台侧题号（如 abc161_d）
+    reference_solution: str | None = None
+    reference_language: str | None = None
 
 
 @app.post("/api/interact")
@@ -527,8 +563,31 @@ def interact(req: InteractRequest) -> dict:
 # ===========================================================================
 # 异步交互 job：后台线程分阶段执行，前端轮询 / SSE 实时展示进度
 # ===========================================================================
-def _build_question(req: InteractRequest):
-    """把请求体构造成 QuestionItem（算法场景样例拼入 prompt + 作为沙盒用例）。"""
+def _next_interactive_qid(root: Path = ROOT) -> str:
+    """给交互题分配题号：IX0001、IX0002 …（顺序号，单题回放里可读）。"""
+    from rex.datasource import interactive_questions_path
+    p = interactive_questions_path(root)
+    used: set[str] = set()
+    if p.exists():
+        for line in p.open(encoding="utf-8"):
+            if not line.strip():
+                continue
+            try:
+                used.add(str(json.loads(line).get("id", "")))
+            except ValueError:
+                continue
+    n = 1
+    while f"IX{n:04d}" in used:
+        n += 1
+    return f"IX{n:04d}"
+
+
+def _build_question(req: InteractRequest, root: Path = ROOT):
+    """把请求体构造成 QuestionItem（样例拼入 prompt + 作为沙盒用例）。
+
+    交互题分配一个**新题号**（IX0001…），不用会话 id 当主键：题号会连同题目一起
+    写进交互题池，单题回放按题号就能取到题面与用例。
+    """
     from rex.models import Difficulty, QuestionItem, TestCase
 
     prompt = req.prompt
@@ -539,11 +598,90 @@ def _build_question(req: InteractRequest):
             f"样例{i}：\n输入：\n{s.input}\n输出：\n{s.output}" for i, s in enumerate(req.samples, 1)
         )
         prompt = f"{req.prompt}\n\n【输入输出样例】\n{sample_block}"
-    qid = "I" + time.strftime("%Y%m%d_%H%M%S")
+    origin = req.origin_question_id
+    if origin and req.origin_title:
+        title = f"{origin} · {req.origin_title}"
+    else:
+        title = req.origin_title or origin or req.prompt[:50]
     return QuestionItem(
-        id=qid, scene=req.scene, title=req.prompt[:50], prompt=prompt,
-        difficulty=Difficulty.BASIC, source="interactive",
+        id=_next_interactive_qid(root), scene=req.scene, title=title.strip(), prompt=prompt,
+        difficulty=Difficulty.BASIC,
+        source=f"交互解题 · {origin}" if origin else "交互解题 · 手动输入",
+        source_id=req.source_id,
         standard_answer=req.answer, test_cases=test_cases,
+        reference_solution=req.reference_solution,
+    )
+
+
+def _trial_reference(q) -> InteractTrial:
+    """在沙盒里跑一遍题集自带参考解，逐用例留档（会话证据，不依赖前端上传）。
+
+    没有参考解或没有公开用例时返回 ``ran=False``，表示本次没有可留档的试运行。
+    """
+    from rex.executor.tests import run_cases_detailed
+
+    code = (q.reference_solution or "").strip()
+    cases = [c for c in q.test_cases if not c.hidden]
+    if not code or not cases:
+        return InteractTrial(ran=False)
+    t0 = time.time()
+    runs = run_cases_detailed(
+        q.reference_solution, cases,
+        language=detect_language(q.reference_solution),   # 参考解可能是 C++（默认是 python）
+        judge=q.judge.value,
+        checker_code=q.checker_code, checker_language=q.checker_language, timeout=20,
+    )
+    trial_cases = [
+        InteractTrialCase(
+            index=r.index, passed=r.passed, input=r.input, expected=r.expected,
+            got=r.got, duration=round(r.duration, 3), error=r.error,
+        )
+        for r in runs if not r.hidden
+    ]
+    return InteractTrial(
+        ran=True, language=detect_language(q.reference_solution or ""),
+        judge=q.judge.value, total=len(trial_cases),
+        passed=sum(1 for c in trial_cases if c.passed),
+        elapsed=round(time.time() - t0, 2), cases=trial_cases,
+    )
+
+
+def _session_snapshot(session_id: str, req: InteractRequest, q: QuestionItem,
+                      trial: InteractTrial, result: InteractResult,
+                      cost_calls: int, elapsed: float,
+                      error: str | None = None) -> InteractSession:
+    """组装会话快照：题目来源与内容 + 本次命中的模型 + 试运行证据 + 判定摘要。
+
+    题目内容以**用户输入的原题面**为准（模型看到的题面含样例块，在交互题池里），
+    这样快照里存的是"当时问的是什么"，而不是拼接后的中间产物。
+    """
+    cases = list(q.test_cases)
+    return InteractSession(
+        session_id=session_id,
+        question_id=q.id,
+        origin="dataset" if req.origin_question_id else "manual",
+        origin_question_id=req.origin_question_id,
+        origin_title=req.origin_title,
+        scene=q.scene,
+        title=q.title,
+        prompt=req.prompt,
+        difficulty=q.difficulty.value,
+        source_id=q.source_id,
+        standard_answer=req.answer,
+        reference_solution=q.reference_solution,
+        reference_language=req.reference_language or (detect_language(q.reference_solution) if q.reference_solution else None),
+        judge=q.judge.value,
+        n_public_cases=sum(1 for c in cases if not c.hidden),
+        n_hidden_cases=sum(1 for c in cases if c.hidden),
+        model=CFG.hy3_model,
+        base_url=CFG.hy3_base_url,
+        reasoning=CFG.hy3_reasoning_effort,
+        temperature=CFG.temperature,
+        trial=trial,
+        result=result,
+        cost_calls=cost_calls,
+        elapsed=round(elapsed, 2),
+        error=error,
     )
 
 
@@ -580,18 +718,25 @@ def _start_interact_job(req: InteractRequest) -> dict:
     def _run() -> None:
         from rex.pipeline import Pipeline
 
+        req = job["req"]
+
+        def _fail(msg: str) -> None:
+            job["phase"] = "failed"
+            job["error"] = msg
+            job["message"] = msg
+            job["queue"].append({"phase": "failed", "message": msg,
+                                 "elapsed": round(time.time() - job["t0"], 1)})
+            job["event"].set()
+
         # 未配置模型就不要进入求解：直接给出可操作的提示（前端在入口处也做了门禁）
         if not CFG.has_credentials:
-            job["phase"] = "failed"
-            job["error"] = "未配置模型：请在「模型配置」里填入 API Key 与 Base URL"
-            job["message"] = job["error"]
-            job["queue"].append({"phase": "failed", "message": job["message"], "elapsed": 0.0})
-            job["event"].set()
+            _fail("未配置模型：请在「模型配置」里填入 API Key 与 Base URL")
             return
         pipe = Pipeline(CFG)
-        job["phase"] = "solve"
-        job["message"] = "正在生成分步解答…"
         t0 = job["t0"]
+        trial = InteractTrial(ran=False)
+        q = None
+        result = InteractResult(mode=job["mode"])
 
         def _report(phase: str, payload=None, message: str | None = None) -> None:
             job["phase"] = phase
@@ -610,7 +755,28 @@ def _start_interact_job(req: InteractRequest) -> dict:
             })
 
         try:
-            q = _build_question(job["req"])
+            # 1) 建题并落交互题池：题目是现场输入的，先落池，单题回放才取得到题面与用例
+            q = _build_question(req)
+            job["question_id"] = q.id
+            try:
+                STORE.append_interactive_question(q)
+            except OSError as e:  # 落池失败不影响本次求解，但要在日志里看得见
+                log.warning("交互题落池失败 %s: %s", q.id, e)
+
+            # 2) 参考解试运行：沙盒真跑一遍留档（服务端自己跑，不依赖前端上传的结果）
+            job["phase"] = "trial"
+            job["message"] = "先在沙盒里跑一遍参考解（留档证据）…"
+            if (q.reference_solution or "").strip():
+                trial = _trial_reference(q)
+                job["trial"] = trial.model_dump()
+                job["message"] = (
+                    f"参考解试运行 {trial.passed}/{trial.total} 通过，开始求解…"
+                    if trial.ran else "正在生成分步解答…"
+                )
+
+            # 3) 求解 + 判定
+            job["phase"] = "solve"
+            job["message"] = "正在生成分步解答…"
             store = STORE
             if job["mode"] == "eval":
                 rec = pipe._eval_one(q, progress=lambda p, payload=None: (
@@ -619,6 +785,12 @@ def _start_interact_job(req: InteractRequest) -> dict:
                 store.append_eval(rec)
                 # 单独重跑一次沙盒执行，拿到 exec 细节（错误信息）供前端展示
                 _, pass_rate, exec_error = pipe._execute(q, rec.answer)
+                result = InteractResult(
+                    mode="eval", verdict=rec.verification.verdict.value,
+                    answer_correct=rec.answer_correct, test_pass_rate=rec.test_pass_rate,
+                    confidence=rec.verification.confidence,
+                    findings=len(rec.verification.findings),
+                )
                 job["payload"] = {
                     "mode": "eval", "eval": rec.model_dump(),
                     "elapsed": round(time.time() - t0, 2),
@@ -630,6 +802,21 @@ def _start_interact_job(req: InteractRequest) -> dict:
                     _report(p, payload, _PHASE_MSG.get(p) or _phase_default_msg(p))))
                 rrec.source = "interactive"
                 store.append_refine(rrec)
+                result = InteractResult(
+                    mode="refine", verdict=rrec.final.verdict.value,
+                    confidence=rrec.final.confidence,
+                    findings=len(rrec.final.findings),
+                    converged=rrec.converged, rounds=len(rrec.rounds),
+                )
+                # 回放列表是按 eval 记录组织的，而 refine 模式只产 refine 记录：
+                # 这里补一条"终局判定"记录（答案=最终修订答案，判定=终局判定），
+                # 回放页的会话块会标明本次是修正闭环演示，不会与一次性求解混淆。
+                if rrec.rounds:
+                    store.append_eval(EvalRecord(
+                        question_id=q.id, scene=q.scene, difficulty=q.difficulty,
+                        answer=rrec.rounds[-1].revised_answer, verification=rrec.final,
+                        cost_calls=rrec.cost_calls, source="interactive",
+                    ))
                 job["payload"] = {
                     "mode": "refine", "refine": rrec.model_dump(),
                     "elapsed": round(time.time() - t0, 2),
@@ -647,6 +834,21 @@ def _start_interact_job(req: InteractRequest) -> dict:
             job["queue"].append({"phase": "failed", "message": job["message"],
                                  "elapsed": round(time.time() - job["t0"], 1)})
         finally:
+            job["cost_calls"] = pipe.client.call_count
+            # 4) 会话快照：成功与失败都留档（含模型、试运行、判定摘要）
+            if q is not None:
+                try:
+                    session = _session_snapshot(
+                        job["id"], req, q, trial, result,
+                        cost_calls=pipe.client.call_count,
+                        elapsed=time.time() - t0, error=job.get("error"),
+                    )
+                    STORE.append_interact_session(session)
+                    job["session_id"] = session.session_id
+                    if isinstance(job.get("payload"), dict):
+                        job["payload"]["session"] = session.model_dump()
+                except OSError as e:
+                    log.warning("交互会话快照写入失败 %s: %s", q.id, e)
             pipe.client.close()
             job["event"].set()
 
@@ -686,6 +888,10 @@ def _job_payload(job: dict) -> dict:
         "error": job["error"],
         "elapsed": job["elapsed"],
         "cost_calls": job["cost_calls"],
+        # 交互题号与会话号：求解完即可在「单题回放」里按题号查这次演示
+        "question_id": job.get("question_id"),
+        "session_id": job.get("session_id"),
+        "trial": job.get("trial"),
         # 本次调用实际使用的模型（演示/复现都要看得出调用的是哪个模型）
         "model": {
             "name": CFG.hy3_model,
