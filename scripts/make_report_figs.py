@@ -203,15 +203,13 @@ def fig4(refine):
             "Not converged\n& wrong"]
     vals = [conv_ok, conv_no, nc_ok, nc_no]
     colors = ["#0072B2", "#D55E00", "#56B4E9", "#999999"]
-    fig, ax = plt.subplots(figsize=(6.2, 4.0))
+    fig, ax = plt.subplots(figsize=(6.0, 3.4))
     bars = ax.bar(cats, vals, color=colors, width=0.62)
     for rect, v in zip(bars, vals):
         ax.text(rect.get_x() + rect.get_width() / 2, v + 0.3, str(v),
                 ha="center", fontsize=9)
     ax.set_ylim(0, max(vals) * 1.32)
-    ax.set_ylabel("Questions (n = 34)")
-    ax.legend(cats, loc="upper center", bbox_to_anchor=(0.5, -0.15),
-              ncol=2, frameon=False)
+    ax.set_ylabel(f"Questions (n = {sum(vals)})")
     _style_ax(ax)
     fig.savefig(FIG_DIR / "fig4_refine_outcome.png")
     plt.close(fig)

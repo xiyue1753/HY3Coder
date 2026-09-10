@@ -59,7 +59,7 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
     q4 = n - q1 - q2 - q3
 
     w("\n### 5.1 针对答案错样本的 ReAct 修正（真实度补偿，2026-09-09）")
-    w("\n测试对象是 temperature=0 正式评测中 `answer_correct=False` 的全部 34 题。"
+    w(f"\n测试对象是 temperature=0 正式评测中 `answer_correct=False` 的全部 {n} 题。"
       "与纯文本 refine 相比，每轮反馈除 verifier 审查文本（findings→修订指令，仅 fatal 驱动）"
       "外，还附上非隐藏样例的沙盒执行结果（失败用例的输入、期望输出与实际输出），"
       "作为客观观察；重验证时通过 `execution_feedback` 喂给双视角与 ARBITER"
@@ -117,9 +117,10 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
       f"{q3} 题沙盒已修对但评估器未判收敛，是定位与接受滞后的另一侧证据。"
       "本节同时是过程评估定位质量的下游观察面，与第 6 节定位准确率相互印证。\n")
     w("\n![fig4](figures/fig4_refine_outcome.png)")
-    w("\n**Fig. 3** 34 个答案错样本经 ReAct 修正后的四象限分布：柱顶为样本数，"
-      "色块含义见图例。真收敛（收敛且最终全对）21 题；文本收敛但 hidden 仍错与修对但"
-      "未获评估器认可各 5 题，构成文本判定与沙盒真值的两条边界。\n")
+    w(f"\n**Fig. 3** {n} 个答案错样本经 ReAct 修正后的四象限分布：柱顶为样本数，"
+      "横轴四类依次为「文本收敛且答案已对 / 文本收敛但答案仍错 / 未收敛但答案已对 / 未收敛且答案仍错」。"
+      f"真收敛（收敛且最终全对）{q1} 题；文本收敛但 hidden 仍错 {q2} 题、修对但未获评估器认可 {q3} 题，"
+      "构成文本判定与沙盒真值的两条边界。\n")
 
     w("\n过程性修正记录（2026-09-09）：\n")
     w("- 编译错误反馈管道缺陷与修复。首轮实现把运行/编译错误截断到 200 字符，"
