@@ -2,6 +2,9 @@
 
 本文说明过程评估器定位出的错误如何转成求解智能体可执行的修订指令、形成 ReAct 闭环，以及用什么指标判断闭环是否有效、何时收敛、何时停止。数据日期 2026-09-08，判定口径为 severity 语义，只有 fatal 驱动修正。相关代码 `src/rex/refine/{agent,prompts}.py`，指标 `src/rex/metrics/compute.py::refine_comparison`。姊妹篇是 `DIFFICULTY_SCORING_METHOD.md` 与 `PROCESS_EVAL_METHOD.md`。
 
+**结论：** 正式评测答案错的 36 题中，限 3 轮内 77.8% 收敛为 CORRECT，其中 22 题过程与答案同时修正成功，最终 27 题答案正确；收敛率同时反映评估器定位的可用性。
+
+
 ## 1. 为什么需要修正闭环
 
 评估器把过程判为有错、定位到步骤、归好类，这只是完成了检测。检测结果若不回流，就只是一张体检报告。ReAct 的思路是把检测升级成治疗：评估器给出判定，也就是 verdict 加 findings，每条带 step_id、错误类型、说明和证据，求解智能体据此重写解题过程，再重新验证，直到收敛或达到轮数上限。

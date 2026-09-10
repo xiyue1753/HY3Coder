@@ -204,6 +204,7 @@ ol.cards.findings>li{border-left-color:#e4a2a2; background:#fffdfd}
 <h2>目录</h2>
 <ol>
 <li><a href="#hy3coder">HY3Coder 分析报告</a></li>
+<li><a href="#_1">交付概览</a></li>
 <li><a href="#1">1. 评估总览</a></li>
 <li class="lvl3"><a href="#11">1.1 记忆暴露检测</a></li>
 <li class="lvl3"><a href="#12">1.2 与任务要求的逐条对照</a></li>
@@ -260,9 +261,108 @@ ol.cards.findings>li{border-left-color:#e4a2a2; background:#fffdfd}
 </nav>
 <h1 id="hy3coder">HY3Coder 分析报告</h1>
 <blockquote>
-<p>更新时间：2026-09-10 ｜ 数据：<code>data/outputs/</code>，评测与修正数据分开存放</p>
+<p>更新时间：2026-09-11 ｜ 数据：<code>data/outputs/</code>，评测与修正数据分开存放</p>
 <p>网页版：<code>reports/REPORT.html</code>，与本文内容一致，表格与配图排版更适合阅读与打印。</p>
 </blockquote>
+<h2 id="_1">交付概览</h2>
+<p>本报告对应一个可运行的<strong>算法题求解与过程评估系统</strong>，以及基于自建评测集的<strong>全量分析报告</strong>。系统对每题独立求解一次，用沙盒执行结果判定答案，用双视角审查加程序化裁决判定过程，再由 ReAct 闭环把过程缺陷反馈回求解端。下面是交付物与核心结论，先看这一节即可判断完成情况；亮点在正文各章，方法与验证在附录 A–D。</p>
+<p><strong>交付物</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>交付物</th>
+<th>位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>分析报告（正文）</td>
+<td>本文；网页版 <code>reports/REPORT.html</code>，表格与配图排版更适合阅读与打印</td>
+</tr>
+<tr>
+<td>求解与评估系统</td>
+<td><code>src/rex/</code>：求解 agent、V1/V2 双视角 verifier 与 ARBITER 仲裁、Python 与 C++ 沙盒、<code>static_check</code> 规则校验、ReAct 修正闭环</td>
+</tr>
+<tr>
+<td>自建评测集</td>
+<td><code>data/questions/abc_selfbuilt.jsonl</code>（175 题）、<code>cf_selfbuilt.jsonl</code>（184 题），每题含可执行参考解、公开用例与隐藏用例</td>
+</tr>
+<tr>
+<td>评测与验证记录</td>
+<td><code>data/outputs/</code>：正式评测逐题记录、修正闭环逐轮记录、记忆暴露探测、人工抽检回填</td>
+</tr>
+<tr>
+<td>方法文档（4 份）</td>
+<td><code>reports/</code> 下的难度分层、过程评估、ReAct 闭环、记忆暴露四篇；全文即附录 A–D</td>
+</tr>
+<tr>
+<td>可视化仪表盘</td>
+<td><code>app/</code>，<code>.\run.ps1 serve</code> 后打开 <code>127.0.0.1:8000</code>，含评估总览、单题回放、Golden 库、人工抽检、交互式解题、题集浏览器</td>
+</tr>
+<tr>
+<td>演示录像</td>
+<td><code>HY3Coder-demo.mp4</code>（79 秒 / 1920×1080）</td>
+</tr>
+<tr>
+<td>复现说明</td>
+<td><code>README.md</code>：环境要求、快速开始、逐项复现命令</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>核心结论</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>维度</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>评测规模</td>
+<td>359 题（ABC 175 / CF 184），temperature=0，每题一次求解</td>
+</tr>
+<tr>
+<td>答案准确率</td>
+<td><strong>90.0%</strong>；ABC 93.7% / CF 86.4%</td>
+</tr>
+<tr>
+<td>过程正确率</td>
+<td><strong>84.4%</strong>；ABC 90.3% / CF 78.8%，95% CI [80.3%, 87.8%]</td>
+</tr>
+<tr>
+<td>隐蔽缺陷检出</td>
+<td>SILENT_FAILURE <strong>15 题（4.2%）</strong>：答案全对、用例全过，过程仍有致命缺陷</td>
+</tr>
+<tr>
+<td>错误定位准确率</td>
+<td>答案错样本 29 条全量复核，命中 <strong>96.6%</strong></td>
+</tr>
+<tr>
+<td>误报控制</td>
+<td>三层复核误报率 <strong>5.3%–10.5%</strong>（19 条被判过程有错，口径见 §6）</td>
+</tr>
+<tr>
+<td>修正闭环</td>
+<td>答案错的 36 题，限 3 轮内 <strong>77.8%</strong> 收敛，最终 27 题答案正确</td>
+</tr>
+<tr>
+<td>能力边界</td>
+<td>过程正确率随难度单调下降，中等档起显著失守（93.7% → 62.9%）</td>
+</tr>
+<tr>
+<td>记忆暴露</td>
+<td>出处精确命中 6/30（20.0%），未观察到记忆抬高成绩</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>阅读指引</strong></p>
+<ul>
+<li>只看结论：本节 + 第 1 章（总览、记忆暴露、任务要求逐条对照）+ 第 9 章（适用范围与边界）。</li>
+<li>看亮点：第 3 章 错误类型分布、第 4 章 5 个典型案例（题目、完整求解过程与判定）、第 5 章 修正闭环、第 7 章 15 条 SILENT_FAILURE 清单。</li>
+<li>核验方法与数据：第 2 章 分层退化、第 6 章 人工抽检、附录 A–D 四份方法文档、<code>README.md</code> 复现章节。</li>
+<li>第 4 章按「判定结论 → 题目全文 → 求解过程 → 判定证据」排列，网页版把题目与过程折成可展开区块，建议在 <code>reports/REPORT.html</code> 中读这一章。</li>
+</ul>
 <h2 id="1">1. 评估总览</h2>
 <div class="tw"><table>
 <thead>
@@ -428,8 +528,8 @@ ol.cards.findings>li{border-left-color:#e4a2a2; background:#fffdfd}
 <p>代价是缺少与公开基准直接可比的数字。这一点用平台官方 ELO 作外部锚点校验来部分弥补：统一难度分与 ABC 官方 ELO 的 Spearman 相关为 0.706、与 CF 为 0.816（见附录 A）。</p>
 <h3 id="14">1.4 应用形态与演示链路</h3>
 <p>本报告的所有读数由 CLI 批量产出（<code>run-eval</code> / <code>run-refine</code> / <code>audit</code> / <code>check-answers</code>，复现命令见附录）；应用侧把这些能力装进一个可运行的界面：FastAPI 后端加单文件 SPA，本地 <code>.\run.ps1 serve</code> 后打开 <code>127.0.0.1:8000</code>，含评估总览、单题回放、Golden 库、人工抽检、交互式解题、题集浏览器六个视图。</p>
-<p><img alt="fig5" src="figures/ui_dashboard_overview.png" /></p>
-<p><strong>Fig. 5</strong> 仪表盘评估总览：顶部为已评估题量、答案准确率、过程正确率与沉默失败检出四项指标，下方依次是分层退化、判定分布、错误类型分布与知识点能力画像。</p>
+<p><img alt="ui_dashboard" src="figures/ui_dashboard_overview.png" /></p>
+<p><strong>仪表盘评估总览</strong>（应用形态，非数据图）：顶部为已评估题量、答案准确率、过程正确率与沉默失败检出四项指标，下方依次是分层退化、判定分布、错误类型分布与知识点能力画像。</p>
 <p>其中"交互式解题"是按现场演示设计的链路：从题集载入题目（连同该题自带参考解）→ 在服务端沙盒里试运行参考解、逐用例回显输入、期望与实际输出 → Hy3 逐 Step 流式求解（步骤卡片依次出现，当前步正文实时增长）→ 过程评估给出 verdict 与 findings → 会话完整留档并分配新题号，可在单题回放入口按题号回看。侧栏"模型配置"可设提供方、Key、推理强度与温度，页面顶部与求解进度都标出本次调用的模型，便于录屏与复现。演示录像 <code>HY3Coder-demo.mp4</code>（79 秒）就是这条链路的完整录制。</p>
 <p>交互演示的题目、会话快照与判定记录写在独立文件里（<code>data/questions/interactive.jsonl</code>、<code>data/outputs/interact_sessions.jsonl</code>、<code>data/outputs/eval_interactive.jsonl</code>），与正式评测物理分离，不进任何统计口径。</p>
 <h2 id="2">2. 分层退化分析</h2>
@@ -582,10 +682,58 @@ ol.cards.findings>li{border-left-color:#e4a2a2; background:#fffdfd}
 </tr>
 </tbody>
 </table></div>
-<p><img alt="fig3" src="figures/fig3_error_types.png" /></p>
+<p><img alt="fig2" src="figures/fig2_error_types.png" /></p>
 <p><strong>Fig. 2</strong> 过程错误类型分布，条形末端给出条数与占比。逻辑缺陷与实现层错误合计超过一半，短板主要在实现严谨性与建模正确性。</p>
 <h2 id="4">4. 典型案例归因</h2>
-<p>下面取 5 例，逐题给出题目、HY3 的求解过程与过程评估判定，三块都能折叠展开；难度按第 2 章的语义档标注，完整清单见第 7 节。</p>
+<p>下面取 5 例，逐题给出题目、HY3 的求解过程与过程评估判定；难度按第 2 章的语义档标注，完整清单见第 7 节。5 例全部是 <code>SILENT_FAILURE</code>，也就是答案与用例全通过、过程仍有致命缺陷的类型，正是任务要求识别的"答案对但过程不成立"。网页版 <code>reports/REPORT.html</code> 把每题的三块折成可展开区块，长文阅读建议在网页版进行。</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>案例</th>
+<th>难度</th>
+<th>判定</th>
+<th>致命缺陷定位</th>
+<th>看点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>A1098</code> abc228_d</td>
+<td>中等 46</td>
+<td>SILENT_FAILURE</td>
+<td>第 2 步 逻辑缺陷、第 4 步 边界条件</td>
+<td>并查集环形回绕与数组越界，评测用例恰好不覆盖</td>
+</tr>
+<tr>
+<td><code>A1148</code> abc368_d</td>
+<td>基础~套路 22</td>
+<td>SILENT_FAILURE</td>
+<td>第 2 步 概念理解错误、逻辑缺陷</td>
+<td>保留条件断言写错，用例集恰好都含顶点 1 关键点而碰巧通过</td>
+</tr>
+<tr>
+<td><code>A1164</code> abc386_d</td>
+<td>中等 50</td>
+<td>SILENT_FAILURE</td>
+<td>第 3 步 复杂度不达标</td>
+<td>自称 O(M log M)，实际实现是 O(M²)</td>
+</tr>
+<tr>
+<td><code>A1174</code> abc392_e</td>
+<td>中等 50</td>
+<td>SILENT_FAILURE</td>
+<td>第 4 步 逻辑缺陷</td>
+<td>构造过程按顺序消耗备用边，边缘情形的评测用例未覆盖</td>
+</tr>
+<tr>
+<td><code>C2029</code> cf2241f</td>
+<td>基础~套路 35</td>
+<td>SILENT_FAILURE</td>
+<td>第 2 步 跳步推导</td>
+<td>胜负充要条件只证明了充分性</td>
+</tr>
+</tbody>
+</table></div>
 <h3 class="case-title"><span class="qid">A1098</span>abc228_d</h3>
 <ul class="meta">
 <li>难度：语义档 中等，diff_score 46</li>
@@ -2052,7 +2200,7 @@ int main() {
 <p>修正轮次分布：1 轮 25 题，2 轮 1 题，3 轮 10 题</p>
 <p>文本收敛和沙盒真值一致，才算真正修好。有 6 题文本判为收敛、隐藏用例却仍然不过，说明评估器只看得到公开用例；反过来有 5 题沙盒已经修对、评估器没有判收敛，是定位与接受之间的滞后。这两类合起来，就是文本判定与沙盒真值之间的边界。</p>
 <p>这套闭环也构成对评估器的一次间接检验：修正端唯一的输入是评估器的 findings（定位到哪一步、属于哪类错误、附什么证据），隐藏用例真值不参与改写，所以"指得准"是"改得动"的前提。22 题文本与沙盒双确认修好，说明这些题的定位与归类落在真错处、足以支撑一次正确重写；6 题假收敛与 5 题滞后则标出这条证据的边界——两者都来自评估器只看得到文本与公开用例，而不是把真实缺陷误判为错误。</p>
-<p><img alt="fig4" src="figures/fig4_refine_outcome.png" /></p>
+<p><img alt="fig3" src="figures/fig3_refine_outcome.png" /></p>
 <p><strong>Fig. 3</strong> 36 道答案错题经 ReAct 修正后的四象限分布，柱顶为样本数。四类依次是文本收敛且答案已对、文本收敛但答案仍错、未收敛但答案已对、未收敛且答案仍错。真正修好的是第一类，22 题；后两类共 11 题，构成文本判定与沙盒真值之间的边界。</p>
 <p>三轮未收敛的 8 题逐条复核如下，每轮的 findings 都与沙盒事实核对过，没有发现评估器误报。</p>
 <ul>
@@ -2328,7 +2476,7 @@ int main() {
 <p><strong>边界读数</strong>：过程正确率比全库基线低 8pp 以上的类别算能力弱点边界，有 <code>construct</code>（70.4%，n=27）、<code>twoptr</code>（71.4%，n=14）、<code>binary</code>（75.7%，n=37）。其中平均 diff_score 高的类别主要受题目本身难度驱动，diff_score 接近基线的才是同难度下确实偏弱。
 明显高于基线的类别是：<code>string</code>，94.1%。</p>
 <p>边界解读：math、sim、graph、dp、greedy、ds 这些主体类别覆盖了绝大多数样本，过程正确率在 80% 上下，与全库基线基本持平，没有系统性短板。弱点集中在 construct、twoptr、binary 三类，主要错误都是逻辑缺陷与条件遗漏，问题出在构造与约束建模的严密性，而不是不会做。string、game、twoptr 这些样本不足 16 的类别读数置信有限，只作方向性提示。</p>
-<p><img alt="fig2" src="figures/fig2_alg_classes.png" /></p>
+<p><img alt="fig4" src="figures/fig4_alg_classes.png" /></p>
 <p><strong>Fig. 4</strong> 13 个算法类别的答案准确率与过程正确率对比，蓝柱为答案准确率，橙柱为过程正确率，按后者升序排列，条形末端为百分数。construct、twoptr、binary 比全库基线低 8pp 以上。</p>
 <h3 id="82">8.2 弱项清单</h3>
 <div class="tw"><table>

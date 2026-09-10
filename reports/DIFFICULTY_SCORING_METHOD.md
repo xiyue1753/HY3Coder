@@ -2,6 +2,9 @@
 
 本文说明难度分层怎么做、为什么这样做、怎么验证。数据日期 2026-09-06，涉及 `abc_selfbuilt.jsonl` 的 175 题与 `cf_selfbuilt.jsonl` 的 184 题。执行脚本为 `scripts/score_difficulty.py`、`scripts/analyze_diff_scores.py`、`scripts/apply_diff_score.py`。
 
+**结论：** 统一难度分与平台官方 ELO 的 Spearman 秩相关为 ABC 0.706、CF 0.816，人工盲打抽检中仲裁分 0.848（优于独立盲打分 0.798 与任一单专家），分层过程正确率随难度单调下降，可作为跨平台分层退化分析的主轴。
+
+
 ## 1. 为什么需要统一难度分层
 
 要回答能力是否随题目难度退化，题集得先有一个可信、跨数据集可比、可复现的难度标签。它既是分层退化分析的自变量，也用于抽样均衡。

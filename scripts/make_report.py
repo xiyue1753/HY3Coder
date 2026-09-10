@@ -153,7 +153,7 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
       f"有 {q2} 题文本判为收敛、隐藏用例却仍然不过，说明评估器只看得到公开用例；"
       f"反过来有 {q3} 题沙盒已经修对、评估器没有判收敛，是定位与接受之间的滞后。"
       "这两类合起来，就是文本判定与沙盒真值之间的边界。\n")
-    w("\n![fig4](figures/fig4_refine_outcome.png)")
+    w("\n![fig3](figures/fig3_refine_outcome.png)")
     w(f"\n**Fig. 3** {n} 道答案错题经 ReAct 修正后的四象限分布，柱顶为样本数。"
       "四类依次是文本收敛且答案已对、文本收敛但答案仍错、未收敛但答案已对、未收敛且答案仍错。"
       f"真正修好的是第一类，{q1} 题；后两类共 {q2 + q3} 题，"
@@ -255,7 +255,7 @@ def _emit_algorithm_profile(w, evals: list[EvalRecord], qmap: dict) -> None:
       "弱点集中在 construct、twoptr、binary 三类，主要错误都是逻辑缺陷与条件遗漏，"
       "问题出在构造与约束建模的严密性，而不是不会做。string、game、twoptr 这些"
       "样本不足 16 的类别读数置信有限，只作方向性提示。\n")
-    w("\n![fig2](figures/fig2_alg_classes.png)")
+    w("\n![fig4](figures/fig4_alg_classes.png)")
     w("\n**Fig. 4** 13 个算法类别的答案准确率与过程正确率对比，蓝柱为答案准确率，"
       "橙柱为过程正确率，按后者升序排列，条形末端为百分数。construct、twoptr、binary "
       "比全库基线低 8pp 以上。\n")
@@ -580,7 +580,7 @@ def build() -> str:
       "复现命令见附录）；应用侧把这些能力装进一个可运行的界面：FastAPI 后端加单文件 SPA，"
       "本地 `.\\run.ps1 serve` 后打开 `127.0.0.1:8000`，含评估总览、单题回放、Golden 库、"
       "人工抽检、交互式解题、题集浏览器六个视图。\n")
-    w("![fig5](figures/ui_dashboard_overview.png)\n")
+    w("![ui_dashboard](figures/ui_dashboard_overview.png)\n")
     w("**Fig. 5** 仪表盘评估总览：顶部为已评估题量、答案准确率、过程正确率与沉默失败检出"
       "四项指标，下方依次是分层退化、判定分布、错误类型分布与知识点能力画像。\n")
     w("\n其中“交互式解题”是按现场演示设计的链路：从题集载入题目（连同该题自带参考解）→ "
@@ -672,7 +672,7 @@ def build() -> str:
     total_inc = sum(m.error_type_dist.values()) or 1
     for k, v in sorted(m.error_type_dist.items(), key=lambda x: -x[1]):
         w(f"| {TYPE_CN.get(k, k)} | {v} | {v / total_inc * 100:.1f}% |")
-    w("\n![fig3](figures/fig3_error_types.png)")
+    w("\n![fig2](figures/fig2_error_types.png)")
     w("\n**Fig. 2** 过程错误类型分布，条形末端给出条数与占比。逻辑缺陷与实现层错误"
       "合计超过一半，短板主要在实现严谨性与建模正确性。\n")
     w("")
