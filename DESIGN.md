@@ -1,6 +1,6 @@
 # HY3Coder 设计文档（正式版）
 
-面向可验证场景（算法竞赛）的**过程评估与错误定位 + 自我修正**系统。
+面向可验证场景（算法竞赛）的过程评估与错误定位、自我修正系统。
 本文件为正式设计文档：分层规则表、错误分类体系、核心 schema 契约、双模式数据流与仪表盘数据隔离说明。
 场景范围：仅算法竞赛（`scene` 固定 `algorithm`）。
 
@@ -8,20 +8,20 @@
 
 ## 1. 系统目标
 
-给定一道算法竞赛题（含输入输出格式、数据范围与约束），系统产出**结构化分步求解过程**并自动评估：
+给定一道算法竞赛题（含输入输出格式、数据范围与约束），系统产出结构化分步求解过程并自动评估：
 
-1. **过程评估**：判定推理链是否成立（逐步自含性 + 全局回溯两轮审查）。
-2. **错误定位**：定位错误起始步骤，并归纳错误类型。
-3. **沉默失败识别**：识别"最终答案正确但过程无法支撑结论"的样本。
-4. **自我修正（ReAct 闭环）**：验证反馈回流驱动求解 Agent 迭代修订，报告修正前后过程正确率对比。
+1. 过程评估：判定推理链是否成立（逐步自含性 + 全局回溯两轮审查）。
+2. 错误定位：定位错误起始步骤，并归纳错误类型。
+3. 沉默失败识别：识别"最终答案正确但过程无法支撑结论"的样本。
+4. 自我修正（ReAct 闭环）：验证反馈回流驱动求解 Agent 迭代修订，报告修正前后过程正确率对比。
 
 ## 2. 架构总览
 
 ```
-data/questions（题集：公开算法对照 + 自建，三档分层）
+data/questions（题集：两套自建集，三档分层）
         │  QuestionItem（题目/标准答案/测试用例/难度/来源/分层依据/判题模式）
-        │  公开对照: algorithm.jsonl（TACO 350 活跃，CF 350 已 deprecated 弃用）
-        │  自建:     abc_selfbuilt.jsonl（AtCoder ABC 175 题，独立产线见 §3）
+        │  abc_selfbuilt.jsonl（AtCoder ABC 175 题） · cf_selfbuilt.jsonl（Codeforces 184 题）
+        │  独立产线见 §3；TACO 公开镜像未接入（历史文件已归档，不参与抽样与统计）
         ▼
 solver/  分步求解 Agent ──► Answer(steps[]+final_answer+code)
         │                     │
@@ -43,17 +43,20 @@ web/ 仪表盘（总览/单题回放/golden/抽检/交互式解题）  ·  cli.p
 
 ## 3. 数据集与分层规则
 
-| 场景 | 来源 | 许可 | 入库 | 分层映射 | 分层依据 |
-|---|---|---|---|---|---|
-| 算法·公开对照 | TACO（agentica-org/DeepCoder-Preview-Dataset） | Apache-2.0 | 350 活跃 | difficulty∈{easy→basic, medium→medium, hard→hard} | 官方难度标签 |
-| 算法·公开集(弃用) | CodeForces 镜像（同上源） | Apache-2.0 | 350 deprecated | — | 已标 metadata.deprecated，抽样/评测自动排除 |
-| 算法·自建 | AtCoder ABC（公开赛题独立产线抓取） | 竞赛题（抓题面+公开 AC 解） | 175 | 官方分值 100→basic, 200-400→medium, 500+→hard | 官方分值 + layer_basis |
+| 场景 | 来源 | 许可 | 入库题数 | 三档分布 |
+|---|---|---|---|---|
+| 算法·自建 | AtCoder ABC（独立产线：抓题面 + 平台 AC 解 + 人工边界用例） | 题目版权归 AtCoder，仅供研究 | 175 | basic 34 / medium 82 / hard 59 |
+| 算法·自建 | Codeforces（同产线；参考解取自 CF 公开 AC 提交与 GitHub 公开题解仓库） | 题目版权归 Codeforces，仅供研究 | 184 | basic 34 / medium 83 / hard 67 |
 
-- 自建题产线（响应任务书"公开集为主 + 自建补充"）：
-  独立抓取产线（抓题面 + AC 解）→ 官方样例 + 人工边界用例（gen_hidden_cases.py，期望由参考解跑出）→ `abc_selfbuilt.jsonl`；
-  多解构造题以 `judge=special` 入库（SPJ checker，见 §5.5）。独立文件便于扩充，web/browse 合并展示；
-  进入 run-eval 前需并入评估池（见 §10 数据流说明）。
-- 分层抽样（`datasets/sampling.py`，自动过滤 deprecated）：
+- TACO / CodeContests 公开镜像未接入活跃数据源（`algorithm.jsonl` 约 82MB，可由公开 HF 数据源重建，
+  不入库），抽样与统计一律不含它；如需引入按独立数据集注册。
+- 三档 `difficulty` 由平台官方 ELO 锚点校正极端错标后定档（`scripts/fix_extreme_mislabel.py`）；
+  报告的分层退化分析用统一难度分 `diff_score`（Hy3 三位专家盲打 + 仲裁，方法论见
+  `reports/DIFFICULTY_SCORING_METHOD.md`），平台三档仅作对照。
+- 自建题产线：独立抓取产线（抓题面 + AC 解）→ 官方样例 + 人工边界用例（`gen_hidden_cases.py`，
+  期望由参考解跑出）→ 题集文件；多解构造题以 `judge=special` 入库（SPJ checker，见 §5.2）。
+  两套自建集各是一个数据集，评估时直接 `--questions <文件>` 指定，无需并入别的池。
+- 分层抽样（`datasets/sampling.py`，自动过滤弃用题）：
 
 | --sample | 算法（basic/medium/hard） |
 |---|---|
@@ -61,7 +64,7 @@ web/ 仪表盘（总览/单题回放/golden/抽检/交互式解题）  ·  cli.p
 | 10 | 4/4/2 |
 | 50 | 20/20/10 |
 | 100 | 100/100/100 |
-| full | 全部活跃（TACO 350 或并入自建后的池） |
+| full | 全部活跃（当前 = 两套自建集共 359 题） |
 
 - 抽样种子固定（默认 42），保证分档统计可复现。
 - 每档实际抽样数 = min(档位需求, 池内数量)，池不足时按池兜底。
@@ -113,13 +116,14 @@ class RefineRound(BaseModel):
 
 class EvalRecord(BaseModel):   # 数据纯净，绝不混入 refine 结果
     question_id, scene, difficulty, answer, answer_correct, test_pass_rate,
-    verification, cost_calls, created_at
+    verification, cost_calls, created_at,
+    source: str = "run-eval"   # 记录来源：run-eval（批量）/ interactive（交互演示）
 
 class RefineRecord(BaseModel):
     question_id, scene, difficulty, initial, rounds, final, converged, cost_calls, created_at
 ```
 
-## 5. 错误分类体系（src/rex/verifier/errors.py）
+## 5. 错误分类与判定辅助（errors.py / static_check.py / judge.py）
 
 | 层级 | 类型 | 说明 | 典型证据 |
 |---|---|---|---|
@@ -133,29 +137,29 @@ class RefineRecord(BaseModel):
 | | boundary 边界条件 | 输入边界处理缺失 | 除零、空输入、0 值特例 |
 | | complexity 复杂度不达标 | 复杂度声明与实际不符 | 声明 O(n) 实际 O(n²)/O(2^n) |
 
-## 5.4 规则校验定位（executor/static_check.py）
+### 5.1 规则校验定位（executor/static_check.py）
 
-规则校验审的是 **solver 产出的代码实现**（implement 步骤的 artifact）——复杂度
-声明一致性、死循环/递归无终止、边界启发式，覆盖 Python 与 C++。它属于
-**实现/结果层审核**（对代码这个产物的规则审查），与 verifier 对**推理链文本**
-的过程评估是两个正交维度：
+规则校验审的是 solver 产出的代码实现（implement 步骤的 artifact）——复杂度
+声明一致性、死循环/递归无终止、边界启发式，覆盖 Python 与 C++。它属于实现/
+结果层审核（对代码这个产物的规则审查），与 verifier 对推理链文本的过程评估是
+两个正交维度：
 
-- **过程评估（LLM）**：判断推理链是否成立（跳步/误用定理/条件遗漏等）。
-- **结果审核（规则/沙盒）**：沙盒判答案对错；规则校验判代码是否满足
-  可自动检查的性质（复杂度声明与实现一致、无死循环等）。
+- 过程评估（LLM）：判断推理链是否成立（跳步/误用定理/条件遗漏等）；
+- 结果审核（规则/沙盒）：沙盒判答案对错，规则校验判代码是否满足可自动检查的
+  性质（复杂度声明与实现一致、无死循环等）。
 
-因此规则校验**不单独阻断 verdict**：启发式有误报，且不直接判断推理链成立性。
-它的输出作为 verifier 的**补充诊断证据**（static_evidence）喂给双视角 LLM 审查，
-帮助定位实现层缺陷——对应任务书"规则校验 + 分步 LLM 审查"的多手段组合。
+因此规则校验不单独阻断 verdict：启发式有误报，且不直接判断推理链成立性。
+它的输出作为 verifier 的补充诊断证据（static_evidence）喂给双视角 LLM 审查，
+帮助定位实现层缺陷，对应任务书"规则校验 + 分步 LLM 审查"的多手段组合。
 
-规则黄金样例集与规则配对存放：`tests/test_static_check.py`（每条规则含
-"正例应命中 / 负例不误报"），开源后 `pytest tests/test_static_check.py` 即可
-验证规则行为，便于后续按需扩展新规则而不影响主判定。
+规则黄金样例集与规则配对存放于 `tests/test_static_check.py`（每条规则含
+"正例应命中 / 负例不误报"），`pytest tests/test_static_check.py` 即可验证规则
+行为，便于后续按需扩展新规则而不影响主判定。
 
-## 5.5 算法判题模式（executor/judge.py：exact vs special/SPJ）
+### 5.2 算法判题模式（executor/judge.py：exact vs special/SPJ）
 
 常规算法题输出唯一，判题用"期望文本比对"（`run_test_cases`，含浮点容差 1e-5）。
-但**构造/多解题**（如输出任意合法操作序列）没有唯一期望文本——官方样例只是众多
+但构造/多解题（如输出任意合法操作序列）没有唯一期望文本——官方样例只是众多
 合法解之一，与 AI 解文本不同不代表错误。这类题由 AtCoder/CF 用 **Special Judge** 判定。
 
 本系统在 `QuestionItem` 上以 `judge` 字段区分两模式：
@@ -179,8 +183,8 @@ class RefineRecord(BaseModel):
 - A1103 abc216_c Many Balls（构造 A/B 操作序列到 N）
 - A1104 abc251_d At Most 3（构造 ≤300 砝码覆盖 [1,W]）
 
-存量扫描：algorithm.jsonl（公开集，已弃用标记）内 ~50 题命中 SPJ 特征词，
-不在本次处理范围；abc_selfbuilt 内 A1098 abc228_d 的 "one such" 为误报（指查询存在）。
+判题模式扫描记录：已弃用的 `algorithm.jsonl` 内约 50 题命中 SPJ 特征词，不在处理范围；
+现役 `abc_selfbuilt` 内 A1098 abc228_d 的 "one such" 属误报（题面里指查询存在，不是多解）。
 
 ## 6. 验证流程（src/rex/verifier/）
 
@@ -203,7 +207,7 @@ class RefineRecord(BaseModel):
 ### 6.2 重建测试（所有缺陷判定的总闸）
 
 怀疑某步有问题时，先问：去掉/修复该句后，剩余推理链 + 题面条件 + 领域常识
-能否**重新推出**该结论？
+能否重新推出该结论？
 - 能重建 → minor（省略的是平凡/显然/常规推导，不构成过程错误）
 - 不能重建 → fatal（结论依赖未给出的关键推理，或该步断言本身错误）
 平凡公式/常识（sin30°=1/2、勾股定理、定义直接可推出）不需推导；解题关键
@@ -229,33 +233,12 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 
 | 模式 | CLI | 数据流 | 输出 | 用途 |
 |---|---|---|---|---|
-| eval | `run-eval` | 一次性：solve→execute→verify，反馈绝不回流 | `data/outputs/eval_{scene}.jsonl` | 全部指标的**唯一**数据来源 |
+| eval | `run-eval` | 一次性：solve→execute→verify，反馈绝不回流 | `data/outputs/eval_{scene}.jsonl` | 全部指标的唯一数据来源 |
 | refine | `run-refine` | 循环：verify→feedback→revise→re-verify（≤3 轮） | `data/outputs/refine_{scene}.jsonl` | 修正效果对比（不计入 eval 指标） |
 
 - 每轮修正记录 `RefineRound`（修订后答案+反馈+重验证），支持"修正前后对比"。
 - 断点续跑：JSONL 追加写，重启跳过已完成 question_id。
 - 成本核算：`Hy3Client.call_count` 每实际请求自增（含重试），逐轮/累计可查。
-
-### 7.2 交互式解题（仪表盘演示）的留档与数据隔离
-
-交互演示（现场输入题目 → HY3 求解 → 过程评估）与正式评测**物理分离**，不进入任何统计口径：
-
-| 产物 | 文件 | 说明 |
-|---|---|---|
-| 交互题池 | `data/questions/interactive.jsonl` | 每次求解分配一个新题号（`IX0001`…）写入；单题回放按题号取题面与用例 |
-| 会话快照 | `data/outputs/interact_sessions.jsonl` | 题面/用例/参考解/命中模型/参考解试运行/判定摘要；失败会话同样留档 |
-| 判定记录 | `data/outputs/eval_interactive.jsonl` | `source="interactive"`，指标侧 `formal_only` 直接过滤掉 |
-| 修正记录 | `data/outputs/refine_interactive.jsonl` | 交互 refine 单独存放，**不写入**数据集注册的正式 refine 文件 |
-
-- 参考解试运行由**服务端**在沙盒里自己跑一遍（不采信前端上传的结果），逐用例留档输入/期望/实际输出；
-  C++ 只编译一次后复用到各用例。
-- **逐 Step 流式**（`on_step` / `on_reasoning`）：交互演示时求解走
-  `Hy3Client.chat_stream` + `rex.stream_json.partial_answer`——按大括号配对流式切出已闭合的
-  step 对象，界面边生成边渲染；思考阶段只回传累计字数（Hy3 先推理再出正文）。
-  该路径**只在交互演示启用**，正式评测仍走 `chat()` 整段调用 + 完整 JSON 解析，
-  判定与成本口径不变（`on_step=None` 即原路径）。
-- 交互记录在「单题回放」里按题号回看（列表来源筛选项：`run-eval` / `interactive`）；refine 演示的会话
-  额外补一条"终局判定"记录，否则回放列表（按 eval 记录组织）看不到它。
 
 ### 7.1 ReAct 自我修正闭环（方法论与收敛判据）
 
@@ -268,6 +251,27 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 - 有效性指标 = `refine_comparison`（before/after_correct、improved、converged，报告 §5）。
 - 方法论全文与有效性论证：`reports/REACT_METHOD.md`（姊妹篇：题集难度分层
   `DIFFICULTY_SCORING_METHOD.md`、过程评估器 `PROCESS_EVAL_METHOD.md`）。
+
+### 7.2 交互式解题（仪表盘演示）的留档与数据隔离
+
+交互演示（现场输入题目 → HY3 求解 → 过程评估）与正式评测物理分离，不进入任何统计口径：
+
+| 产物 | 文件 | 说明 |
+|---|---|---|
+| 交互题池 | `data/questions/interactive.jsonl` | 每次求解分配一个新题号（`IX0001`…）写入；单题回放按题号取题面与用例 |
+| 会话快照 | `data/outputs/interact_sessions.jsonl` | 题面/用例/参考解/命中模型/参考解试运行/判定摘要；失败会话同样留档 |
+| 判定记录 | `data/outputs/eval_interactive.jsonl` | `source="interactive"`，指标侧 `formal_only` 直接过滤掉 |
+| 修正记录 | `data/outputs/refine_interactive.jsonl` | 交互 refine 单独存放，不写入数据集注册的正式 refine 文件 |
+
+- 参考解试运行由服务端在沙盒里跑一遍（不采信前端上传的结果），逐用例留档输入/期望/实际输出；
+  C++ 只编译一次后复用到各用例。
+- 逐 Step 流式（`on_step` / `on_reasoning`）：交互演示时求解走
+  `Hy3Client.chat_stream` + `rex.stream_json.partial_answer`，按大括号配对流式切出已闭合的
+  step 对象，界面边生成边渲染；思考阶段只回传累计字数（Hy3 先推理再出正文）。
+  该路径只在交互演示启用，正式评测仍走 `chat()` 整段调用 + 完整 JSON 解析，
+  判定与成本口径不变（`on_step=None` 即原路径）。
+- 交互记录在「单题回放」里按题号回看（列表来源筛选项：`run-eval` / `interactive`）；refine 演示的会话
+  额外补一条"终局判定"记录，否则回放列表（按 eval 记录组织）看不到它。
 
 ## 8. SILENT_FAILURE（答案正确但过程根本缺陷）留档
 
@@ -302,59 +306,63 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 
 ### 9.1 minor 统计口径（主口径 / 副口径）
 
-**定义**：`minor` 是 finding 的 severity（`finding.severity == minor`），表示"不破坏推理链成立性的轻微瑕疵"（表述笔误/可重建省略/无害误述）。**verdict 层无 minor 档**；错误分 fatal/minor 两类发生在 finding 层。
+**定义**：`minor` 是 finding 的 severity（`finding.severity == minor`），表示"不破坏推理链成立性的轻微瑕疵"（表述笔误/可重建省略/无害误述）。verdict 层无 minor 档；错误分 fatal/minor 两类发生在 finding 层。
 
 **样本三类去向（一切统计的根）**：
 | 类 | verdict | findings | 主口径(默认) | 副口径(minor_as_error) |
 |---|---|---|---|---|
 | A 干净 | CORRECT | 空 | 过程正确 | 过程正确 |
-| B **仅 minor 记录** | CORRECT | 全 minor | 过程正确 | **过程错误** |
+| B 仅 minor 记录 | CORRECT | 全 minor | 过程正确 | 过程错误 |
 | C fatal 驱动 | SILENT/PROCESS_INCORRECT/ANSWER_INCORRECT | 有 fatal（可附 minor） | 过程错误 | 过程错误 |
 
 **流转链（代码逐点）**：
-1. V1/V2/ARBITER 判定产出 findings（带 severity）——**总仲裁交付最终 verdict**；
-2. eval reconcile（`_reconcile_verdict`，有沙盒信号）：答案对+无 fatal → CORRECT（**minor 被"剥离"，findings 保留** → B 类）；答案对+有 fatal → SILENT_FAILURE（C 类）；答案错 → PROCESS_INCORRECT/ANSWER_INCORRECT；
+1. V1/V2/ARBITER 判定产出 findings（带 severity）——总仲裁交付最终 verdict；
+2. eval reconcile（`_reconcile_verdict`，有沙盒信号）：答案对+无 fatal → CORRECT（minor 被剥离，findings 保留 → B 类）；答案对+有 fatal → SILENT_FAILURE（C 类）；答案错 → PROCESS_INCORRECT/ANSWER_INCORRECT；
 3. refine（`_strip_minor_only`，无沙盒）：仅 minor → CORRECT 即停（不空转）；
 4. metrics：`_is_process_correct`——主口径看 verdict==CORRECT；副口径要求 CORRECT 且 findings 为空（B 类变错）；`compute_metrics(minor_as_error=...)` 统一入口；
 5. 抽检（`audit_metrics`）：误报率分母=答案对且被判过程有错。主口径判据 verdict∈{PI,SF}；副口径追加 verdict==CORRECT 且 findings 非空（B 类入分母）。三层复核 `human_severity_match`：`level_mismatch`（系统把 minor 判 fatal）主口径误报、副口径不计；`fp` 两口径均误报；
 6. 报告呈现（`make_report.py` §1 总览）：过程正确率主/副并列 + **"仅 minor 记录样本 N（主口径对/副口径错）"**；§6 误报率区间。
 
-**当前基线（359，temp0 前）**：CORRECT 300 = 282 干净 + **18 仅 minor 记录**（A1013/A1024/A1104/C2106 等）；SILENT_FAILURE 18（17 无 minor + 1 附 minor）；PROCESS_INCORRECT 33（25 无 + 8 附 minor）。
+**当前基线（t0 正式评测，359 题）**：CORRECT 303 = 280 干净 + 23 仅 minor 记录（A1007/A1018/A1043 等）；
+SILENT_FAILURE 15；PROCESS_INCORRECT 33；ANSWER_INCORRECT 8（3 条带程序化兜底定位，5 条仅比对答案）。
+副口径下这 23 条仅 minor 记录转为过程错，过程正确率 84.4% → 78.0%。
 
 **关于 "minor 与 SILENT_FAILURE（答案对但过程错）的关系"（防误读）**：
 - SILENT_FAILURE 由 **fatal** 驱动，不是 minor；
-- 无 fatal 的 minor-only 样本 reconcile 后为 CORRECT（B 类，主口径正确），**不会进入 SF**；
-- minor 出现在 SF 的常见形态是**人工核验纠正**：系统把实质 minor 误判为 fatal → 样本被误放入 SF/PI → 抽检判 `level_mismatch`（C2118/C2140）。因此 SF 中与 minor 相关的统计 = `level_mismatch` 计数，不是 minor finding 计数。
+- 无 fatal 的 minor-only 样本 reconcile 后为 CORRECT（B 类，主口径正确），不会进入 SF；
+- minor 出现在 SF 的常见形态是人工核验纠正：系统把实质 minor 误判为 fatal → 样本被误放入 SF/PI → 抽检判 `level_mismatch`（C2118/C2140）。因此 SF 中与 minor 相关的统计 = `level_mismatch` 计数，不是 minor finding 计数。
 
-**temperature=0 全量重做 checklist（不覆盖当前记录）**：
-1. 生成侧：`REX_TEMPERATURE=0` 跑 `python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full`（默认输出 `eval_abc_selfbuilt_t0.jsonl`；CF 同理 `eval_cf_selfbuilt_t0.jsonl`）——写独立文件，temperature=0.9 时代的 `eval_*_all.jsonl` 原样归档保留；
-2. 读取侧：`export REX_EVAL_SUFFIX=_t0` 后，`make_report.py`/审计/仪表盘统一读 t0 记录（`datasource.evals_path` 按后缀解析；不设该环境变量即读默认注册文件）；
-3. 每样本自动产出 answer_correct/verdict/findings(severity)/arbiter(=ARBITER 总仲裁)；
-4. 统计统一走 `make_report.py`（§1 主/副 + minor-only 行、§6 抽检区间）——主/副口径按 §9.1 路线自动一致；
-5. 抽检模板基于 t0 记录重新生成（`scripts/audit_sample.py`），标注仍按 `audit_rules.md` v4，回填后同步 `data/audit/` 副本；
-6. 新旧两套记录并存于 `data/outputs/`，报告/表格注明数据版本（默认注册文件 = temp0 前基线，`REX_EVAL_SUFFIX=_t0` = 重跑结果）。
+**temperature=0 基线与历史记录的关系**：
+
+- 生成侧：`REX_TEMPERATURE=0` 跑 `python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full`
+  得到 `eval_abc_selfbuilt_t0.jsonl`（CF 同理 `eval_cf_selfbuilt_t0.jsonl`）；temperature=0.9 时代的
+  `eval_*_all.jsonl` 归档在 `data/outputs/_archived/`，不被覆盖。
+- 读取侧：`REX_EVAL_SUFFIX=_t0` 时，`make_report.py`、审计与仪表盘统一读 t0 记录
+  （`datasource.evals_path` 按后缀解析；不设该环境变量则读默认注册文件）。
+- 每样本落 answer_correct / verdict / findings(severity) / arbiter（恒为 ARBITER 总仲裁）。
+- 统计统一走 `make_report.py`（§1 主/副口径 + minor-only 行、§6 抽检区间），主副口径按
+  §9.1 的流转链自动一致；抽检模板由 t0 记录生成（`scripts/audit_sample.py`），标注按
+  `audit_rules.md` v4，回填后同步到 `data/audit/audit_records.jsonl`。
 
 ## 10. 运行方式
 
 ```bash
-# 环境（优先级：优先 tensor_env，其次 anaconda）
-#   D:\.conda\envs\tensor_env\python.exe  (Python 3.9, 推荐, run.ps1 默认)
-#   D:\ProgramData\anaconda3\python.exe   (Python 3.13, 备选)
-#   .\run.ps1 ...  统一入口；或 $env:REX_PYTHON=... 覆盖解释器
-# .env 提供 HY3_API_KEY / HY3_BASE_URL / HY3_MODEL
+# 环境：conda 环境 tensor_env（Python 3.9，推荐）；解释器不在 PATH 时用 $env:REX_PYTHON 指定
+#   统一入口：.\run.ps1 <test|run-eval|run-refine|report|serve|exec ...>
+#   .env 提供 HY3_API_KEY / HY3_BASE_URL / HY3_MODEL
 
 # 评估模式（数据纯净）
-python -m src.cli run-eval --scene algorithm --sample 100      # 放大（样例验证）
+python -m src.cli run-eval --scene algorithm --sample 100      # 分层抽样放大
 
-# 自建题（AtCoder 175 题）跑评估：直接指定题集文件
+# 自建题全量评估（正式基线，temperature=0）
 python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --resume
 
 # 修正模式（ReAct 闭环）
 python -m src.cli run-refine --scene algorithm --sample 5 --max-rounds 3
 
 # 答案校验 / 人工抽检 / 仪表盘
-python -m src.cli check-answers --results data/outputs/eval_algorithm.jsonl
-python -m src.cli audit --results data/outputs/eval_algorithm.jsonl --sample 30
+python -m src.cli check-answers --results data/outputs/eval_abc_selfbuilt_t0.jsonl
+python -m src.cli audit --results data/outputs/eval_abc_selfbuilt_t0.jsonl --sample 30
 python -m src.cli serve    # http://127.0.0.1:8000
 
 # 测试
@@ -366,16 +374,16 @@ python -m pytest tests/
 - 源码（src/rex/ 模块化，tests/ pytest）
 - 题集 data/questions/：
   - `abc_selfbuilt.jsonl`（AtCoder ABC 175 题）/ `cf_selfbuilt.jsonl`（Codeforces 184 题）：含 AC 参考解、公开+隐藏用例、SPJ checker、分层依据（layer_basis）
-  - TACO 公开镜像（`algorithm.jsonl`，约 82MB）不入库，可由公开 HF 数据源重建（本地 dataset-full 分支保留完整数据）
+  - TACO 公开镜像（`algorithm.jsonl`，约 82MB）未接入、不入库，可由公开 HF 数据源重建（本地 dataset-full 分支保留完整数据）
 - SILENT_FAILURE 留档：真实评测检出的「答案对但过程根本缺陷」样本，作为 `verification.findings` 随评测结果一并交付
 - 评估结果 data/outputs/（eval/refine 严格分离，可断点续跑），随仓库交付的文件：
   - `eval_abc_selfbuilt_t0.jsonl`（175 题）/ `eval_cf_selfbuilt_t0.jsonl`（184 题）：temperature=0 正式评测全量记录（含模型过程与代码、判定、findings、静态校验、沙盒通过率）
   - `refine_wrong_t0.jsonl`（36 条）：答案错样本的 ReAct 修正逐轮记录
   - `contamination_probe.jsonl`（30 题）+ `contamination_probe_pilot.jsonl`（6 题）：记忆暴露行为探测
   - `diff_scores.jsonl`（359 条）：统一难度分与三专家盲打明细
-  - `eval_interactive.jsonl` / `interact_sessions.jsonl` / `interactive.jsonl`：交互演示留档（判定记录 / 会话快照 / 交互题池），属演示产物，不进任何统计
-  - 不入库：`_archived/`（历史分片）、运行日志（`*.log`/`*.err`）、`audit_records*.jsonl` 与 `audit_rules.md`（以 `data/audit/` 为权威版）
-- 分析报告 reports/（分层退化、错误分布、case 归因、修正前后对比、能力画像）
+  - 不入库：`_archived/`（历史分片）、运行日志（`*.log`/`*.err`）、`audit_records*.jsonl` 与 `audit_rules.md`（以 `data/audit/` 为权威版）、
+    交互演示留档（`interactive.jsonl` 题池 / `interact_sessions.jsonl` 会话快照 / `eval_interactive.jsonl` 判定记录，运行期生成，不进任何统计）
+- 分析报告：根目录 `REPORT.md`（交付副本）+ `reports/REPORT.md`（权威版本，分层退化、错误分布、case 归因、修正前后对比、能力画像）+ `reports/REPORT.html` 网页版
 - 方法论文档 reports/：`DIFFICULTY_SCORING_METHOD.md`（题集统一难度分层）、
   `PROCESS_EVAL_METHOD.md`（过程评估器判定）、`REACT_METHOD.md`（ReAct 自我修正闭环）
 - 人工抽检记录 data/audit/audit_records.jsonl（48 条，含用户终审）+ 抽检规则 data/audit/audit_rules.md

@@ -2,6 +2,9 @@
 
 犀牛鸟开源实战任务 2 参赛作品（个人/活动作品）。面向**算法竞赛**可验证场景，构建"**分步求解 → 过程评估 → 错误定位归类 → 自我修正**"的完整闭环：给定一道算法竞赛题，系统产出结构化分步求解过程，自动判定推理链是否成立、定位错误起始步骤、归纳错误类型，并识别"**答案正确但过程不成立**"的沉默失败样本；验证反馈可回流驱动求解 Agent 迭代修订（ReAct 闭环），实现从"评测器"到"评测 + 增强"的应用闭环。本仓库为个人参赛作品，非腾讯官方发布。方案聚焦**算法竞赛**可验证场景。
 
+> **分析报告（交付正文）**：[`REPORT.md`](REPORT.md) —— 359 题正式基线的指标与置信区间、分层退化、错误定位与修正效果，含附录 A–D 四份方法文档全文。
+> 网页版 [`reports/REPORT.html`](reports/REPORT.html)，排版更适合阅读与打印；四份方法文档也以单篇形式并列存放在 `reports/` 下。
+
 ## 核心能力
 
 | 能力 | 说明 |
@@ -18,9 +21,8 @@
 
 ## 环境要求
 
-> 系统 `python` 是 WindowsApps 占位程序（调用会报 exit 9009），**不可用**。
-> 解释器优先级：① **`tensor_env`**（Python 3.9，推荐，run.ps1 默认）
-> ② anaconda base（Python 3.13，备选）。两者均已装好依赖。
+Python 3.9+。代码使用了 `X | None` 等 3.10+ 类型注解语法，在 3.9 下依赖
+`eval_type_backport`（已写入 requirements.txt）求值。
 
 ```powershell
 # 1. 创建并激活 conda 环境（若尚未创建）
@@ -29,11 +31,8 @@ conda activate tensor_env
 pip install -r requirements.txt
 ```
 
-> 说明：代码使用了 `X | None` 等 3.10+ 类型注解语法，在 Python 3.9 下依赖
-> `eval_type_backport`（已写入 requirements.txt）求值。
-
-**推荐用仓库自带的 `run.ps1` 统一调用**（默认 tensor_env；备选 anaconda 时
-设 `$env:REX_PYTHON="D:\ProgramData\anaconda3\python.exe"` 覆盖）：
+**推荐用仓库自带的 `run.ps1` 统一调用**（默认 `tensor_env`；解释器不叫这个
+名字或不在 PATH 上时，用 `$env:REX_PYTHON` 指向自己的 python 覆盖）：
 
 ```powershell
 .\run.ps1 test              # 运行全部 pytest
@@ -116,9 +115,9 @@ copy .env.example .env
 
 | 数据集 | 来源 | 许可 |
 |---|---|---|
-| TACO（算法·公开对照） | agentica-org/DeepCoder-Preview-Dataset | Apache-2.0 |
-| CodeContests（算法） | 同上 | Apache-2.0 |
 | 自建 AtCoder ABC（算法·主推） | AtCoder ABC 比赛原题 + AC 参考解 | 数据版权归 AtCoder，仅供研究 |
+| 自建 Codeforces | Codeforces 比赛原题 + 公开 AC 解（含 GitHub 公开题解源） | 数据版权归 Codeforces，仅供研究 |
+| TACO / CodeContests（未接入） | agentica-org/DeepCoder-Preview-Dataset | Apache-2.0 |
 
 题集（`data/questions/*.jsonl`）：
 - **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题，主推）**：由独立产线抓题面 + AC 参考解 + 人工设计隐藏边界用例入库，难度按 ABC 分值映射三档（basic34/medium82/hard59），含 SPJ 多解构造题（checker 判题）；
@@ -131,6 +130,7 @@ copy .env.example .env
 
 ```
 Hy3_APP2/
+├── REPORT.md                # 分析报告交付副本（正文 §1-§9 + 附录 A-D；权威版本在 reports/REPORT.md）
 ├── DESIGN.md                # 正式设计文档（分层规则表/错误分类/schema 契约/双模式）
 ├── README.md
 ├── requirements.txt
@@ -161,7 +161,6 @@ Hy3_APP2/
 ```
 方案文档见 `方案文档.md`；任务与设计文档见 `DESIGN.md`。
 （数据抓取/实现过程等内部文档不随公开仓库发布，仅本地保留。）
-```
 
 ## 评估指标口径
 
