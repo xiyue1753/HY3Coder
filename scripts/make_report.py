@@ -65,7 +65,8 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
       "作为客观观察；重验证时通过 `execution_feedback` 喂给双视角与 ARBITER"
       "（公开样例失败时不得判 CORRECT）。终局用全部用例（含 hidden）沙盒复核答案真值，"
       "记录见 `data/outputs/refine_wrong_t0.jsonl`，脚本 `scripts/run_refine_wrong_t0.py`。"
-      "方法全文见附录 C。\n")
+      "方法全文见附录 C。（样本数由 34 增至 36：2026-09-10 补充 hidden 后新暴露的两道"
+      "答案错题 A1169/C2063 已并入。）\n")
     w("\n| 指标 | 数值 |")
     w("|---|---|")
     w(f"| 修正样本数（全部答案错） | {n} |")
@@ -116,7 +117,10 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
     w("\n文本收敛与沙盒真值一致才算完全成功；"
       f"{q2} 题文本收敛但 hidden 仍错（假收敛），反映评估器只能看到公开用例；"
       f"{q3} 题沙盒已修对但评估器未判收敛，是定位与接受滞后的另一侧证据。"
-      "本节同时是过程评估定位质量的下游观察面，与第 6 节定位准确率相互印证。\n")
+      "本节同时是过程评估定位质量的下游观察面，与第 6 节定位准确率相互印证。"
+      "新并入的 2 例一正一反：`C2063` 3 轮真收敛（复杂度缺陷修正后全量通过），"
+      "`A1169` 1 轮即判 CORRECT 但全量仍 60%——与它的 eval 期漏检同源，"
+      "说明\"公开用例全过\"时评估器容易接受未经验证的推理链。\n")
     w("\n![fig4](figures/fig4_refine_outcome.png)")
     w(f"\n**Fig. 3** {n} 个答案错样本经 ReAct 修正后的四象限分布：柱顶为样本数，"
       "横轴四类依次为「文本收敛且答案已对 / 文本收敛但答案仍错 / 未收敛但答案已对 / 未收敛且答案仍错」。"
@@ -221,7 +225,7 @@ def _emit_algorithm_profile(w, evals: list[EvalRecord], qmap: dict) -> None:
             w(f"显著高于基线的类别（强项）：{strong_txt}。")
         w("")
     w("\n边界解读：主体算法类（math/sim/graph/dp/greedy/ds，覆盖绝大多数样本）"
-      "过程正确率 81%–85%，与全库基线基本持平，无系统性短板。"
+      "过程正确率 80% 上下（79.5%–84.6%），与全库基线基本持平，无系统性短板。"
       "弱点集中在 construct / twoptr / binary 三类，其主要过程错误均为逻辑缺陷与"
       "条件遗漏（missing_condition），指向构造与约束建模的严密性不足，而非知识缺失。"
       "string / game / twoptr 等样本不超过 16 的类别读数置信有限，只作方向性提示。"
@@ -482,6 +486,16 @@ def build() -> str:
     lo, hi = wilson_interval(k_proc, n_valid)
     w(f"| 过程正确率 95% CI | [{lo * 100:.1f}%, {hi * 100:.1f}%]（Wilson） |")
     w("")
+    w("\n**基线修订说明（2026-09-10 补充 hidden）**：为补齐原先缺隐藏用例的题目"
+      "（ABC 13 题 + CF 129 题），按题面约束补充了合法边界 hidden 用例；"
+      "用同一次求解的模型代码在新用例上重跑，仅**答案对错**受影响（过程评估的推理链未变，"
+      "不重跑 LLM 审查，只按流水线既有的确定性规则同步 `verdict` 一致性）。实测 "
+      "**2 题答案由对转错**：`A1169`（abc383_e，原判 CORRECT，verifier 未发现该边界缺陷 "
+      "→ 属评估器漏检，verdict 修正为 ANSWER_INCORRECT）、`C2063`（cf1868c，原判 "
+      "SILENT_FAILURE，复杂度 fatal 成立且答案实际也错 → 修正为 PROCESS_INCORRECT）。"
+      "表中数字为本修订后口径（补充前为 90.5% / 84.7%）；§2 分档/分层表、§3 分类统计、"
+      "§6 人工抽检与 §8 算法类别细表均已按本修订重算。\n")
+    w("")
     # 分平台概览
     w("\n**分平台概览**（均为正式 run-eval）\n")
     w("| 子集 | 样本 | 答案准确率 | 过程正确率 |")
@@ -567,8 +581,10 @@ def build() -> str:
               "读数被小样本支配，故并入「难~极高难」一行解读，不作单独能力结论；"
               "临界点结论限定在入门~中等区间。")
         w("\n![fig1](figures/fig1_diff_tiers.png)")
-        w("\n**Fig. 1** 统一难度分档下答案准确率（实线）与过程正确率（虚线）随 diff_score 的退化。"
-          "高难段 [60,100) 含 35 题（80+ 的 5 题并入）；过程正确率自中等档（73.0%）起显著跌落，"
+        _crit = filled[drop] if drop else filled[-1]
+        w(f"\n**Fig. 1** 统一难度分档下答案准确率（实线）与过程正确率（虚线）随 diff_score 的退化。"
+          f"高难段 [60,100) 含 {hi_n} 题（80+ 的 {n_hi80} 题并入）；"
+          f"过程正确率自{_crit['name']}档（{pct(_crit['process'])}）起显著跌落，"
           "是高难能力边界的第一条证据线。\n")
         w("")
     else:
@@ -666,6 +682,13 @@ def build() -> str:
           "的分级是否属实：完全相符即分级正确；层次不符即分级打反（系统把 minor 判成 "
           "fatal，属误报侧）；完全不符即系统认为有错而实际过程正确。误报率区间取两个端点："
           "仅完全不符（下界，minor 也算过程错）到含层次不符（上界，minor 不算过程错）。\n")
+        w(f"\n**层次基线**：本节按**当前**（2026-09-10 补充 hidden 后）t0 口径计——"
+          f"答案错误 {am.localization_n} 条、答案正确但被判过程有错（误报率分母）"
+          f"{am.fp_n} 条。补充前（2026-09-09 抽检当时）为 **28 / 20**，"
+          "定位 27/28 = 96.4%、三层复核 match 18。这一条之差来自被抽检的 `C2063`："
+          "补充 hidden 后其答案由对转错、verdict 由 SILENT_FAILURE 修正为 "
+          "PROCESS_INCORRECT（见 §1 基线修订说明），故从误报率分母移入定位分母，"
+          "且系统对其复杂度缺陷的定位经人工复核为命中。\n")
     else:
         w(f"\n_暂无抽检标注，运行 `python -m src.cli audit --results {ds.evals_path(ROOT, next(d for d in ds.active_datasets() if d.evals))}` 生成模板。_\n")
 
