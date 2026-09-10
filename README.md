@@ -4,6 +4,30 @@
 
 > **分析报告（交付正文）**：[`REPORT.md`](REPORT.md) —— 359 题正式基线的指标与置信区间、分层退化、错误定位与修正效果，含附录 A–D 四份方法文档全文。
 > 网页版 [`reports/REPORT.html`](reports/REPORT.html)，排版更适合阅读与打印；四份方法文档也以单篇形式并列存放在 `reports/` 下。
+> **演示录像**：[`HY3Coder-demo.mp4`](HY3Coder-demo.mp4)（79 秒 / 1920×1080）。
+
+## 交付材料索引（对应任务书第 2 项）
+
+任务书要求与产出的逐条落点如下；报告正文 §1.2 另有一份"任务要求 → 系统对应"的对照表。
+
+| 任务书要求 | 交付材料 | 位置 |
+|---|---|---|
+| 开源仓库：应用源码 | 求解 / 验证 / 修正 / 执行 / 指标各层模块、CLI 与 FastAPI 仪表盘 | `src/rex/`、`src/web/`、`src/cli.py` |
+| 开源仓库：过程评估模块 | 双视角验证 + 总仲裁、沙盒执行与静态检查、指标与统计 | `src/rex/verifier/`、`src/rex/executor/`、`src/rex/metrics/` |
+| 开源仓库：README、环境配置样例与运行说明 | 环境要求、快速开始、统一运行入口与目录说明 | `README.md`、`.env.example`、`requirements.txt`、`run.ps1` |
+| 评测材料：分层题集及标准答案 | 两套自建集，每题含题面、平台 AC 参考解、公开 + 隐藏用例、判题模式与分层依据 | `data/questions/abc_selfbuilt.jsonl`（175）、`data/questions/cf_selfbuilt.jsonl`（184） |
+| 评测材料：分层依据 | 统一难度分的方法论文档与逐题打分明细 | `reports/DIFFICULTY_SCORING_METHOD.md`、`data/outputs/diff_scores.jsonl` |
+| 评测材料：答案校验脚本 | 在沙盒里跑公开 / 隐藏用例，多解题目走 SPJ checker | `scripts/check_answers.py`、`src/rex/executor/judge.py` |
+| 评测材料：过程评估脚本 | 逐题走「求解 → 沙盒 → 双视角验证 + 仲裁」 | `scripts/evaluate.py`、`src/rex/verifier/` |
+| 完整结果：最终答案准确率、过程正确率 | 359 题全量读数、Wilson 区间与抽样稳定性检验 | `REPORT.md` §1；逐题明细 `data/outputs/eval_abc_selfbuilt_t0.jsonl`、`data/outputs/eval_cf_selfbuilt_t0.jsonl` |
+| 完整结果：错误类型分布 | 10 类错误的分布与典型证据 | `REPORT.md` §3 |
+| 完整结果：难度分层结果 | 统一难度轴上的分层退化，指出明显下降的难度区间 | `REPORT.md` §2 |
+| 有效性验证：定位准确率与误报率 | 答案错的 29 条全量复核、答案对却判过程有错的 19 条三层复核 | `REPORT.md` §6 |
+| 有效性验证：人工抽检记录 | 48 条抽检标注、抽检规则与抽样模板 | `data/audit/audit_records.jsonl`、`data/audit/audit_rules.md`、`scripts/audit_sample.py` |
+| 分析报告：设计依据、错误分类体系、典型案例、能力边界与临界点 | 正文 §1–§9，附录 A–D 为四份方法文档全文 | `REPORT.md`；网页版 `reports/REPORT.html`；单篇 `reports/DIFFICULTY_SCORING_METHOD.md`、`reports/PROCESS_EVAL_METHOD.md`、`reports/REACT_METHOD.md`、`reports/CONTAMINATION_METHOD.md` |
+| demo 视频（2 分钟以内） | 79 秒 / 1920×1080，现场演示：题集载入 → 参考解沙盒试运行 → 逐步求解 → 过程评估 | `HY3Coder-demo.mp4` |
+
+提交方式相关的几条：真实密钥不入库（`.env.example` 只列变量名，密钥在本地 `.env`，已被 `.gitignore` 排除）；模型能力调用统一走 Hy3（`src/rex/hy3_client.py`）；README 首段已标注为个人参赛作品。
 
 ## 核心能力
 
@@ -131,6 +155,8 @@ copy .env.example .env
 ```
 Hy3_APP2/
 ├── REPORT.md                # 分析报告交付副本（正文 §1-§9 + 附录 A-D；权威版本在 reports/REPORT.md）
+├── HY3Coder-demo.mp4        # 演示录像 79 秒（任务书要求的 demo 视频）
+├── 方案文档.md              # 项目方案书（目标/设计/三大部分/完成度）
 ├── DESIGN.md                # 正式设计文档（分层规则表/错误分类/schema 契约/双模式）
 ├── README.md
 ├── requirements.txt

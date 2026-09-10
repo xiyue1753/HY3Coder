@@ -65,8 +65,8 @@ data/outputs/interact_sessions.jsonl
 data/outputs/eval_interactive.jsonl
 data/outputs/refine_interactive.jsonl
 
-# 演示录像等大体积媒体（本地留存，不入库）
-*.mp4
+# 演示录像：任务书要求的产出之一（HY3Coder-demo.mp4，79 秒），随仓库发布；
+# 其余大体积媒体素材不入库
 *.mov
 *.mkv
 
