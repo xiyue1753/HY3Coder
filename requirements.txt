@@ -1,4 +1,4 @@
-# ReAgents v2 — 可验证场景的过程评估与错误定位系统
+# HY3Coder — 可验证场景的过程评估与错误定位系统
 # 推荐环境：conda 虚拟环境 tensor_env（Python 3.9），亦可运行于 Python 3.13
 # 注意：代码使用 `X | None` 等 3.10+ 类型注解语法，3.9 下依赖 eval_type_backport 求值
 
