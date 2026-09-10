@@ -213,89 +213,37 @@
 
 > Score : $400$ points
 >
->
->
->
->
->
->
-> ### Problem Statement
+> **Problem Statement**
 > There is a sequence $A = (A_0, A_1, \dots, A_{N - 1})$ with $N = 2^{20}$ terms. Initially, every term is $-1$.
->
 >
 > Process $Q$ queries in order. The $i$-th query $(1 \leq i \leq Q)$ is described by an integer $t_i$ such that $t_i = 1$ or $t_i = 2$, and another integer $x_i$, as follows.
 >
->
->
->
 > If $t_i = 1$, do the following in order.
->
 >
 > Define an integer $h$ as $h = x_i$.
 >
->
 > While $A_{h \bmod N} \neq -1$, keep adding $1$ to $h$. We can prove that this process ends after finite iterations under the Constraints of this problem.
->
 >
 > Replace the value of $A_{h \bmod N}$ with $x_i$.
 >
->
->
->
->
->
 > If $t_i = 2$, print the value of $A_{x_i \bmod N}$ at that time.
->
->
->
 >
 > Here, for integers $a$ and $b$, $a \bmod b$ denotes the remainder when $a$ is divided by $b$.
 >
->
->
->
->
->
->
->
->
->
->
-> ### Constraints
->
+> **Constraints**
 >
 > $1 \leq Q \leq 2 \times 10^5$
 >
->
 > $t_i \in \{ 1, 2 \} \, (1 \leq i \leq Q)$
->
 >
 > $0 \leq x_i \leq 10^{18} \, (1 \leq i \leq Q)$
 >
->
 > There is at least one $i$ $(1 \leq i \leq Q)$ such that $t_i = 2$.
->
 >
 > All values in input are integers.
 >
->
->
->
->
->
->
->
->
->
->
->
->
->
->
->
-> ### Input
+> **Input**
 > Input is given from Standard Input in the following format:
->
 >
 > ```
 > $Q$
@@ -305,33 +253,10 @@
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
-> ### Output
+> **Output**
 > For each query with $t_i = 2$, print the response in one line. It is guaranteed that there is at least one such query.
 >
->
->
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Input 1
+> **Sample Input 1**
 > ```
 > 4
 > 1 1048577
@@ -341,35 +266,20 @@
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
-> ### Sample Output 1
+> **Sample Output 1**
 > ```
 > 1048577
 > -1
 >
 > ```
 >
->
 > We have $x_1 \bmod N = 1$, so the first query sets $A_1 = 1048577$.
->
 >
 > In the second query, initially we have $h = x_2$, for which $A_{h \bmod N} = A_{1} \neq -1$, so we add $1$ to $h$. Now we have $A_{h \bmod N} = A_{2} = -1$, so this query sets $A_2 = 1$.
 >
->
 > In the third query, we print $A_{x_3 \bmod N} = A_{1} = 1048577$.
 >
->
 > In the fourth query, we print $A_{x_4 \bmod N} = A_{3} = -1$.
->
 >
 > Note that, in this problem, $N = 2^{20} = 1048576$ is a constant and not given in input.
 
@@ -439,12 +349,12 @@ int main() {
 
 > Score : $425$ points
 >
-> ### Problem Statement
+> **Problem Statement**
 > You are given a tree with $N$ vertices numbered $1$ to $N$. The $i$-th edge connects vertices $A_i$ and $B_i$.
 >
 > Consider a tree that can be obtained by removing some (possibly zero) edges and vertices from this graph. Find the minimum number of vertices in such a tree that includes all of $K$ specified vertices $V_1,\ldots,V_K$.
 >
-> ### Constraints
+> **Constraints**
 >
 > $1 \leq K \leq N \leq 2\times 10^5$
 >
@@ -456,7 +366,7 @@ int main() {
 >
 > All input values are integers.
 >
-> ### Input
+> **Input**
 > The input is given from Standard Input in the following format:
 >
 > ```
@@ -468,10 +378,10 @@ int main() {
 >
 > ```
 >
-> ### Output
+> **Output**
 > Print the answer.
 >
-> ### Sample Input 1
+> **Sample Input 1**
 > ```
 > 7 3
 > 1 2
@@ -484,7 +394,7 @@ int main() {
 >
 > ```
 >
-> ### Sample Output 1
+> **Sample Output 1**
 > ```
 > 4
 >
@@ -492,7 +402,7 @@ int main() {
 >
 > The given tree is shown on the left in the figure below. The tree with the minimum number of vertices that includes all of vertices $1,3,5$ is shown on the right.
 >
-> ### Sample Input 2
+> **Sample Input 2**
 > ```
 > 4 4
 > 3 1
@@ -502,13 +412,13 @@ int main() {
 >
 > ```
 >
-> ### Sample Output 2
+> **Sample Output 2**
 > ```
 > 4
 >
 > ```
 >
-> ### Sample Input 3
+> **Sample Input 3**
 > ```
 > 5 1
 > 1 4
@@ -519,7 +429,7 @@ int main() {
 >
 > ```
 >
-> ### Sample Output 3
+> **Sample Output 3**
 > ```
 > 1
 >
@@ -586,94 +496,37 @@ if __name__=='__main__': main()
 
 > Score : $425$ points
 >
->
->
->
->
->
->
-> ### Problem Statement
+> **Problem Statement**
 > There is an $N \times N$ grid. Takahashi wants to color each cell black or white so that all of the following conditions are satisfied:
->
->
->
 >
 > For every row, the following condition holds:
 >
->
->
->
 > There exists an integer $i\ (0\leq i\leq N)$ such that the leftmost $i$ cells are colored black, and the rest are colored white.
->
->
->
 >
 > For every column, the following condition holds:
 >
->
->
->
 > There exists an integer $i\ (0\leq i\leq N)$ such that the topmost $i$ cells are colored black, and the rest are colored white.
->
->
->
->
->
->
 >
 > Out of these $N^2$ cells, $M$ of them have already been colored. Among them, the $i$-th one is at the $X_i$-th row from the top and the $Y_i$-th column from the left, and it is colored black if $C_i$ is B and white if $C_i$ is W.
 >
->
 > Determine whether he can color the remaining uncolored $N^2 - M$ cells so that all the conditions are satisfied.
 >
->
->
->
->
->
->
->
->
->
->
-> ### Constraints
->
+> **Constraints**
 >
 > $1\leq N\leq 10^9$
 >
->
 > $1\leq M\leq \min(N^2,2\times 10^5)$
->
 >
 > $1\leq X_i,Y_i\leq N$
 >
->
 > $(X_i,Y_i)\neq (X_j,Y_j)\ (i\neq j)$
->
 >
 > $C_i$ is B or W.
 >
->
 > All input numbers are integers.
 >
->
->
->
->
->
->
->
->
->
->
->
->
->
->
->
-> ### Input
+> **Input**
 > The input is given from Standard Input in the following format:
->
 >
 > ```
 > $N$ $M$
@@ -683,33 +536,10 @@ if __name__=='__main__': main()
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
-> ### Output
+> **Output**
 > If it is possible to satisfy the conditions, print Yes; otherwise, print No.
 >
->
->
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Input 1
+> **Sample Input 1**
 > ```
 > 4 3
 > 4 1 B
@@ -718,39 +548,15 @@ if __name__=='__main__': main()
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
-> ### Sample Output 1
+> **Sample Output 1**
 > ```
 > Yes
 >
 > ```
 >
->
 > For example, one can color the grid as in the following figure to satisfy the conditions. The cells already colored are surrounded by red borders.
 >
->
->
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Input 2
+> **Sample Input 2**
 > ```
 > 2 2
 > 1 2 W
@@ -758,71 +564,28 @@ if __name__=='__main__': main()
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
-> ### Sample Output 2
+> **Sample Output 2**
 > ```
 > No
 >
 > ```
 >
->
 > No matter how the remaining two cells are colored, the conditions cannot be satisfied.
 >
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Input 3
+> **Sample Input 3**
 > ```
 > 1 1
 > 1 1 W
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
-> ### Sample Output 3
+> **Sample Output 3**
 > ```
 > Yes
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Input 4
+> **Sample Input 4**
 > ```
 > 2289 10
 > 1700 1083 W
@@ -838,17 +601,7 @@ if __name__=='__main__': main()
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
-> ### Sample Output 4
+> **Sample Output 4**
 > ```
 > No
 >
@@ -949,71 +702,28 @@ if __name__ == "__main__":
 
 > Score : $450$ points
 >
->
->
->
->
->
->
-> ### Problem Statement
+> **Problem Statement**
 > There are $N$ servers numbered from $1$ to $N$ and $M$ cables numbered from $1$ to $M$.
 > Cable $i$ connects servers $A_i$ and $B_i$ bidirectionally.
 >
->
 > By performing the following operation some number of times (possibly zero), make all servers connected via cables.
->
->
->
 >
 > Operation: Choose one cable and reconnect one of its ends to a different server.
 >
->
->
->
 > Find the minimum number of operations required and output an operation sequence achieving this minimum.
 >
->
->
->
->
->
->
->
->
->
->
-> ### Constraints
->
+> **Constraints**
 >
 > $2 \leq N \leq 2\times 10^5$
 >
->
 > $N-1 \leq M \leq 2\times 10^5$
->
 >
 > $1 \leq A_i, B_i \leq N$
 >
->
 > All input values are integers.
 >
->
->
->
->
->
->
->
->
->
->
->
->
->
->
->
-> ### Input
+> **Input**
 > The input is given from Standard Input in the following format:
->
 >
 > ```
 > $N$ $M$
@@ -1024,47 +734,16 @@ if __name__ == "__main__":
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
->
-> ### Output
+> **Output**
 > Let the minimum number of operations be $K$. Print $K+1$ lines.
->
->
->
 >
 > The first line should contain $K$.
 >
->
 > The $(i+1)$-th line should contain three space-separated integers: the number of the cable chosen in the $i$-th operation, the server number that was originally connected at that end, and the server number to which it is connected after the operation, in this order.
->
->
->
 >
 > If there are multiple valid solutions, any one of them will be accepted.
 >
->
->
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Input 1
+> **Sample Input 1**
 > ```
 > 4 5
 > 1 1
@@ -1075,45 +754,18 @@ if __name__ == "__main__":
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Output 1
+> **Sample Output 1**
 > ```
 > 1
 > 1 1 3
 >
 > ```
 >
->
->
 > By reconnecting the end of cable $1$ that is connected to server $1$ to server $3$, the servers can be connected via cables.
->
->
->
 >
 > Operations such as reconnecting the end of cable $5$ that is connected to server $4$ to server $1$, or reconnecting the end of cable $2$ that is connected to server $2$ to server $3$, will also result in all servers being connected and are considered correct.
 >
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Input 2
+> **Sample Input 2**
 > ```
 > 4 3
 > 3 4
@@ -1122,39 +774,15 @@ if __name__ == "__main__":
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Output 2
+> **Sample Output 2**
 > ```
 > 0
 >
 > ```
 >
->
->
 > No operation may be necessary.
 >
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Input 3
+> **Sample Input 3**
 > ```
 > 5 4
 > 3 3
@@ -1164,18 +792,7 @@ if __name__ == "__main__":
 >
 > ```
 >
->
->
->
->
->
->
->
->
->
->
->
-> ### Sample Output 3
+> **Sample Output 3**
 > ```
 > 4
 > 1 3 5
@@ -1257,171 +874,33 @@ int main(){
 #### 题目
 
 > F. A Bit Odd
-> time limit per test2 seconds
-> memory limit per test256 megabytes
+> time limit per test 2 seconds ｜ memory limit per test 256 megabytes
 >
-> Alice and Bob have got a binary
-> ∗
-> ∗
->  string 
-> s
-> 𝑠
->  of length 
-> n
-> 𝑛
-> . They have decided to play a game on it, taking turns alternately, with Alice moving first.
+> Alice and Bob have got a binary string $s$ of length $n$. They have decided to play a game on it, taking turns alternately, with Alice moving first.
 >
-> In each move, the player must select a subsequence
-> †
-> †
->  which has an odd number of inversions
-> ‡
-> ‡
->  and delete it. The player who cannot make a move loses.
+> In each move, the player must select a subsequence with an odd number of inversions and delete it. The player who cannot make a move loses.
 >
 > Determine who wins the game, assuming both players play optimally.
 >
-> ∗
-> ∗
-> A binary string is a string that consists only of the characters 
-> 0
-> 0
->  and 
-> 1
-> 1
-> .
+> * A binary string is a string that consists only of the characters `0` and `1`.
+> * A sequence $a$ is a subsequence of a string $b$ if $a$ can be obtained from $b$ by the deletion of several (possibly zero or all) characters.
+> * An inversion in a binary string $s$ is a pair of indices $(i, j)$ such that $i < j$, $s_i = 1$ and $s_j = 0$.
 >
-> †
-> †
-> A sequence 
-> a
-> 𝑎
->  is a subsequence of a string 
-> b
-> 𝑏
->  if 
-> a
-> 𝑎
->  can be obtained from 
-> b
-> 𝑏
->  by the deletion of several (possibly zero or all) characters.
+> **Input**
 >
-> ‡
-> ‡
-> An inversion in a binary string 
-> s
-> 𝑠
->  is a pair of indices 
-> (i,j)
-> (
-> 𝑖
-> ,
-> 𝑗
-> )
->  such that 
-> i<j
-> 𝑖
-> <
-> 𝑗
->  and 
-> s
-> i
-> =1
-> 𝑠
-> 𝑖
-> =
-> 1
->  and 
-> s
-> j
-> =0
-> 𝑠
-> 𝑗
-> =
-> 0
-> .
+> The first line contains a single integer $t$ ($1 \le t \le 10^4$) — the number of test cases. Description of each test case follows.
 >
-> Input
+> The first line of each test case contains a single integer $n$ ($1 \le n \le 2 \cdot 10^5$) — the length of the binary string $s$.
 >
-> The first line contains a single integer 
-> t
-> 𝑡
->  (
-> 1≤t≤
-> 10
-> 4
-> 1
-> ≤
-> 𝑡
-> ≤
-> 10
-> 4
-> ) — the number of test cases. Description of each test case follows.
+> The second line of each test case contains a binary string $s$ of length $n$. It is guaranteed that each character of $s$ is either `0` or `1`, and that the sum of $n$ over all the test cases does not exceed $2 \cdot 10^5$.
 >
-> The first line of each test case contains a single integer 
-> n
-> 𝑛
->  (
-> 1≤n≤2⋅
-> 10
-> 5
-> 1
-> ≤
-> 𝑛
-> ≤
-> 2
-> ⋅
-> 10
-> 5
-> ) — the length of the binary string 
-> s
-> 𝑠
-> .
+> **Output**
 >
-> The second line of each test case contains a binary string 
-> s
-> 𝑠
->  of length 
-> n
-> 𝑛
-> . It is guaranteed that each character of 
-> s
-> 𝑠
->  is either 
-> 0
-> 0
->  or 
-> 1
-> 1
-> .
+> For each test case, print `Alice` if Alice wins the game and `Bob` otherwise.
 >
-> It is guaranteed that the sum of 
-> n
-> 𝑛
->  over all the test cases does not exceed 
-> 2⋅
-> 10
-> 5
-> 2
-> ⋅
-> 10
-> 5
-> .
+> **Example · input**
 >
-> Output
->
-> For each test case, print 
-> Alice
-> Alice
->  if Alice wins the game and 
-> Bob
-> Bob
->  otherwise.
->
-> Example
-> input
-> Copy
+> ```
 > 3
 > 5
 > 10101
@@ -1429,40 +908,19 @@ int main(){
 > 0100
 > 6
 > 011001
-> output
-> Copy
+> ```
+>
+> **Example · output**
+>
+> ```
 > Alice
 > Alice
 > Bob
-> Note
+> ```
 >
-> For the first test case, Alice can choose the entire string as it has an odd number of inversions. Now, Bob is left with an empty string, and he cannot make a move. Thus, Alice wins.
+> **Note**
 >
-> For the second test case, Alice can choose the subsequence formed by the characters at indices 
-> 1
-> 1
-> , 
-> 2
-> 2
-> , and 
-> 4
-> 4
-> , i.e., 
-> 010
-> 010
-> . Bob is then left with the character at index 
-> 3
-> 3
-> , namely 
-> 0
-> 0
-> , which has 
-> 0
-> 0
->  inversions (an even number). Therefore, Bob cannot choose a subsequence with an odd number of inversions, so Alice wins.
->
-> For the third test case, it can be shown that Bob can guarantee a win irrespective of Alice's first move.
-
+> 第一个用例：Alice 直接取整串即可（逆序对数为奇数），Bob 面对空串无路可走，Alice 胜。第二个用例：Alice 取下标 $1, 2, 4$ 组成的子序列 `010`，Bob 只剩下标 $3$ 的 `0`，其逆序对数为 $0$（偶数），无法行动，Alice 胜。第三个用例：无论 Alice 先手如何取，Bob 都能保证取胜。
 #### HY3 求解过程
 
 最终答案：Alice wins iff the total number of inversions is odd or there exists a split point with an odd number of '1's in the prefix and an odd number of '0's in the suffix; otherwise Bob wins.
