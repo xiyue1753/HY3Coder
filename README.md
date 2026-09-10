@@ -131,7 +131,8 @@ Hy3_APP2/
 ├── scripts/         评测主流程与数据可再生脚本
 │                    evaluate.py check_answers.py refine_failed.py make_report.py
 │                    gen_hidden_cases.py gen_cf_hidden_cases.py normalize_tags.py 等
-├── reports/         分析报告（REPORT.md 与方法论文档）
+├── reports/         分析报告：REPORT.md 一份看全（正文 §1-§9 + 附录 A-D 四份方法文档全文）
+│                    figures/ 正文配图；blind_* 为难度盲打对照材料
 └── tests/           pytest（FakeHy3 + 沙盒隔离 + refine 闭环）
 ```
 方案文档见 `方案文档.md`；任务与设计文档见 `DESIGN.md`。

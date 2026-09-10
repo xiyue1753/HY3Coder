@@ -64,7 +64,8 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
       "外，还附上非隐藏样例的沙盒执行结果（失败用例的输入、期望输出与实际输出），"
       "作为客观观察；重验证时通过 `execution_feedback` 喂给双视角与 ARBITER"
       "（公开样例失败时不得判 CORRECT）。终局用全部用例（含 hidden）沙盒复核答案真值，"
-      "记录见 `data/outputs/refine_wrong_t0.jsonl`，脚本 `scripts/run_refine_wrong_t0.py`。\n")
+      "记录见 `data/outputs/refine_wrong_t0.jsonl`，脚本 `scripts/run_refine_wrong_t0.py`。"
+      "方法全文见附录 C。\n")
     w("\n| 指标 | 数值 |")
     w("|---|---|")
     w(f"| 修正样本数（全部答案错） | {n} |")
@@ -260,7 +261,7 @@ def _emit_contamination(w, evals: list[EvalRecord]) -> None:
     w("\n### 1.1 记忆暴露检测（官方原题镜像 contamination 探测，2026-09-09）")
     w("\n题集为官方原题镜像，成绩是能力加记忆的上界。本节用行为探测估计记忆暴露："
       "分层抽样 30 题（ABC/CF × basic/medium/hard 每层 5，seed 42），每题两个 probe，"
-      "分别是出处召回（是否记得竞赛/题号）与解法盲答；判定见 `reports/CONTAMINATION_METHOD.md`，"
+      "分别是出处召回（是否记得竞赛/题号）与解法盲答；判定见附录 D，"
       "原始数据 `data/outputs/contamination_probe.jsonl`。\n")
     w("\n| 指标 | 数值 |")
     w("|---|---|")
@@ -282,7 +283,51 @@ def _emit_contamination(w, evals: list[EvalRecord]) -> None:
       "出处命中组与未命中组在 t0 评测的答案正确率无显著差异，未观察到记忆显著抬高成绩。"
       "反例 `C2149` 记得出处（568A）但正式评测仍答错，说明记忆存在不等于解题能力。"
       "局限：无法实证训练语料，行为探测有假阴假阳，且命中集中于超经典题，暴露的威胁度低。"
-      "方法全文见 `reports/CONTAMINATION_METHOD.md`。\n")
+      "方法全文见附录 D。\n")
+
+
+def _emit_task_mapping(w) -> None:
+    """§1.2 任务要求 → 本系统对应 → 落点（供评审逐条核对）。"""
+    w("\n### 1.2 与任务要求的逐条对照\n")
+    w("\n| 任务要求 | 本系统的对应 | 落点 |")
+    w("|---|---|---|")
+    w("| 题集要有标准答案、可自动校验、分难度、说明来源 | "
+      "每题含 AC 参考解 + 测试用例期望输出（公开 + 隐藏，多解走 SPJ）；"
+      "difficulty 双轨分层（平台官方分 + Hy3 多专家评审） | "
+      "`data/questions/*.jsonl`；分层方法见附录 A |")
+    w("| 过程正确性判定、错误定位、错误归类、\"答案对但过程不成立\"识别 | "
+      "verdict 四值；findings 带 `step_id`；10 类错误类型；SILENT_FAILURE | "
+      "本报告 §3 / §7；判定方法见附录 B |")
+    w("| 实现手段：规则校验、分步 LLM 审查、沙盒、多视角复核 | "
+      "`static_check`（复杂度/死循环/递归）；V1+V2 两视角；Python/C++ 沙盒；"
+      "ARBITER 总仲裁 | 附录 B；代码 `src/rex/` |")
+    w("| 定位准确率（答案错样本）与误报率（答案对样本） | "
+      "答案错样本 29 条全量人工复核，定位命中 28/29 = 96.6%；"
+      "答案对且判有错 19 条三层复核 | 本报告 §6（48 条全抽） |")
+    w("| 分析报告：设计依据、错误分类、典型案例、能力边界 | "
+      "本报告 §1–§8，附录 A–D 为四份方法文档全文 | `reports/REPORT.md` |")
+
+
+def _emit_limits(w) -> None:
+    """§9 局限与待办。"""
+    w("## 9. 局限与待办")
+    w("\n**已识别的局限**\n")
+    w("\n- 污染分析只做到行为层：训练语料无法实证（§1.1、附录 D）；行为探测本身有假阴假阳，"
+      "30 题样本量小，6 条出处命中样本与正式评测的对照还比较粗。")
+    w("- 漏检侧没有数据：分层抽检里\"答案对且判 CORRECT\"这一层的配额被两个关键层占满，"
+      "抽不到，因此给不出漏检率。")
+    w("- 抽检是单标注者，未做标注一致性（双盲复核）。")
+    w("- hidden 边界用例多为按题面手工设计，\"输入是否满足题面约束\"是结构性局限，"
+      "无法靠生成时小心解决，目前靠流水线核对兜底（附录 B.4.4）。")
+    w("- 抽检样本取自补齐 hidden 用例之前的基线，其中 1 条（C2063）在补齐后答案判定发生变化"
+      "（§6 已说明）；若要严格对齐，需按当前基线重新分层抽样。")
+    w("")
+    w("\n**待办**\n")
+    w("\n- 污染：把 6 条出处命中样本与正式评测做更细的对照；如条件允许，补训练语料层面的旁证。")
+    w("- 抽检：补\"答案对且判 CORRECT\"一层的抽样以给出漏检率；引入第二标注者做一致性复核。")
+    w("- 复现：记录 model / reasoning / 日期（当前未锁版本号）。")
+    w("- 基线：按补齐 hidden 后的当前基线重新分层抽样，使抽检口径与全量口径一致。")
+    w("")
 
 
 # 语义档位：diff_score 0-100 绝对刻度（与打分 prompt 的语义锚一致）。
@@ -352,6 +397,33 @@ def merged_high_stats(scored: list[tuple[float, EvalRecord]], cut: float = 60.0)
     """
     hi = [(d, r) for d, r in scored if d >= cut]
     return _band_stats(hi)
+
+
+def _emit_appendix(w, path: Path, letter: str, title: str, intro: str) -> None:
+    """把方法文档全文并入报告附录：去掉原标题行，## N. → ### X.N，### N.M → #### X.N.M。"""
+    if not path.exists():
+        return
+    w(f"\n---\n\n# 附录 {letter}：{title}\n")
+    w(f"\n{intro}\n")
+    out_lines: list[str] = []
+    for ln in path.read_text(encoding="utf-8").split("\n"):
+        if ln.startswith("# "):
+            continue
+        mm = re.match(r"^## (\d+)\.\s*(.*)$", ln)
+        if mm:
+            out_lines.append(f"### {letter}.{mm.group(1)} {mm.group(2)}")
+            continue
+        mf = re.match(r"^## (附.*)$", ln)
+        if mf:
+            out_lines.append(f"### {letter}.{mf.group(1)}")
+            continue
+        md = re.match(r"^### (\d+)\.(\d+)\s*(.*)$", ln)
+        if md:
+            out_lines.append(f"#### {letter}.{md.group(1)}.{md.group(2)} {md.group(3)}")
+            continue
+        out_lines.append(ln)
+    w("\n".join(out_lines).rstrip())
+    w("\n")
 
 
 def build() -> str:
@@ -437,6 +509,7 @@ def build() -> str:
     w("")
 
     _emit_contamination(w, evals)
+    _emit_task_mapping(w)
 
     # ---- 2. 分层退化（平台难度轴）----
     w("## 2. 分层退化分析")
@@ -634,6 +707,7 @@ def build() -> str:
     w("| 分层退化 | 平台难度轴见 2.1；统一难度轴见 2.2（临界点 = 首次 ≥8pp 跌落的 diff_score 档） | 对临界点之上补充针对性用例 |")
     w("")
 
+    _emit_limits(w)
     w("---")
     w("\n_数据纯净性说明：以上全部指标仅基于 eval 模式结果；refine 数据单独用于第 5 节对比，不混入评估指标。_\n")
 
@@ -706,6 +780,18 @@ def build() -> str:
             out_lines.append(ln)
         w("\n".join(out_lines).rstrip())
         w("\n")
+
+    # ---- 附录 C：ReAct 自我修正闭环方法 ----
+    _emit_appendix(w, ROOT / "reports" / "REACT_METHOD.md", "C",
+                   "ReAct 自我修正闭环方法",
+                   "以下为过程评估结果回流求解端的闭环方法说明（fatal 驱动修订指令、逐轮全量重写并"
+                   "独立重验证、收敛与停止判据、评测与修正数据严格隔离），"
+                   "源自 `reports/REACT_METHOD.md`。")
+    # ---- 附录 D：数据集记忆暴露（contamination）检测方法 ----
+    _emit_appendix(w, ROOT / "reports" / "CONTAMINATION_METHOD.md", "D",
+                   "数据集记忆暴露（contamination）检测方法",
+                   "以下为记忆暴露行为探测的方法与结果全文（分层抽样、两个 probe 的协议、"
+                   "两级暴露判定、与正式评测的交叉读数），源自 `reports/CONTAMINATION_METHOD.md`。")
 
     return "\n".join(L)
 
