@@ -215,6 +215,91 @@ def fig4(refine):
     plt.close(fig)
 
 
+def _wilson(k: int, n: int):
+    from rex.metrics.stats import wilson_interval
+    return wilson_interval(k, n)
+
+
+def _rates(recs):
+    """(样本数, 答案正确数, 过程正确数)，与报告口径一致。"""
+    n = len(recs)
+    ka = sum(1 for r in recs if r.get("answer_correct") is True)
+    kp = sum(1 for r in recs if (r.get("verification") or {}).get("verdict") == "CORRECT")
+    return n, ka, kp
+
+
+def _platform(rec):
+    return "ABC" if rec["question_id"].startswith("A") else "CF"
+
+
+def _tier_rows(evs, qmap):
+    """语义四档 → [(档名, recs)]，与 _diff_tier_stats 同口径。"""
+    bands = [("Intro", 0, 20), ("Basic", 20, 40), ("Mid", 40, 60), ("Hard", 60, 100)]
+    out = []
+    for name, lo, hi in bands:
+        recs = []
+        for o in evs:
+            q = qmap.get(o["question_id"])
+            ds = (q.get("metadata") or {}).get("diff_score") if q else None
+            if ds is not None and lo <= ds < hi:
+                recs.append(o)
+        out.append((name, recs))
+    return out
+
+
+def _band_of(ds):
+    if ds is None:
+        return None
+    if ds < 20:
+        return "Intro"
+    if ds < 40:
+        return "Basic"
+    if ds < 60:
+        return "Mid"
+    return "Hard"
+
+
+def fig5(evs, qmap):
+    """答案准确率与过程正确率的 Wilson 95% 区间：全库 / 两平台 / 语义四档。"""
+    groups = [("Overall", evs, False),
+              ("ABC (AtCoder)", [r for r in evs if _platform(r) == "ABC"], False),
+              ("CF (Codeforces)", [r for r in evs if _platform(r) == "CF"], False)]
+    for i, (name, recs) in enumerate(_tier_rows(evs, qmap)):
+        groups.append((name, recs, i == 0))     # 只在第一档前留分组间隔
+
+    fig, ax = plt.subplots(figsize=(6.4, 4.2))
+    y = 0.0
+    yticks, ylabels = [], []
+    label_x = 100.0                      # 数值统一排成右侧一列，避免与邻近行的区间重叠
+    for name, recs, gap in groups:
+        if gap:
+            y += 0.55                    # y 轴已反转，+ 表示更靠下，等于留出可见间隔
+            ax.axhline(y - 0.5, color="#BBBBBB", lw=0.6, ls=":")
+        n, ka, kp = _rates(recs)
+        for k, color, off in ((ka, ANS_C, 0.18), (kp, PROC_C, -0.18)):
+            p = k / n * 100 if n else 0.0
+            lo, hi = _wilson(k, n)
+            ax.errorbar([p], [y + off], xerr=[[p - lo * 100], [hi * 100 - p]],
+                        fmt="o", ms=4, color=color, ecolor=color,
+                        elinewidth=1.0, capsize=2.2)
+            ax.text(label_x, y + off, f"{p:.1f}%", ha="left", va="center",
+                    fontsize=7.5, color=color)
+        yticks.append(y)
+        ylabels.append(f"{name} (n={n})")
+        y += 1.0
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(ylabels)
+    ax.invert_yaxis()
+    ax.set_xlim(40, 106)
+    ax.set_xlabel("Correctness (%) with 95% Wilson interval")
+    ax.plot([], [], "o", color=ANS_C, ms=4, label="Answer accuracy")
+    ax.plot([], [], "o", color=PROC_C, ms=4, label="Process correctness")
+    ax.legend(loc="upper left", frameon=False)
+    _style_ax(ax)
+    fig.savefig(FIG_DIR / "fig5_ci_forest.png")
+    plt.close(fig)
+
+
 def _as_records(evs):
     from rex.models import EvalRecord
     return [EvalRecord.model_validate(o) for o in evs]
@@ -222,14 +307,16 @@ def _as_records(evs):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--only", default=None, help="fig1/fig2/fig3/fig4")
+    ap.add_argument("--only", default=None,
+                    help="fig1/fig2/fig3/fig4/fig5")
     args = ap.parse_args()
     FIG_DIR.mkdir(exist_ok=True)
     qmap, evs, refine = _load()
     jobs = {"fig1": lambda: fig1(evs, qmap),
             "fig2": lambda: fig2(evs, qmap),
             "fig3": lambda: fig3(evs),
-            "fig4": lambda: fig4(refine)}
+            "fig4": lambda: fig4(refine),
+            "fig5": lambda: fig5(evs, qmap)}
     keys = [args.only] if args.only else list(jobs)
     for k in keys:
         jobs[k]()

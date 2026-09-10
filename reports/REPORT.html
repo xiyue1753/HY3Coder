@@ -2580,17 +2580,13 @@ int main() {
 <h3 id="b4">B.4 验证</h3>
 <p>评估器是测量工具，需要证明它可靠。我们从判定层、小样本有效性、全量抽检三个层面验证。</p>
 <h4 id="b41">B.4.1 判定层单元测试</h4>
-<p>severity 驱动 verdict 的每条规则都有单测覆盖：fatal 加 CORRECT 矛盾强制改正、答案对加无 fatal 归 CORRECT、答案错绝不判 CORRECT/SILENT、refine 全 minor 视为正确、副口径分母扩大等。当前测试集共 102 项，全部通过。</p>
+<p>severity 驱动 verdict 的每条规则都有单测覆盖：fatal 加 CORRECT 矛盾强制改正、答案对加无 fatal 归 CORRECT、答案错绝不判 CORRECT/SILENT、refine 全 minor 视为正确、副口径分母扩大等。当前测试集共 129 项（其中判定一致性 11 项），全部通过。</p>
 <h4 id="b42">B.4.2 全量人工抽检</h4>
 <p>按"答案对错 × 判定"对 359 条样本分层抽取 48 条，全部人工回填，规则和记录见 <code>data/audit/audit_rules.md</code> 与 <code>audit_records.jsonl</code>。两轮争议逐条评审终审后结果如下。</p>
 <ul>
-<li><strong>定位准确率</strong>：答案错误样本 29 条，命中 28/29 = <strong>96.6%</strong>。唯一 miss 是 C2077：系统把真实根因判在步骤 5，即自测阶段虚构样例自圆其说；人工复核认为题意操作误读发生在步骤 2 建模，把重复取区间理解成只取一个 L..R 区间，样例 4 的实际值 22 与算法算出的 15 不符，却被虚构输入掩盖。判定方向正确，fatal 成立，但没有落到真实根因步骤。</li>
+<li><strong>定位准确率</strong>：答案错误样本 29 条，命中 28/29 = <strong>96.6%</strong>。唯一 miss 是 C2077，判定方向与 fatal 结论都成立，但根因步骤落在步骤 5（自测阶段虚构样例自圆其说），人工复核认定真实根因在步骤 2 建模，没有落到真实根因步骤。</li>
 <li><strong>误报率</strong>：答案正确且被判过程有错的 19 条中，三层复核 match 17、level_mismatch 1 即 C2104、fp 1 即 A1124。副口径误报率 <strong>5.3%</strong>，1/19，只算完全不符；主口径 <strong>10.5%</strong>，2/19，把层次不符也算进去。</li>
-<li>争议终审摘要（audit note 留档）：</li>
-<li>C2104 → <strong>minor</strong>：步骤 2 分段公式漏 <code>x&gt;n</code> 前提，但步骤 5 用反例当场验证并修正，代码用的是修正式且用例全过，属于推导中间缺陷被自身验证纠正，系统按 fatal 判过严，记为 level_mismatch，主口径算误报。</li>
-<li>C2077 → <strong>fatal</strong>：题意操作误读，直接导致建模错误，不是人名之类无关的误读。</li>
-<li>A1174 → <strong>fatal</strong>，match：构造缺陷真实，该边缘情况评测用例没有覆盖到。</li>
-<li>A1124 → <strong>误报</strong>，fp：系统指控 <code>f(mid)=mid/N+mid/M-2·mid/L</code> 在 <code>N=1</code>、二分中点逼近 <code>hi=9e18</code> 时会 long long 溢出，但推演表明该边界不可达——首轮 <code>mid=4.5e18</code> 就已使 <code>cnt ≥ K_max</code>，之后 <code>mid</code> 只降不升，求和最大约 6.75e18，小于 9.22e18，永不溢出。沙盒 20% 失败的唯一来源是一条非法 hidden 用例 <code>1 1 1</code>，其中 <code>N=M</code> 违反题设 <code>N≠M</code>，题目无解，期望输出只是参考解的偶然行为；换用 3000 组合法随机输入对拍，0 不一致，修复用例后 4/4 通过。该非法用例已替换为 <code>1 100000000 10000000000</code>，并据修复后的沙盒事实修正答案判定。A1124 暴露的是一条复合链路，坏用例污染答案判定，过程评估再基于错误的沙盒事实给出误报，误报率相应加 1。</li>
+<li>争议终审结论（audit note 留档）：C2104 改判 <strong>minor</strong>（推导中间缺陷被后续步骤自身验证纠正，系统按 fatal 判过严，记为 level_mismatch，主口径算误报）；C2077 维持 <strong>fatal</strong>（题意误读导致建模错误）；A1174 维持 <strong>fatal</strong> 且分类相符（构造缺陷真实，边缘情况评测用例未覆盖）；A1124 记为<strong>误报</strong>（溢出指控在合法输入域不可达，触发源是一条违反题设约束的非法 hidden 用例，已替换并按修复后的沙盒事实修正答案判定，见 B.4.3）。</li>
 </ul>
 <h4 id="b43-hidden">B.4.3 hidden 用例约束复核</h4>
 <p>2026-09-09，A1124 抽检时发现它的 hidden 用例 <code>1 1 1</code> 里 <code>N=M</code>，违反题设 <code>N≠M</code>，期望值是参考解在无解输入下的偶然输出。此后对所有 hidden 用例做了一次全量复核，防止同类坏用例污染评测。</p>
