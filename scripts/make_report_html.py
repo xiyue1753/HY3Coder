@@ -2,7 +2,8 @@
 
 内容以 REPORT.md 为唯一来源，本脚本只负责呈现：
 - 表格、代码块、配图与目录排版；
-- 题面（````prompt 围栏）沿用应用侧的 marked + KaTeX 渲染，容器收成滑动窗口；
+- 题面（md 里是 `> ` 引用块，见 PROMPT_RE）沿用应用侧的 marked + KaTeX 渲染，
+  容器收成滑动窗口；md 端用引用块是为了让 $...$ 公式能正常渲染；
 - 典型案例的三段（题目 / HY3 求解过程 / 过程评估判定）折成 <details>，
   步��做成编号卡片、结论与证据各自成套色小框、严重度做成标签。
 """
@@ -276,6 +277,17 @@ TEMPLATE = """<!DOCTYPE html>
 
 CASE_SECS = ("题目", "HY3 求解过程", "过程评估判定")
 CODE_RE = re.compile(r'<pre><code( class="language-(\w+)")?>(.*?)</code></pre>', re.S)
+# 题面在 md 里用引用块承载（`> ` 行），这样 md 端 $...$ 能被渲染器的数学支持解析；
+# HTML 侧再把它还原成滑动窗口，交给 marked + KaTeX 渲染。
+PROMPT_RE = re.compile(r"^#### 题目[ \t]*\n\n*((?:>[^\n]*\n)+)", re.M)
+
+
+def _stash_prompt(m: re.Match, prompts: list[str]) -> str:
+    """摘出题面引用块，正文只留占位符，避免题面内部的标题进目录。"""
+    lines = [ln[2:] if ln.startswith("> ") else ""
+             for ln in m.group(1).split("\n") if ln.startswith(">")]
+    prompts.append("\n".join(lines) + "\n")
+    return m.group(0).split("\n", 1)[0] + f"\n\n@@PROMPT{len(prompts) - 1}@@\n"
 
 
 def _build_toc(tokens: list[dict]) -> str:
@@ -363,15 +375,18 @@ def _case_headers(body: str) -> str:
 
 def render(src: Path, out: Path) -> None:
     text = src.read_text(encoding="utf-8")
+    prompts: list[str] = []
+    text = PROMPT_RE.sub(lambda m: _stash_prompt(m, prompts), text)
     md = markdown.Markdown(
         extensions=["tables", "fenced_code", "toc", "attr_list", "md_in_html"],
         extension_configs={"toc": {"toc_depth": "1-4"}},
     )
     body = md.convert(text)
-    body = re.sub(r'<pre><code class="language-prompt">(.*?)</code></pre>',
-                  lambda m: '<div class="prompt md-bound" data-prompt="1">'
-                            + html.escape(html.unescape(m.group(1))) + "</div>",
-                  body, flags=re.S)
+    for i, raw in enumerate(prompts):
+        body = body.replace(
+            f"<p>@@PROMPT{i}@@</p>",
+            '<div class="prompt md-bound" data-prompt="1">' + html.escape(raw) + "</div>",
+        )
     body = _collapsible(body)
     body = _wrap_code(body)
     body = _case_headers(body)
