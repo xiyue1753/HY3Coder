@@ -140,7 +140,7 @@ class QuestionItem(BaseModel):
     title: str
     prompt: str                   # 完整题目文本
     difficulty: Difficulty
-    source: str                   # 来源：TACO/CodeForces(镜像)/AtCoder-自编/自编
+    source: str                   # 来源：AtCoder-自建 / Codeforces-自建 / 交互解题 · …
     source_id: str | None = None  # 原数据集 id（可复现溯源）
     layer_basis: str = ""         # 分层依据说明（可复现分层规则表）
     standard_answer: str          # 标准答案（算法：期望输出/参考文本）

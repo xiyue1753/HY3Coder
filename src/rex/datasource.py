@@ -9,26 +9,13 @@ make_report / 前端提示）一律通过本模块的访问器取路径，
     - 以**数据集 dataset** 为主维度：每个数据集是一道题池（题集文件 +
       评测输出文件 + refine 输出文件）。当前活跃数据集：abc_selfbuilt
       （AtCoder ABC 自建 175 题）、cf_selfbuilt（Codeforces 自建 184 题）。
-    - 非数据集类 artifact 单独注册：golden（真实）、audit、交互评测输出。
-
-历史命名（无需再理解）：
-    - eval_selfbuilt_all.jsonl  = abc_selfbuilt 在 temperature=0.9 时代的评测输出
-      （已归档 data/outputs/_archived/；现正式文件为 eval_abc_selfbuilt_t0.jsonl）
-    - refine_selfbuilt_all.jsonl = abc_selfbuilt 数据集的正式 refine 输出
-    - eval_interactive.jsonl   = 交互演示记录（source=interactive）
-    - interactive.jsonl        = 交互题池（交互式解题现场输入的题，按题号可回放）
-    - interact_sessions.jsonl  = 交互解题完整会话快照（题面/用例/参考解/模型/试运行）
-    - refine_interactive.jsonl = 交互演示的 refine 记录（与正式 refine 严格分离）
-    - golden_algorithm.jsonl   = 合成 golden（已删除，2026-09-08；常量注册保留兼容）
-    - golden_real_algorithm.jsonl = 真实评测检出 golden
-    - audit_records.jsonl      = 人工抽检标注
-
-废弃（不再注册，若残留文件属历史存档）：
-    - eval_algorithm.jsonl（旧 TACO 评测，含交互混入，2026-09 废弃）
-    - refine_algorithm.jsonl（TACO 时代 refine）
-    - algorithm.jsonl / taco*.jsonl（TACO 镜像题集，若未来引入按独立数据集注册）
-    - eval_selfbuilt_{bm,hard,smoke,fixverify}.jsonl（ABC 评测的历史分片，
-      内容已被 eval_selfbuilt_all.jsonl 全量覆盖）
+    - 非数据集类 artifact 单独注册：golden（真实）、audit、交互演示输出。对应文件：
+      eval_interactive.jsonl   = 交互演示记录（source=interactive）
+      interactive.jsonl        = 交互题池（交互式解题现场输入的题，按题号可回放）
+      interact_sessions.jsonl  = 交互解题完整会话快照（题面/用例/参考解/模型/试运行）
+      refine_interactive.jsonl = 交互演示的 refine 记录（与正式 refine 严格分离）
+      golden_real_algorithm.jsonl = 真实评测检出的 golden 样本
+      audit_records.jsonl      = 人工抽检标注
 """
 from __future__ import annotations
 
@@ -72,7 +59,7 @@ class Dataset:
 DATASETS: tuple[Dataset, ...] = (
     Dataset(
         key="abc_selfbuilt",
-        label="ABC 自建（公开集 175 题）",
+        label="ABC 自建（175 题）",
         enabled=True,
         questions="abc_selfbuilt.jsonl",
         evals="eval_abc_selfbuilt_t0.jsonl",   # 正式评测主数据源（temperature=0 全量重跑）
@@ -90,8 +77,7 @@ DATASETS: tuple[Dataset, ...] = (
     ),
 )
 
-# 废弃/历史数据集的 key（文档用途，便于检索）
-DEPRECATED_KEYS = ("algorithm", "taco", "math")
+# 数据集 key 只保留当前活跃的两套自建集（见上）；历史 key 不再登记。
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +94,7 @@ INTERACTIVE_SESSIONS = "interact_sessions.jsonl"
 INTERACTIVE_REFINE = "refine_interactive.jsonl"
 #: 人工抽检标注记录。
 AUDIT_FILE = "audit_records.jsonl"
-#: 真实评测检出 golden 文件名（合成 golden_algorithm.jsonl 已删除，常量保留兼容读取，文件不存在时自然为空）。
+#: golden 文件名；文件不存在时读取为空。
 GOLDEN_SYNTHETIC_FILE = "golden_algorithm.jsonl"
 GOLDEN_REAL_FILE = "golden_real_algorithm.jsonl"
 GOLDEN_FILES = (GOLDEN_REAL_FILE, GOLDEN_SYNTHETIC_FILE)
@@ -294,7 +280,7 @@ def _read_jsonl(path: Path, model) -> list:
 # 导出常用容器（兼容 `from rex.datasource import ...`）
 # ---------------------------------------------------------------------------
 __all__ = [
-    "Dataset", "DATASETS", "DEPRECATED_KEYS",
+    "Dataset", "DATASETS",
     "INTERACTIVE_EVAL", "INTERACTIVE_QUESTIONS", "INTERACTIVE_SESSIONS",
     "INTERACTIVE_REFINE", "GOLDEN_FILES", "AUDIT_FILE",
     "active_datasets", "dataset", "dataset_by_questions",

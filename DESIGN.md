@@ -21,7 +21,7 @@
 data/questions（题集：两套自建集，三档分层）
         │  QuestionItem（题目/标准答案/测试用例/难度/来源/分层依据/判题模式）
         │  abc_selfbuilt.jsonl（AtCoder ABC 175 题） · cf_selfbuilt.jsonl（Codeforces 184 题）
-        │  独立产线见 §3；TACO 公开镜像未接入（历史文件已归档，不参与抽样与统计）
+        │  独立产线见 §3
         ▼
 solver/  分步求解 Agent ──► Answer(steps[]+final_answer+code)
         │                     │
@@ -48,11 +48,11 @@ web/ 仪表盘（总览/单题回放/golden/抽检/交互式解题）  ·  cli.p
 | 算法·自建 | AtCoder ABC（独立产线：抓题面 + 平台 AC 解 + 人工边界用例） | 题目版权归 AtCoder，仅供研究 | 175 | basic 34 / medium 82 / hard 59 |
 | 算法·自建 | Codeforces（同产线；参考解取自 CF 公开 AC 提交与 GitHub 公开题解仓库） | 题目版权归 Codeforces，仅供研究 | 184 | basic 34 / medium 83 / hard 67 |
 
-- TACO / CodeContests 公开镜像未接入活跃数据源（`algorithm.jsonl` 约 82MB，可由公开 HF 数据源重建，
-  不入库），抽样与统计一律不含它；如需引入按独立数据集注册。
-- 三档 `difficulty` 由平台官方 ELO 锚点校正极端错标后定档（`scripts/fix_extreme_mislabel.py`）；
-  报告的分层退化分析用统一难度分 `diff_score`（Hy3 三位专家盲打 + 仲裁，方法论见
-  `reports/DIFFICULTY_SCORING_METHOD.md`），平台三档仅作对照。
+- 三档 `difficulty` 的定档规则：ABC 按官方分值（100 → basic，200–400 → medium，500+ → hard），
+  CF 按官方 rating（< 1200 → basic，1200–1800 → medium，> 1800 → hard）；跨 ≥ 2 档的极端错标
+  再用官方 ELO 锚点（`metadata.difficulty_ap` / `rating`）校正，脚本 `scripts/fix_extreme_mislabel.py`。
+  报告的分层退化分析另用统一难度分 `diff_score`（Hy3 三位专家盲打 + 仲裁，方法论见
+  `reports/DIFFICULTY_SCORING_METHOD.md`），平台三档作对照。
 - 自建题产线：独立抓取产线（抓题面 + AC 解）→ 官方样例 + 人工边界用例（`gen_hidden_cases.py`，
   期望由参考解跑出）→ 题集文件；多解构造题以 `judge=special` 入库（SPJ checker，见 §5.2）。
   两套自建集各是一个数据集，评估时直接 `--questions <文件>` 指定，无需并入别的池。
@@ -183,8 +183,8 @@ class RefineRecord(BaseModel):
 - A1103 abc216_c Many Balls（构造 A/B 操作序列到 N）
 - A1104 abc251_d At Most 3（构造 ≤300 砝码覆盖 [1,W]）
 
-判题模式扫描记录：已弃用的 `algorithm.jsonl` 内约 50 题命中 SPJ 特征词，不在处理范围；
-现役 `abc_selfbuilt` 内 A1098 abc228_d 的 "one such" 属误报（题面里指查询存在，不是多解）。
+判题模式扫描记录：`abc_selfbuilt` 内 A1098 abc228_d 的 "one such" 属误报（题面里指查询存在，
+不是多解），未转为 SPJ。
 
 ## 6. 验证流程（src/rex/verifier/）
 
@@ -374,7 +374,6 @@ python -m pytest tests/
 - 源码（src/rex/ 模块化，tests/ pytest）
 - 题集 data/questions/：
   - `abc_selfbuilt.jsonl`（AtCoder ABC 175 题）/ `cf_selfbuilt.jsonl`（Codeforces 184 题）：含 AC 参考解、公开+隐藏用例、SPJ checker、分层依据（layer_basis）
-  - TACO 公开镜像（`algorithm.jsonl`，约 82MB）未接入、不入库，可由公开 HF 数据源重建（本地 dataset-full 分支保留完整数据）
 - SILENT_FAILURE 留档：真实评测检出的「答案对但过程根本缺陷」样本，作为 `verification.findings` 随评测结果一并交付
 - 评估结果 data/outputs/（eval/refine 严格分离，可断点续跑），随仓库交付的文件：
   - `eval_abc_selfbuilt_t0.jsonl`（175 题）/ `eval_cf_selfbuilt_t0.jsonl`（184 题）：temperature=0 正式评测全量记录（含模型过程与代码、判定、findings、静态校验、沙盒通过率）

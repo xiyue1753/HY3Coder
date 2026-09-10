@@ -141,12 +141,10 @@ copy .env.example .env
 |---|---|---|
 | 自建 AtCoder ABC（算法·主推） | AtCoder ABC 比赛原题 + AC 参考解 | 数据版权归 AtCoder，仅供研究 |
 | 自建 Codeforces | Codeforces 比赛原题 + 公开 AC 解（含 GitHub 公开题解源） | 数据版权归 Codeforces，仅供研究 |
-| TACO / CodeContests（未接入） | agentica-org/DeepCoder-Preview-Dataset | Apache-2.0 |
 
 题集（`data/questions/*.jsonl`）：
 - **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题，主推）**：由独立产线抓题面 + AC 参考解 + 人工设计隐藏边界用例入库，难度按 ABC 分值映射三档（basic34/medium82/hard59），含 SPJ 多解构造题（checker 判题）；
 - **自建集 `cf_selfbuilt.jsonl`（Codeforces 184 题，与 ABC 大致同规模）**：同产线，参考解来自 CF 公开 AC 提交与 GitHub 公开题解仓库（绕开 CF 反爬的提交页限流，题目页抓取 + GitHub 解样例沙盒验证），分层 basic34/medium83/hard67；
-- TACO/CodeContests 公开镜像题集已从活跃数据源中移除（旧 `algorithm.jsonl` 命名废弃，数据隔离，不进入仪表盘/统计；如需引入按独立数据集注册）；
 - SILENT_FAILURE 由真实评测检出并留档核验：逐题判定、findings 与沙盒事实随评测结果 `data/outputs/eval_*_t0.jsonl` 一并交付，可复现报告中的检出与抽检结论。
 - **数据文件位置统一由注册中心 `src/rex/datasource.py` 声明。**
 
