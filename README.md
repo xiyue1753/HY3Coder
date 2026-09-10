@@ -110,7 +110,7 @@ copy .env.example .env
 - 求解 Agent：将题目转换为分步求解 JSON（算法 understand/approach/complexity/implement/selftest）。
 - 验证 Agent × 2：独立完成自含性检查与全局回溯，交叉复核。
 - 仲裁 Agent：双视角不一致时最终裁定。
-- 模型调用经迁移自旧版 `Hy3_APP/src/ctxpilot/hy3/client.py` 的 `Hy3Client`（OpenAI 兼容接口，重试退避、流式、reasoning_effort、防注入 guard prompt）。
+- 模型调用统一由 `Hy3Client` 封装（OpenAI 兼容接口：重试退避、SSE 流式、`reasoning_effort`、防注入 guard prompt）。
 
 ## 数据来源与许可
 
@@ -123,7 +123,7 @@ copy .env.example .env
 题集（`data/questions/*.jsonl`）：
 - **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题，主推）**：由独立产线抓题面 + AC 参考解 + 人工设计隐藏边界用例入库，难度按 ABC 分值映射三档（basic34/medium82/hard59），含 SPJ 多解构造题（checker 判题）；
 - **自建集 `cf_selfbuilt.jsonl`（Codeforces 184 题，与 ABC 大致同规模）**：同产线，参考解来自 CF 公开 AC 提交与 GitHub 公开题解仓库（绕开 CF 反爬的提交页限流，题目页抓取 + GitHub 解样例沙盒验证），分层 basic34/medium83/hard67；
-- TACO/CodeContests 公开镜像题集曾以 `algorithm.jsonl` 命名，2026-09 起废弃该命名（数据隔离，未来按独立数据集如 `taco` 注册），不再进入仪表盘/统计；
+- TACO/CodeContests 公开镜像题集已从活跃数据源中移除（旧 `algorithm.jsonl` 命名废弃，数据隔离，不进入仪表盘/统计；如需引入按独立数据集注册）；
 - SILENT_FAILURE 由真实评测检出并留档核验：逐题判定、findings 与沙盒事实随评测结果 `data/outputs/eval_*_t0.jsonl` 一并交付，可复现报告中的检出与抽检结论。
 - **数据文件位置统一由注册中心 `src/rex/datasource.py` 声明。**
 

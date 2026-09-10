@@ -1,8 +1,8 @@
 # HY3Coder 设计文档（正式版）
 
 面向可验证场景（算法竞赛）的**过程评估与错误定位 + 自我修正**系统。
-本文件为正式设计文档，取代早期草案，包含分层规则表、错误分类体系、核心 schema 契约与双模式数据流说明。
-（数学/MATH 评测路线已放弃，2026-09-03，本文档与代码同步移除 math 场景。）
+本文件为正式设计文档：分层规则表、错误分类体系、核心 schema 契约、双模式数据流与仪表盘数据隔离说明。
+场景范围：仅算法竞赛（`scene` 固定 `algorithm`）。
 
 ---
 
@@ -94,7 +94,8 @@ class VerificationResult(BaseModel):
     findings: list[ErrorFinding]
     confidence: float
     arbiter: Literal["V1", "V2", "ARBITER", "HUMAN_REVIEW"]
-    # V1/V2 仅为历史数据兼容；新版 verify 恒走总仲裁（arbiter ∈ {ARBITER, HUMAN_REVIEW}）
+    # verify 恒走总仲裁：双视角一致与否都交由 ARBITER 交付最终结果
+    # （arbiter ∈ {ARBITER, HUMAN_REVIEW}；V1/V2 仅用于读取历史数据）
     timestamp: float
 
 class RefineFeedback(BaseModel):
@@ -190,7 +191,7 @@ class RefineRecord(BaseModel):
    视角并标 `HUMAN_REVIEW`。
 4. `findings` 携带 step_id 供定位与 refine 使用。
 
-### 6.1 缺陷严重度分级（severity，2026-09-07 判定重构）
+### 6.1 缺陷严重度分级（severity）
 
 每条 `ErrorFinding` 带 `severity`：
 - **fatal**（实质缺陷）：推理链断裂/关键引理未证且不可重建、误用定理、循环论证、
@@ -299,7 +300,7 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 - 副口径：若把 minor 也计入过程错误，过程正确率/误报率各是多少
   （报告并列展示区间两端说明口径敏感性）
 
-### 9.1 minor 统计口径路线（v1，2026-09-08 对齐，temp0 重做前必读）
+### 9.1 minor 统计口径（主口径 / 副口径）
 
 **定义**：`minor` 是 finding 的 severity（`finding.severity == minor`），表示"不破坏推理链成立性的轻微瑕疵"（表述笔误/可重建省略/无害误述）。**verdict 层无 minor 档**；错误分 fatal/minor 两类发生在 finding 层。
 
