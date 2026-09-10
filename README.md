@@ -129,10 +129,12 @@ Hy3_APP2/
 │                    + refine_wrong_t0.jsonl(36) + contamination_probe.jsonl(30) + diff_scores.jsonl(359)
 │                    （正式结果随仓库交付；运行日志与历史分片不入库，见 .gitignore）
 ├── scripts/         评测主流程与数据可再生脚本
-│                    evaluate.py check_answers.py refine_failed.py make_report.py
+│                    evaluate.py check_answers.py refine_failed.py
+│                    make_report_html.py（把报告渲染成网页版）
 │                    gen_hidden_cases.py gen_cf_hidden_cases.py normalize_tags.py 等
-├── reports/         分析报告：REPORT.md 一份看全（正文 §1-§9 + 附录 A-D 四份方法文档全文）
-│                    figures/ 正文配图；blind_* 为难度盲打对照材料
+├── reports/         分析报告：REPORT.md（正文 §1-§9 + 附录 A-D 四份方法文档全文）
+│                    REPORT.html 为同内容网页版；figures/ 正文配图
+│                    四份方法文档以单篇形式并列存放，供单独分发
 └── tests/           pytest（FakeHy3 + 沙盒隔离 + refine 闭环）
 ```
 方案文档见 `方案文档.md`；任务与设计文档见 `DESIGN.md`。

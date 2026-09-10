@@ -61,8 +61,10 @@ data/questions/algorithm.jsonl
 # 临时展示/归档（一次性展示页与中间 json，不入库）
 /archive/
 
-# 展示类 HTML 报告（本地生成物，不入库）
+# 展示类 HTML 报告（本地生成物，不入库）；
+# 例外：REPORT.html 是分析报告正文的网页版，随报告一并交付
 /reports/*.html
+!/reports/REPORT.html
 
 # 内部开发文档与留档数据（实现日志/抓取指南/真实模型输出留档，
 # 不随公开仓库发布；文件保留本地工作区）

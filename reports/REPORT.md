@@ -1,6 +1,8 @@
 # HY3Coder 分析报告
 
-> 生成时间：2026-09-10 14:39 ｜ 数据：`data/outputs/`，评测与修正数据分开存放
+> 更新时间：2026-09-10 ｜ 数据：`data/outputs/`，评测与修正数据分开存放
+>
+> 网页版：`reports/REPORT.html`，与本文内容一致，表格与配图排版更适合阅读与打印。
 
 ## 1. 评估总览
 
@@ -36,7 +38,7 @@
 | 探测样本 | 30 |
 | 自称见过（P1 = seen） | 29，96.7%；迎合偏差高，不作暴露证据 |
 | 出处精确命中（强证据） | 6，20.0%；95% CI [10%, 37%] |
-| 命中难度分布 | basic 4 / medium 2 / hard 0 |
+| 命中样本的平台分档 | basic 4 / medium 2 / hard 0 |
 | 命中样本 | `A1023`（abc300_c）, `C2001`（cf1a）, `C2002`（cf71a）, `C2008`（cf1730a）, `C2072`（cf719a）, `C2149`（cf568a） |
 
 
@@ -59,26 +61,16 @@
 |---|---|---|
 | 题集要有标准答案、可自动校验、分难度、说明来源 | 每题带可执行的 AC 参考解与测试用例，公开用例和隐藏用例都在，多解题目用 SPJ 判定；难度双轨分层，平台官方分与 Hy3 多专家评审各一套 | `data/questions/*.jsonl`；分层方法见附录 A |
 | 过程正确性判定、错误定位、错误归类、"答案对但过程不成立"识别 | verdict 四值；findings 带 `step_id`；10 类错误类型；SILENT_FAILURE | 本报告 §3 与 §7；判定方法见附录 B |
-| 实现手段：规则校验、分步 LLM 审查、沙盒、多视角复核 | `static_check` 查复杂度、死循环与递归；V1、V2 两个视角各自审查；Python 与 C++ 沙盒；ARBITER 总仲裁 | 附录 B；代码 `src/rex/` |
+| 实现手段：沙盒校验、多视角 Agent 复核 | 沙盒校验：Python 与 C++ 沙盒跑公开与隐藏用例，答案真值以沙盒为准，`static_check` 的规则校验作为补充诊断证据；多视角 Agent 复核：V1 自含性审查与 V2 全局回溯各自给出 verdict 与 findings，再由 ARBITER 总仲裁 | 附录 B；代码 `src/rex/` |
 | 定位准确率（答案错样本）与误报率（答案对样本） | 答案错的 29 条全量人工复核，定位命中 28 条，96.6%；答案对却被判过程有错的 19 条做三层复核 | 本报告 §6，48 条全部抽检 |
 | 分析报告：设计依据、错误分类、典型案例、能力边界 | 本报告 §1 至 §9，附录 A 至 D 为四份方法文档全文 | `reports/REPORT.md` |
 
 ## 2. 分层退化分析
 
-### 2.1 平台难度轴
+本章有两条难度轴。统一难度分 `diff_score` 是本报告使用的标准，分层退化分析与后面各章的难度标注都以它为准；平台官方标签只作对照，用来看两个平台各自的原始分级。
 
 
-按各平台官方难度校正后分 basic、medium、hard 三档。
-
-
-| 难度 | 样本 | 答案准确率 | 过程正确率 |
-|---|---|---|---|
-| basic | 68 | 94.1% | 91.2% |
-| hard | 126 | 82.5% | 74.6% |
-| medium | 165 | 93.9% | 89.1% |
-
-
-### 2.2 统一难度轴
+### 2.1 统一难度轴
 
 
 `diff_score` 是统一难度分，由 Hy3 三位专家盲打后仲裁给出，取值 0 到 100，与题目来自哪个平台无关，方法与验证见附录 A。按绝对语义刻度切四档：0–20 入门，20–40 基础套路，40–60 中等，60–100 难到极高难。这里不做样本均分，档位含义在跨数据集时保持稳定。
@@ -100,6 +92,19 @@
 
 **Fig. 1** 统一难度分档下答案准确率（实线）与过程正确率（虚线）。难档覆盖 `diff_score` 60 以上共 35 题，其中 80 以上的 5 题并入。过程正确率从中等档开始显著跌落，降到 71.6%，这是高难能力边界的第一条证据。
 
+
+
+### 2.2 平台难度轴
+
+
+按各平台官方难度校正后分 basic、medium、hard 三档，仅作对照。
+
+
+| 难度 | 样本 | 答案准确率 | 过程正确率 |
+|---|---|---|---|
+| basic | 68 | 94.1% | 91.2% |
+| medium | 165 | 93.9% | 89.1% |
+| hard | 126 | 82.5% | 74.6% |
 
 ## 3. 错误类型分布
 
@@ -126,38 +131,137 @@
 
 ## 4. 典型案例归因
 
-下面取 5 例，看评估器把缺陷定位到了哪一步、归成了哪一类，完整清单见第 7 节。
+下面取 5 例，逐题给出题面摘录与评估器的定位结果；难度按第 2 章的语义档标注，完整清单见第 7 节。
 
 
-### A1098 · algorithm · hard
+### A1098 · abc228_d
+- 难度：语义档 中等，diff_score 46
 - 判定：SILENT_FAILURE，置信度 0.95
-- 题目：Score : $400$ points Problem Statement There is a sequence $A = (A_0,…
 - 答案正确：True，用例通过率 1.0
 - 定位：第2步 逻辑缺陷，并查集设计未考虑线性探测的环形回绕：parent[pos] = find(pos+1) 在 pos = N-1 时指向哨兵 N，而非回绕到…；第4步 边界条件，代码在 pos=N 时访问 parent[N+1]（数组大小 N+1，合法下标 0..N），且写 A[N]（有效仅 0..N-1），属于未处…
 
-### A1148 · algorithm · hard
+题面摘录：
+
+```text
+Score : $400$ points
+
+Problem Statement
+There is a sequence $A = (A_0, A_1, \dots, A_{N - 1})$ with $N = 2^{20}$ terms. Initially, every term is $-1$.
+
+Process $Q$ queries in order. The $i$-th query $(1 \leq i \leq Q)$ is described by an integer $t_i$ such that $t_i = 1$ or $t_i = 2$, and another integer $x_i$, as follows.
+
+If $t_i = 1$, do the following in order.
+
+Define an integer $h$ as $h = x_i$.
+
+While $A_{h \bm
+……（题面后续略）
+```
+
+### A1148 · abc368_d
+- 难度：语义档 基础~套路，diff_score 22
 - 判定：SILENT_FAILURE，置信度 0.93
-- 题目：Score : $425$ points Problem Statement You are given a tree with $N$ v…
 - 答案正确：True，用例通过率 1.0
 - 定位：第2步 概念理解错误，错误断言节点必须保留当且仅当本身是关键点或子树（以1为根）含关键点。反例：链1-2-3, K={3}，代码输出3，正确最小为1，因根1非关键…；第2步 逻辑缺陷，算法等价条件逻辑错误：仅依子树含关键点计数会保留非必要桥接祖先。正确需节点是关键点，或≥2子树枝含关键点，或子树含且父侧含。反例同上。
 
-### A1164 · algorithm · medium
+题面摘录：
+
+```text
+Score : $425$ points
+
+Problem Statement
+You are given a tree with $N$ vertices numbered $1$ to $N$. The $i$-th edge connects vertices $A_i$ and $B_i$.
+
+Consider a tree that can be obtained by removing some (possibly zero) edges and vertices from this graph. Find the minimum number of vertices in such a tree that includes all of $K$ specified vertices $V_1,\ldots,V_K$.
+
+Constraints
+
+$1 \leq K \leq N \leq 2\times 10^5$
+……（题面后续略）
+```
+
+### A1164 · abc386_d
+- 难度：语义档 中等，diff_score 50
 - 判定：SILENT_FAILURE，置信度 0.90
-- 题目：Score : $425$ points Problem Statement There is an $N \times N$ grid.…
 - 答案正确：True，用例通过率 1.0
 - 定位：第3步 复杂度不达标，步骤3断言算法总复杂度为O(M log M)时间、O(M)空间，但实际步骤4代码中对每个约束列c遍历所有压缩段segs（cols最多M个，s…
 
-### A1174 · algorithm · hard
+题面摘录：
+
+```text
+Score : $425$ points
+
+Problem Statement
+There is an $N \times N$ grid. Takahashi wants to color each cell black or white so that all of the following conditions are satisfied:
+
+For every row, the following condition holds:
+
+There exists an integer $i\ (0\leq i\leq N)$ such that the leftmost $i$ cells are colored black, and the rest are colored white.
+
+For every column, the following condition holds:
+
+There exists an
+……（题面后续略）
+```
+
+### A1174 · abc392_e
+- 难度：语义档 中等，diff_score 50
 - 判定：SILENT_FAILURE，置信度 0.90
-- 题目：Score : $450$ points Problem Statement There are $N$ servers numbered…
 - 答案正确：True，用例通过率 1.0
 - 定位：第4步 逻辑缺陷，构造实现中盲目顺序消耗spare边，且用 fu == y（y为弹出的未连通分量代表整数，未做dsu.find）决定是否将边连到已连通分量co…
 
-### C2029 · algorithm · medium
+题面摘录：
+
+```text
+Score : $450$ points
+
+Problem Statement
+There are $N$ servers numbered from $1$ to $N$ and $M$ cables numbered from $1$ to $M$.
+Cable $i$ connects servers $A_i$ and $B_i$ bidirectionally.
+
+By performing the following operation some number of times (possibly zero), make all servers connected via cables.
+
+Operation: Choose one cable and reconnect one of its ends to a different server.
+
+Find the minimum number of operat
+……（题面后续略）
+```
+
+### C2029 · cf2241f
+- 难度：语义档 基础~套路，diff_score 35
 - 判定：SILENT_FAILURE，置信度 0.95
-- 题目：F. A Bit Odd time limit per test2 seconds memory limit per test256 meg…
 - 答案正确：True，用例通过率 1.0
 - 定位：第2步 跳步推导，步骤2给出充要条件：总逆序对奇或存在分割点k使前缀1奇且后缀0奇则Alice赢，否则Bob必胜。前置推理仅证明了充分性（存在k可删对应子序列…
+
+题面摘录：
+
+```text
+F. A Bit Odd
+time limit per test2 seconds
+memory limit per test256 megabytes
+
+Alice and Bob have got a binary
+∗
+∗
+ string
+s
+𝑠
+ of length
+n
+𝑛
+. They have decided to play a game on it, taking turns alternately, with Alice moving first.
+
+In each move, the player must select a subsequence
+†
+†
+ which has an odd number of inversions
+‡
+‡
+ and delete it. The player who cannot make a move loses.
+
+Determine who wins the game,
+……（题面后续略）
+```
 
 ## 5. 修正闭环
 
@@ -190,13 +294,14 @@
 | CF 自建 | 25 | 18，72.0% | 20，80.0% |
 
 
-按难度：
+按统一难度语义档：
 
-| 难度 | 样本 | 文本收敛 | 最终修对 |
+| 语义档 | 样本 | 文本收敛 | 最终修对 |
 |---|---|---|---|
-| basic | 4 | 4，100.0% | 2，50.0% |
-| medium | 10 | 8，80.0% | 7，70.0% |
-| hard | 22 | 16，72.7% | 18，81.8% |
+| 入门~一眼题 | 3 | 3，100.0% | 2，66.7% |
+| 基础~套路 | 9 | 8，88.9% | 6，66.7% |
+| 中等 | 13 | 9，69.2% | 8，61.5% |
+| 难~极高难 | 11 | 8，72.7% | 11，100.0% |
 
 
 修正轮次分布：1 轮 25 题，2 轮 1 题，3 轮 10 题
@@ -233,23 +338,23 @@
 
 正式评测的 359 题里，有 15 题被检出 `SILENT_FAILURE`，占 4.2%：答案在公开与隐藏用例上全部通过，verifier 却认定推理链存在致命缺陷。这些题全部落在人工抽检的样本内，致命分级经复核属实，见第 6 节。逐题的求解过程、findings 与沙盒事实在 `data/outputs/eval_abc_selfbuilt_t0.jsonl` 与 `eval_cf_selfbuilt_t0.jsonl`，这里不再重复粘贴。
 
-| 题目 | 平台 | 难度 | 致命定位（步骤 · 类型） |
+| 题目 | 平台 | 语义档 | 致命定位 |
 |---|---|---|---|
-| `A1098` | ABC | hard | step2 逻辑缺陷、step4 边界条件 |
-| `A1148` | ABC | hard | step2 概念理解错误、step2 逻辑缺陷 |
-| `A1164` | ABC | medium | step3 复杂度不达标 |
-| `A1174` | ABC | hard | step4 逻辑缺陷 |
-| `C2029` | CF | medium | step2 跳步推导 |
-| `C2058` | CF | medium | step1 跳步推导 |
-| `C2062` | CF | hard | step2 逻辑缺陷、step4 逻辑缺陷 |
-| `C2079` | CF | medium | step2 逻辑缺陷 |
-| `C2106` | CF | hard | step2 概念理解错误、step2 逻辑缺陷 |
-| `C2108` | CF | hard | step1 跳步推导 |
-| `C2117` | CF | medium | step2 概念理解错误 |
-| `C2125` | CF | medium | step2 逻辑缺陷 |
-| `C2133` | CF | hard | step2 条件遗漏、step2 逻辑缺陷 |
-| `C2136` | CF | medium | step2 概念理解错误、step2 逻辑缺陷 |
-| `C2160` | CF | hard | step2 概念理解错误、step2 逻辑缺陷 |
+| `A1098` | ABC | 中等 46 | step2 逻辑缺陷、step4 边界条件 |
+| `A1148` | ABC | 基础~套路 22 | step2 概念理解错误、step2 逻辑缺陷 |
+| `A1164` | ABC | 中等 50 | step3 复杂度不达标 |
+| `A1174` | ABC | 中等 50 | step4 逻辑缺陷 |
+| `C2029` | CF | 基础~套路 35 | step2 跳步推导 |
+| `C2058` | CF | 基础~套路 23 | step1 跳步推导 |
+| `C2062` | CF | 中等 47 | step2 逻辑缺陷、step4 逻辑缺陷 |
+| `C2079` | CF | 基础~套路 36 | step2 逻辑缺陷 |
+| `C2106` | CF | 难~极高难 77 | step2 概念理解错误、step2 逻辑缺陷 |
+| `C2108` | CF | 基础~套路 25 | step1 跳步推导 |
+| `C2117` | CF | 中等 42 | step2 概念理解错误 |
+| `C2125` | CF | 入门~一眼题 15 | step2 逻辑缺陷 |
+| `C2133` | CF | 难~极高难 71 | step2 条件遗漏、step2 逻辑缺陷 |
+| `C2136` | CF | 中等 45 | step2 概念理解错误、step2 逻辑缺陷 |
+| `C2160` | CF | 中等 55 | step2 概念理解错误、step2 逻辑缺陷 |
 
 
 这类缺陷有三种典型形态：一是声明的复杂度与实现不符，剪枝或上界失效、最坏情形退化；二是关键引理缺证明，贪心最优性、博弈必胜性、组合计数只写显然；三是边界条件遗漏。公开的小样例覆盖不到它们，只有过程评估能抓住，也正是不看过程、只看答案的评测会系统性漏掉的部分。
@@ -297,7 +402,7 @@
 | 复杂度控制 | 见第 3 节错误类型占比，若 `复杂度不达标`/`边界条件` 占比高，反映算法场景实现严谨性不足 | 增加静态检查前置；对声明复杂度与实现做一致性校验 |
 | 跳步推导 | 算法场景 `跳步推导` 高发说明步骤颗粒度过粗 | 验证 prompt 强化逐步自含性要求 |
 | 沉默失败 | golden 检出率与抽检误报率联动监控 | 高误报时收紧定位条件，低检出时增强回溯审查 |
-| 分层退化 | 平台难度轴见 2.1，统一难度轴见 2.2，临界点取首次 8pp 以上跌落的 diff_score 档 | 对临界点之上补充针对性用例 |
+| 分层退化 | 统一难度轴见 2.1，平台难度轴见 2.2，临界点取首次 8pp 以上跌落的 diff_score 档 | 对临界点之上补充针对性用例 |
 
 ## 9. 局限与待办
 
@@ -402,7 +507,7 @@ _以上指标全部来自正式评测结果；修正数据只用于第 5 节的�
 
 #### A.4.3 分层单调性
 
-难度标签的价值最终要看能力是否随难度退化。按绝对语义档切档，各档过程正确率单调下降。下表是方法定稿时的快照，题集后续扩入 CF 难档题后各档样本见分析报告 §2.2 的实时统计：
+难度标签的价值最终要看能力是否随难度退化。按绝对语义档切档，各档过程正确率单调下降。下表是方法定稿时的快照，题集后续扩入 CF 难档题后各档样本见分析报告 §2.1 的实时统计：
 
 | 语义档 | 样本 | 过程正确率 |
 |---|---|---|

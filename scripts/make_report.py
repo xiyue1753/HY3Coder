@@ -1,7 +1,12 @@
 """Generate reports/REPORT.md from eval/refine/audit data.
 
+注意：`reports/REPORT.md` 自 2026-09-10 起改为手工维护的正式稿，本脚本仅保留
+作为口径与措辞的参考实现（各节数字的算法、附录拼装规则仍以这里为准）。
+直接运行不会覆盖正式稿，必须显式加 `--force`。
+
 Usage:
-    python scripts/make_report.py [--out reports/REPORT.md]
+    python scripts/make_report.py --out /tmp/report_draft.md   # 只生成草稿
+    python scripts/make_report.py --force                      # 覆盖正式稿（会丢手工改动）
 """
 from __future__ import annotations
 
@@ -47,6 +52,26 @@ def _one_line(text: str, limit: int) -> str:
     顺带丢掉只有 # 的 markdown 标题记号，避免题面里的 "### Problem Statement" 混进来。"""
     s = " ".join(tok for tok in str(text).split() if tok.strip("#").strip())
     return s if len(s) <= limit else s[:limit].rstrip() + "…"
+
+
+def _excerpt(text: str, limit: int) -> str:
+    """题面摘录：保留换行与缩进，去掉 markdown 标题记号与反引号，供围栏代码块展示。"""
+    lines = []
+    for raw in str(text).splitlines():
+        ln = re.sub(r"^\s*#{1,6}\s*", "", raw.rstrip()).replace("`", "'")
+        lines.append(ln)
+    s = re.sub(r"\n{3,}", "\n\n", "\n".join(lines).strip())
+    return s if len(s) <= limit else s[:limit].rstrip() + "\n……（题面后续略）"
+
+
+def _tier_of(ds: float | None) -> str:
+    """diff_score 落在哪个语义档，档名与第 2 章展示的口径一致。"""
+    if ds is None:
+        return "—"
+    for name, lo, hi in SEMANTIC_TIERS:
+        if lo <= ds < hi:
+            return name
+    return SEMANTIC_TIERS[-1][0]
 
 
 def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
@@ -102,18 +127,21 @@ def _emit_refine_wrong(w, records: list[dict], qmap: dict) -> None:
           f"{a}，{pct(a / len(rows))} |")
     w("")
 
-    tiers = ["basic", "medium", "hard"]
-    diff = {t: [r for r in done if r.get("difficulty") == t] for t in tiers}
-    w("\n按难度：\n")
-    w("| 难度 | 样本 | 文本收敛 | 最终修对 |")
+    by_tier: dict[str, list[dict]] = defaultdict(list)
+    for r in done:
+        q = qmap.get(r.get("question_id", ""))
+        ds = (q.metadata or {}).get("diff_score") if q else None
+        by_tier[_tier_of(ds)].append(r)
+    w("\n按统一难度语义档：\n")
+    w("| 语义档 | 样本 | 文本收敛 | 最终修对 |")
     w("|---|---|---|---|")
-    for t in tiers:
-        rows = diff[t]
+    for name, _lo, _hi in SEMANTIC_TIERS:
+        rows = by_tier.get(name) or []
         if not rows:
             continue
         c = sum(1 for r in rows if r.get("converged"))
         a = sum(1 for r in rows if (r.get("final") or {}).get("answer_correct") is True)
-        w(f"| {t} | {len(rows)} | {c}，{pct(c / len(rows))} | {a}，{pct(a / len(rows))} |")
+        w(f"| {name} | {len(rows)} | {c}，{pct(c / len(rows))} | {a}，{pct(a / len(rows))} |")
     w("")
 
     rc = defaultdict(int)
@@ -270,7 +298,7 @@ def _emit_contamination(w, evals: list[EvalRecord]) -> None:
     w(f"| 自称见过（P1 = seen） | {seen}，{pct(seen / n)}；迎合偏差高，不作暴露证据 |")
     w(f"| 出处精确命中（强证据） | {len(hits)}，{pct(len(hits) / n)}；"
       f"95% CI [{lo * 100:.0f}%, {hi * 100:.0f}%] |")
-    w(f"| 命中难度分布 | basic {basic} / medium {mid} / hard 0 |")
+    w(f"| 命中样本的平台分档 | basic {basic} / medium {mid} / hard 0 |")
     if hits:
         w(f"| 命中样本 | {hit_ids} |")
     w("")
@@ -301,9 +329,11 @@ def _emit_task_mapping(w) -> None:
     w("| 过程正确性判定、错误定位、错误归类、\"答案对但过程不成立\"识别 | "
       "verdict 四值；findings 带 `step_id`；10 类错误类型；SILENT_FAILURE | "
       "本报告 §3 与 §7；判定方法见附录 B |")
-    w("| 实现手段：规则校验、分步 LLM 审查、沙盒、多视角复核 | "
-      "`static_check` 查复杂度、死循环与递归；V1、V2 两个视角各自审查；"
-      "Python 与 C++ 沙盒；ARBITER 总仲裁 | 附录 B；代码 `src/rex/` |")
+    w("| 实现手段：沙盒校验、多视角 Agent 复核 | "
+      "沙盒校验：Python 与 C++ 沙盒跑公开与隐藏用例，答案真值以沙盒为准，"
+      "`static_check` 的规则校验作为补充诊断证据；"
+      "多视角 Agent 复核：V1 自含性审查与 V2 全局回溯各自给出 verdict 与 findings，"
+      "再由 ARBITER 总仲裁 | 附录 B；代码 `src/rex/` |")
     w("| 定位准确率（答案错样本）与误报率（答案对样本） | "
       "答案错的 29 条全量人工复核，定位命中 28 条，96.6%；"
       "答案对却被判过程有错的 19 条做三层复核 | 本报告 §6，48 条全部抽检 |")
@@ -515,18 +545,12 @@ def build() -> str:
     _emit_contamination(w, evals)
     _emit_task_mapping(w)
 
-    # ---- 2. 分层退化（平台难度轴）----
+    # ---- 2. 分层退化（统一难度轴为主，平台标签作对照）----
     w("## 2. 分层退化分析")
-    w("\n### 2.1 平台难度轴\n")
-    w("\n按各平台官方难度校正后分 basic、medium、hard 三档。\n")
-    w("\n| 难度 | 样本 | 答案准确率 | 过程正确率 |")
-    w("|---|---|---|---|")
-    for tier, t in sorted(m.per_tier.items()):
-        w(f"| {tier} | {t.n} | {pct(t.answer_accuracy)} | {pct(t.process_correctness)} |")
-    w("")
-
-    # ---- 2b. 统一难度轴（diff_score 五分位，跨平台可比）----
-    w("\n### 2.2 统一难度轴\n")
+    w("\n本章有两条难度轴。统一难度分 `diff_score` 是本报告使用的标准，"
+      "分层退化分析与后面各章的难度标注都以它为准；平台官方标签只作对照，"
+      "用来看两个平台各自的原始分级。\n")
+    w("\n### 2.1 统一难度轴\n")
     ut = unified_tier_table(evals, qmap)
     if ut:
         w("\n`diff_score` 是统一难度分，由 Hy3 三位专家盲打后仲裁给出，取值 0 到 100，"
@@ -580,6 +604,18 @@ def build() -> str:
     else:
         w("\n_暂无 diff_score（先运行 score_difficulty.py）。_\n")
 
+    # ---- 2.2 平台难度轴（对照）----
+    w("\n### 2.2 平台难度轴\n")
+    w("\n按各平台官方难度校正后分 basic、medium、hard 三档，仅作对照。\n")
+    w("\n| 难度 | 样本 | 答案准确率 | 过程正确率 |")
+    w("|---|---|---|---|")
+    for tier in ("basic", "medium", "hard"):
+        t = m.per_tier.get(tier)
+        if t is None:
+            continue
+        w(f"| {tier} | {t.n} | {pct(t.answer_accuracy)} | {pct(t.process_correctness)} |")
+    w("")
+
     # ---- 3. 错误类型分布 ----
     w("## 3. 错误类型分布")
     w("\n按评估器已报告的 finding 统计：\n")
@@ -599,19 +635,26 @@ def build() -> str:
     if not notable:
         w("\n_当前样本中暂无 SILENT_FAILURE，退而展示过程错误样本。_\n")
         notable = [r for r in evals if r.verification.verdict.value == "PROCESS_INCORRECT"][:5]
-    w("\n下面取 5 例，看评估器把缺陷定位到了哪一步、归成了哪一类，完整清单见第 7 节。\n")
+    w("\n下面取 5 例，逐题给出题面摘录与评估器的定位结果；难度按第 2 章的语义档标注，"
+      "完整清单见第 7 节。\n")
     for r in notable:
         q = qmap.get(r.question_id)
-        qtitle = _one_line(q.prompt if q else r.question_id, 70)
+        sid = (getattr(q, "source_id", "") or "") if q else ""
+        w(f"\n### {r.question_id}" + (f" · {sid}" if sid else ""))
+        ds = _diff_score_of(r, qmap)
+        w(f"- 难度：语义档 {_tier_of(ds)}"
+          + (f"，diff_score {ds:.0f}" if ds is not None else ""))
+        w(f"- 判定：{r.verification.verdict.value}，置信度 {r.verification.confidence:.2f}")
+        w(f"- 答案正确：{r.answer_correct}，用例通过率 {r.test_pass_rate}")
         findings = "；".join(
             f"第{f.step_id}步 {TYPE_CN.get(f.error_type.value, f.error_type.value)}，"
             f"{_one_line(f.detail, 70)}"
             for f in r.verification.findings[:3])
-        w(f"\n### {r.question_id} · {r.scene} · {r.difficulty.value}")
-        w(f"- 判定：{r.verification.verdict.value}，置信度 {r.verification.confidence:.2f}")
-        w(f"- 题目：{qtitle}")
-        w(f"- 答案正确：{r.answer_correct}，用例通过率 {r.test_pass_rate}")
         w(f"- 定位：{findings or '无'}")
+        w("\n题面摘录：\n")
+        w("```text")
+        w(_excerpt(q.prompt if q else r.question_id, 420))
+        w("```")
     w("")
 
     # ---- 5. 修正闭环（ReAct 前后对比）----
@@ -688,7 +731,7 @@ def build() -> str:
       "致命分级经复核属实，见第 6 节。逐题的求解过程、findings 与沙盒事实在 "
       "`data/outputs/eval_abc_selfbuilt_t0.jsonl` 与 `eval_cf_selfbuilt_t0.jsonl`，"
       "这里不再重复粘贴。\n")
-    w("| 题目 | 平台 | 难度 | 致命定位（步骤 · 类型） |")
+    w("| 题目 | 平台 | 语义档 | 致命定位 |")
     w("|---|---|---|---|")
     for r in sorted(sil, key=lambda x: x.question_id):
         pos = "、".join(
@@ -697,7 +740,9 @@ def build() -> str:
             if f.severity == ErrorSeverity.FATAL
         )
         plat = "ABC" if r.question_id.startswith("A") else "CF"
-        w(f"| `{r.question_id}` | {plat} | {r.difficulty.value} | {pos or '—'} |")
+        ds = _diff_score_of(r, qmap)
+        tier = _tier_of(ds) + (f" {ds:.0f}" if ds is not None else "")
+        w(f"| `{r.question_id}` | {plat} | {tier} | {pos or '—'} |")
     w("")
     w("\n这类缺陷有三种典型形态：一是声明的复杂度与实现不符，剪枝或上界失效、"
       "最坏情形退化；二是关键引理缺证明，贪心最优性、博弈必胜性、组合计数只写显然；"
@@ -713,7 +758,7 @@ def build() -> str:
     w("| 复杂度控制 | 见第 3 节错误类型占比，若 `复杂度不达标`/`边界条件` 占比高，反映算法场景实现严谨性不足 | 增加静态检查前置；对声明复杂度与实现做一致性校验 |")
     w("| 跳步推导 | 算法场景 `跳步推导` 高发说明步骤颗粒度过粗 | 验证 prompt 强化逐步自含性要求 |")
     w("| 沉默失败 | golden 检出率与抽检误报率联动监控 | 高误报时收紧定位条件，低检出时增强回溯审查 |")
-    w("| 分层退化 | 平台难度轴见 2.1，统一难度轴见 2.2，临界点取首次 8pp 以上跌落的 diff_score 档 | 对临界点之上补充针对性用例 |")
+    w("| 分层退化 | 统一难度轴见 2.1，平台难度轴见 2.2，临界点取首次 8pp 以上跌落的 diff_score 档 | 对临界点之上补充针对性用例 |")
     w("")
 
     _emit_limits(w)
@@ -768,7 +813,14 @@ def build() -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, default=ROOT / "reports" / "REPORT.md")
+    ap.add_argument("--force", action="store_true",
+                    help="正式稿已改为手工维护，覆盖它必须显式加 --force")
     args = ap.parse_args()
+    official = (ROOT / "reports" / "REPORT.md").resolve()
+    if args.out.resolve() == official and not args.force:
+        print("reports/REPORT.md 是手工维护的正式稿，未覆盖。")
+        print("只想要草稿：--out <其它路径>；确实要覆盖：加 --force（手工改动会丢）")
+        return
     args.out.parent.mkdir(parents=True, exist_ok=True)
     # 固定 LF：写入时不随平台做换行转换，保证生成结果与仓库中的版本逐字节一致
     args.out.write_text(build(), encoding="utf-8", newline="\n")
