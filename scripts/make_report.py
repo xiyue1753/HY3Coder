@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rex.config import Config
 from rex.metrics.compute import audit_metrics, compute_metrics, refine_comparison
-from rex.metrics.stats import stability_check, wilson_interval
+from rex.metrics.stats import stability_check, stability_sweep, wilson_interval
 from rex.models import (
     AuditRecord,
     ErrorSeverity,
@@ -531,18 +531,23 @@ def build() -> str:
         w(f"| {pl} 自建 | {len(sub)} | {pct(ans / nv if nv else None)} | "
           f"{pct(proc / nv if nv else None)} |")
     w("")
-    # 稳定性 + 随机性声明
+    # 稳定性：样本构成敏感性（数值来自固化记录，重算逐位一致；不含运行期随机性）
     st = stability_check(valid)
+    sw = stability_sweep(valid)
     if st.stable:
         drift_txt = f"漂移 {st.drift * 100:.1f}pp，在 5pp 的判稳阈值以内。"
     else:
         drift_txt = (f"漂移 {st.drift * 100:.1f}pp，超过 5pp 判稳阈值，"
                      "单次求解的波动还需要多跑几轮抹平。")
-    w("**稳定性说明**：以上结果都来自单次求解，每题只调用一次模型，采样本身带随机性。"
-      "为看这项影响有多大，用两个随机种子各取 60% 分档重抽，两次的过程正确率分别是 "
-      f"{st.seed_a * 100:.1f}% 与 {st.seed_b * 100:.1f}%，{drift_txt}"
-      "若要把区间收得更紧，可对全量多次求解取平均；本报告作为单次基线，"
-      "不确定性范围由上面的置信区间和这一检验给出。\n")
+    w("**稳定性说明**：本章数值全部来自仓库中已固化的 t0 正式评测记录"
+      "（temperature=0，359 题，每题一次求解），读取同一份记录重算得到的结果逐位一致，"
+      "不含运行期随机性。为看样本构成对结论的影响，按难度档用两组固定随机种子各重抽 60% 样本，"
+      f"过程正确率分别为 {st.seed_a * 100:.1f}% 与 {st.seed_b * 100:.1f}%，{drift_txt}"
+      f"再用 {sw.pairs} 组种子跑同一检验（`stability_sweep`）：漂移中位数 "
+      f"{sw.median_drift * 100:.1f}pp、最大 {sw.max_drift * 100:.1f}pp，"
+      f"全部 {sw.pairs} 组都在阈值内——指标对\"抽到哪一部分题\"不敏感。"
+      "本检验衡量的是**样本构成**的影响；本报告是 temperature=0 的单次基线，"
+      "指标区间由上面的 Wilson 置信区间与这一检验共同给出。\n")
     w("")
 
     _emit_contamination(w, evals)

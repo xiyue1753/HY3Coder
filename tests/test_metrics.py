@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from rex.metrics.compute import audit_metrics, compute_metrics, refine_comparison
-from rex.metrics.stats import stability_check, wilson_interval
+from rex.metrics.stats import stability_check, stability_sweep, wilson_interval
 from rex.models import (
     Answer,
     Difficulty,
@@ -203,6 +203,27 @@ def test_stability_check() -> None:
     rep = stability_check(records)
     assert rep.stable is True or rep.drift < 0.5
     assert 0.0 <= rep.drift <= 1.0
+
+
+def test_stability_sweep_deterministic_and_bounded() -> None:
+    """多种子扫描：口径自洽，且同一份记录重跑结果逐位一致（纯重抽，不调用模型）。"""
+    records = [_rec(f"q{i}", Verdict.CORRECT if i % 3 else Verdict.PROCESS_INCORRECT)
+               for i in range(120)]
+    sw = stability_sweep(records, pairs=5)
+    assert sw.pairs == 5
+    assert sw.over_threshold <= sw.pairs
+    assert 0.0 <= sw.median_drift <= sw.max_drift <= 1.0
+    assert sw.rate_low <= sw.rate_high
+    assert sw == stability_sweep(records, pairs=5)     # 可复现
+
+
+def test_stability_sweep_flags_unstable_set() -> None:
+    """同档内对错各半的小样本：换种子漂移大，应被扫出来（阈值内的正常集不会误报）。"""
+    small = [_rec(f"s{i}", Verdict.CORRECT if i < 5 else Verdict.PROCESS_INCORRECT)
+             for i in range(10)]
+    assert stability_sweep(small, pairs=5).over_threshold > 0
+    stable = [_rec(f"t{i}", Verdict.CORRECT) for i in range(50)]
+    assert stability_sweep(stable, pairs=5).max_drift == 0.0
 
 
 def test_refine_comparison() -> None:
