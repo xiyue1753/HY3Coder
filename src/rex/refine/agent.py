@@ -61,13 +61,18 @@ class Refiner:
         self._client = solver._client  # noqa: SLF001
 
     def refine(self, question: QuestionItem,
-               progress: Callable[[str, object | None], None] | None = None) -> RefineRecord:
-        """ReAct 修正闭环。``progress(phase, payload)`` 报告阶段与中间解答。"""
+               progress: Callable[[str, object | None], None] | None = None,
+               on_step=None, on_reasoning=None) -> RefineRecord:
+        """ReAct 修正闭环。``progress(phase, payload)`` 报告阶段与中间解答。
+
+        ``on_step``：可选流式回调（交互演示用）。首轮求解与每轮修订都会边生成边回调，
+        不传则与原路径完全一致。
+        """
         t0 = time.time()
         # 首轮：独立求解 + 验证（与 eval 模式同路径，保证 initial 可比）
         if progress:
             progress("solve", None)
-        answer = self._solver.solve(question)
+        answer = self._solver.solve(question, on_step=on_step, on_reasoning=on_reasoning)
         if progress:
             progress("answer", answer)
         if progress:
@@ -85,7 +90,8 @@ class Refiner:
                     break  # 无反馈可生成（理论上 CORRECT 才出现）
                 if progress:
                     progress(f"revise-{round_no}", None)
-                revised = self._solver.revise(question, current_answer, feedbacks)
+                revised = self._solver.revise(question, current_answer, feedbacks,
+                                             on_step=on_step, on_reasoning=on_reasoning)
                 if progress:
                     progress(f"answer-{round_no}", revised)
                 if progress:

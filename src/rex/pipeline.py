@@ -224,20 +224,24 @@ class Pipeline:
         return list(done.values())
 
     def _eval_one(self, q: QuestionItem,
-                  progress: Callable[[str, object | None], None] | None = None) -> EvalRecord:
+                  progress: Callable[[str, object | None], None] | None = None,
+                  on_step=None, on_reasoning=None) -> EvalRecord:
         """Evaluate one question.
 
         ``progress(phase, payload)``：可选阶段回调。phase 取值：
         "solve"(开始求解) → "answer"(完成，payload=Answer 可先展示) →
         "execute"(沙盒执行) → "static"(静态校验) → "verify"(过程评估)。
         供交互式界面实时展示进度（api 层 job 轮询/SSE 复用）。
+
+        ``on_step``：可选流式回调，求解时逐片回调部分 Answer（交互演示逐 Step 显示）；
+        不传则走原来的整段调用，正式评测口径不变。
         """
         from rex.executor.static_check import check_static, static_evidence_block, static_result_to_dict
 
         t0 = time.time()
         if progress:
             progress("solve", None)
-        answer = self.solver.solve(q)
+        answer = self.solver.solve(q, on_step=on_step, on_reasoning=on_reasoning)
         if progress:
             progress("answer", answer)
         if progress:

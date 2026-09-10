@@ -257,17 +257,21 @@ const PHASE_CN={
   solve:'求解', answer:'已生成过程', execute:'沙盒执行', static:'静态校验',
   verify:'过程评估', revise:'修正', done:'完成'
 };
-function renderInterimAnswer(ans){
+function renderInterimAnswer(ans, streaming){
   const body=$('#iResultBody');
   if(!ans)return;
   const steps=(ans.steps)||[];
   body.style.alignItems='stretch';body.style.justifyContent='flex-start';body.style.display='block';
-  body.innerHTML=`<div class="flex items-center gap-2 mb-2"><span class="tag" style="color:var(--pri)">解答过程已生成</span>
-    <span class="muted text-sm">等待过程评估完成，最终判定将更新于此</span></div>
-    ${steps.map((s,i)=>`<div class="step-card step-in" style="animation-delay:${i*0.12}s" title="依赖：${(s.deps||[]).join(',')||'无'}">
-      <div class="k">${KIND_CN[s.kind]||s.kind} · STEP ${s.id}</div>
-      <div class="mt-1">${renderMath(s.content)}</div>
-      <div class="mt-1 text-sm" style="color:var(--pri2)">→ ${renderMath(s.conclusion)}</div></div>`).join('')||'<div class="muted">无步骤</div>'}`;
+  // streaming=true：模型还在流式吐，卡片不重播入场动画，末步挂个光标
+  const head=streaming
+    ? `<span class="spin"></span><span class="muted text-sm">正在逐 Step 生成解答过程…</span>`
+    : `<span class="tag" style="color:var(--pri)">解答过程已生成</span>
+       <span class="muted text-sm">等待过程评估完成，最终判定将更新于此</span>`;
+  body.innerHTML=`<div class="flex items-center gap-2 mb-2">${head}</div>
+    ${steps.map((s,i)=>`<div class="step-card${streaming?'':' step-in'}"${streaming?'':` style="animation-delay:${i*0.12}s"`} title="依赖：${(s.deps||[]).join(',')||'无'}">
+      <div class="k">${KIND_CN[s.kind]||s.kind||'—'} · STEP ${s.id??i+1}</div>
+      <div class="mt-1">${s.content?renderMath(s.content):'<span class="muted">…</span>'}${streaming&&i===steps.length-1?'<span class="cursor"></span>':''}</div>
+      ${s.conclusion?`<div class="mt-1 text-sm" style="color:var(--pri2)">→ ${renderMath(s.conclusion)}</div>`:''}</div>`).join('')||'<div class="muted">等待模型输出…</div>'}`;
   if(ans.code){
     const el=document.createElement('details');
     el.style.marginTop='10px';
@@ -350,12 +354,14 @@ function phaseIndex(phase, mode){
   if(map[norm]!==undefined)return map[norm];
   return -1;
 }
-function advancePhaseUI(phase, mode, elapsed){
+function advancePhaseUI(phase, mode, elapsed, message){
   UI_STAGE.mode=mode;
   $('#iProgress').style.display='block';
   const idx=phaseIndex(phase, mode);
   if(idx>=0)UI_STAGE.cursor=Math.max(UI_STAGE.cursor, idx);
-  $('#iProgressMsg').textContent='阶段：'+ (PHASE_CN[phase.replace(/-\d+$/,'')]||phase.replace(/-\d+$/,''))+(/-?\d+$/.test(phase)?'（第'+phase.split('-')[1]+'轮）':'');
+  // 后端流式阶段会给出更细的进度文案（模型推理中／正在逐 Step 生成），优先展示
+  const label='阶段：'+ (PHASE_CN[phase.replace(/-\d+$/,'')]||phase.replace(/-\d+$/,''))+(/-?\d+$/.test(phase)?'（第'+phase.split('-')[1]+'轮）':'');
+  $('#iProgressMsg').textContent=message||label;
   if(elapsed)$('#iProgressElapsed').textContent=elapsed+'s';
   renderPhasePills(mode);
 }
@@ -421,18 +427,25 @@ async function interact(){
     const jobId=d.job_id;
     setPhaseUI('solve', d.mode, '');
     // 轮询状态（SSE 端点存在但轮询更简单稳定；两个端点可任选）
-    let finalPayload=null, answerShown=false;
-    for(let tries=0; tries<600; tries++){
-      await new Promise(res=>setTimeout(res,500));
+    let finalPayload=null;
+    for(let tries=0; tries<900; tries++){
+      // 300ms 轮询：流式逐步出现更顺，请求本身只是读内存快照，代价很低
+      await new Promise(res=>setTimeout(res,300));
       let st;
       try{ st=await (await fetch('/api/interact/job/'+jobId)).json(); }
       catch(e){ continue; }
       // 阶段按序推进：即使 execute/static 毫秒级被轮询跳过，
       // 用"已到达阶段 → 之前的全部点亮"保证徽章顺序完整
       if(st.phase && st.phase!=='done' && st.phase!=='failed'){
-        advancePhaseUI(st.phase, d.mode, st.elapsed);
+        advancePhaseUI(st.phase, d.mode, st.elapsed, st.message);
       }
-      if(st.answer && !answerShown){ answerShown=true; renderInterimAnswer(st.answer); }   // B：先展示过程
+      // 逐 Step 出现：每次拿到新快照就重渲染（后端流式推部分过程，末步带光标）。
+      // generating 只在"正在生成正文"的阶段为真：solve（首解）与 revise-N（修订轮），
+      // 否则 execute/verify 阶段会一直挂着光标和"生成中"文案。
+      if(st.answer){
+        const generating=st.status==='running'&&(st.phase==='solve'||st.phase.startsWith('revise-'));
+        renderInterimAnswer(st.answer, generating);
+      }
       if(st.result){ finalPayload=st.result; break; }
       if(st.status==='failed'){ throw new Error(st.error||'运行失败'); }
     }

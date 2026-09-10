@@ -7,6 +7,7 @@ returns).
 """
 from __future__ import annotations
 
+import json
 import random
 import time
 
@@ -16,6 +17,29 @@ import httpx
 #   429 = rate limit / capacity (the Hy3 gateway's rate_limit_error)
 #   500/502/503/504 = upstream hiccup
 _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+
+#: SSE 结束标记（流式读完的哨兵值）
+SSE_DONE = object()
+
+
+def _sse_piece(line: str):
+    """把一行 SSE 解析成 ``(正文片, 推理片)``；结束标记返回 ``SSE_DONE``，其它返回 None。
+
+    Hy3 的思考阶段只吐 ``reasoning_content``（不产出正文），单独回传以便界面提示
+    "模型推理中"，避免长思考窗口看起来像卡住。
+    """
+    line = (line or "").strip()
+    if not line.startswith("data:"):
+        return None
+    data = line[5:].strip()
+    if data == "[DONE]":
+        return SSE_DONE
+    try:
+        obj = json.loads(data)
+        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
+    except (ValueError, AttributeError, IndexError):
+        return None
+    return delta.get("content") or "", delta.get("reasoning_content") or ""
 
 
 def _normalize_base_url(raw: str) -> str:
@@ -173,6 +197,85 @@ class Hy3Client:
         # Some endpoints return null content (e.g. reasoning mode). Callers
         # expect a str — normalize to "" instead of leaking None downstream.
         return content or ""
+
+    def chat_stream(
+        self,
+        user: str,
+        system: str | None = None,
+        reasoning_effort: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        on_delta=None,
+        on_reasoning=None,
+    ) -> str:
+        """流式调用：逐片回调 ``on_delta(piece)``，返回完整回复文本。
+
+        ``on_reasoning(n_chars)``：可选，思考阶段累计字符数（Hy3 先推理再出正文）。
+
+        仅交互式演示用（步骤边生成边显示）；正式评测仍走 :meth:`chat`，口径不变。
+        重试策略与 ``chat`` 一致，但**一旦已经吐出过内容就不再重试**——重放会让
+        界面上的步骤重复出现，宁可失败。
+        """
+        if not self.api_key:
+            raise Hy3Error("HY3_API_KEY is not configured")
+        if not self.base_url:
+            raise Hy3Error("HY3_BASE_URL is not configured")
+        system = system or GUARD_SYSTEM
+        url = f"{self.base_url}/chat/completions"
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": temperature if temperature is not None else self.temperature,
+            "top_p": top_p if top_p is not None else self.top_p,
+            "stream": True,
+        }
+        is_hy3 = ("hy3" in self.model.lower()) or ("tokenhub" in self.base_url.lower())
+        if is_hy3:
+            payload["reasoning_effort"] = reasoning_effort or self.reasoning_effort
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+
+        attempt = 0
+        while True:
+            self.call_count += 1
+            pieces: list[str] = []
+            retry_after: str | None = None
+            try:
+                with self._client.stream("POST", url, headers=headers, json=payload) as r:
+                    retry_after = r.headers.get("Retry-After")
+                    if r.status_code == 200:
+                        n_reason = 0
+                        for line in r.iter_lines():
+                            piece = _sse_piece(line)
+                            if piece is None:
+                                continue
+                            if piece is SSE_DONE:
+                                break
+                            content, reasoning = piece
+                            if reasoning:
+                                n_reason += len(reasoning)
+                                if on_reasoning:
+                                    on_reasoning(n_reason)
+                            if content:
+                                pieces.append(content)
+                                if on_delta:
+                                    on_delta(content)
+                        return "".join(pieces)
+                    body = r.read().decode("utf-8", "replace")[:300]
+                    if not (r.status_code in _RETRYABLE_STATUS and attempt < self.max_retries):
+                        raise Hy3Error(f"Hy3 API error {r.status_code}: {body}")
+            except httpx.TimeoutException as e:  # transient — retry if nothing emitted
+                if pieces or attempt >= self.max_retries:
+                    raise Hy3Error(f"Hy3 stream failed: {e}") from e
+            except httpx.HTTPError as e:  # connect/other transport error — do not retry
+                raise Hy3Error(f"Hy3 stream failed: {e}") from e
+
+            if pieces:
+                raise Hy3Error("Hy3 stream interrupted after partial output")
+            time.sleep(self._backoff_delay(attempt, retry_after))
+            attempt += 1
 
     def close(self) -> None:
         if self._owns_client:

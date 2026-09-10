@@ -784,10 +784,32 @@ def _start_interact_job(req: InteractRequest) -> dict:
             # 3) 求解 + 判定
             job["phase"] = "solve"
             job["message"] = "正在生成分步解答…"
+
+            def _on_step(partial: dict) -> None:
+                """流式回调：把正在生成的过程推给前端（逐 Step 出现）。
+
+                轮询端点读的是 ``job["answer"]`` 最新快照，所以这里每次都更新；
+                队列（SSE 用）只在**步骤数变化**时入队，避免几百个 token 事件堆积。
+                """
+                job["answer"] = partial
+                job["message"] = "正在逐 Step 生成解答过程…"
+                n = len(partial.get("steps") or [])
+                if n != job.get("_steps_seen"):
+                    job["_steps_seen"] = n
+                    job["queue"].append({
+                        "phase": job["phase"], "message": job["message"],
+                        "elapsed": round(time.time() - job["t0"], 1), "answer": partial,
+                    })
+
+            def _on_reasoning(n_reason: int) -> None:
+                """Hy3 的思考阶段不产出正文，这里给界面一个"模型在动"的信号。"""
+                job["message"] = f"模型推理中…（已思考 {n_reason} 字）"
+
             store = STORE
             if job["mode"] == "eval":
                 rec = pipe._eval_one(q, progress=lambda p, payload=None: (
-                    _report(p, payload, _PHASE_MSG.get(p) or _phase_default_msg(p))))
+                    _report(p, payload, _PHASE_MSG.get(p) or _phase_default_msg(p))),
+                    on_step=_on_step, on_reasoning=_on_reasoning)
                 rec.source = "interactive"
                 store.append_eval(rec)
                 # 单独重跑一次沙盒执行，拿到 exec 细节（错误信息）供前端展示
@@ -806,7 +828,8 @@ def _start_interact_job(req: InteractRequest) -> dict:
                 }
             else:
                 rrec = pipe.refiner.refine(q, progress=lambda p, payload=None: (
-                    _report(p, payload, _PHASE_MSG.get(p) or _phase_default_msg(p))))
+                    _report(p, payload, _PHASE_MSG.get(p) or _phase_default_msg(p))),
+                    on_step=_on_step, on_reasoning=_on_reasoning)
                 rrec.source = "interactive"
                 store.append_refine(rrec)
                 result = InteractResult(
@@ -893,7 +916,8 @@ def _job_payload(job: dict) -> dict:
         "answer": job["answer"],
         "result": job["payload"],
         "error": job["error"],
-        "elapsed": job["elapsed"],
+        # 运行中实时走表（长思考阶段界面不至于看起来卡住）
+        "elapsed": job["elapsed"] or round(time.time() - job["t0"], 1),
         "cost_calls": job["cost_calls"],
         # 交互题号与会话号：求解完即可在「单题回放」里按题号查这次演示
         "question_id": job.get("question_id"),
