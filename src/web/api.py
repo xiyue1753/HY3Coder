@@ -56,6 +56,9 @@ CFG = Config.from_env(ROOT)
 STATIC = ROOT / "src" / "web" / "static"
 log = logging.getLogger(__name__)
 
+#: 交互题的 source 前缀（题池里靠它把演示题与正式题集区分开）
+INTERACTIVE_SOURCE = "交互解题 · "
+
 # 共享的 RecordStore 实例（带缓存）：所有请求复用，避免每次全量读文件
 from rex.store import RecordStore
 STORE = RecordStore(CFG.outputs_dir, root=ROOT)
@@ -440,8 +443,12 @@ def _question_map() -> dict[str, QuestionItem]:
 @app.get("/api/lab/questions")
 def lab_questions(keyword: str | None = None, ds: str | None = None,
                   limit: int = 30, offset: int = 0) -> dict:
-    """选题列表：题面预览 + 公开用例数（隐藏用例只给数量，不外发内容）。"""
-    qs = _load_questions()
+    """选题列表：题面预览 + 公开用例数（隐藏用例只给数量，不外发内容）。
+
+    只列正式题集：交互题池里的题（演示现场输入、每次求解新增一条）不在这里出现，
+    否则演示几次后选题列表会被 IX00xx 淹掉；交互题仍可在「单题回放」按题号查看。
+    """
+    qs = [q for q in _load_questions() if not q.source.startswith(INTERACTIVE_SOURCE)]
     prefix = {"abc_selfbuilt": "A", "cf_selfbuilt": "C"}.get(ds or "")
     if prefix:
         qs = [q for q in qs if q.id.startswith(prefix)]
@@ -606,7 +613,7 @@ def _build_question(req: InteractRequest, root: Path = ROOT):
     return QuestionItem(
         id=_next_interactive_qid(root), scene=req.scene, title=title.strip(), prompt=prompt,
         difficulty=Difficulty.BASIC,
-        source=f"交互解题 · {origin}" if origin else "交互解题 · 手动输入",
+        source=f"{INTERACTIVE_SOURCE}{origin}" if origin else f"{INTERACTIVE_SOURCE}手动输入",
         source_id=req.source_id,
         standard_answer=req.answer, test_cases=test_cases,
         reference_solution=req.reference_solution,

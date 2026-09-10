@@ -242,7 +242,13 @@ def active_eval_filenames() -> tuple[str, ...]:
 
 
 def load_active_refines(root: str | Path) -> list[RefineRecord]:
-    """正式 refine 记录（只含启用数据集，交互演示的 refine 不进这里）。"""
+    """正式 refine 记录（只含启用数据集，交互演示的 refine 不进这里）。
+
+    注意：报告 §5 修正闭环用的 ``refine_wrong_t0.jsonl`` 是脚本
+    （``scripts/run_refine_wrong_t0.py``）产出的另一种 schema（带 eval_verdict /
+    initial_public_pass / final.full_pass_rate 等），不是 ``RefineRecord``，
+    因此不在这里读取；仪表盘的修正对比目前没有数据源。
+    """
     refs: list[RefineRecord] = []
     for ds in active_datasets():
         p = refine_path(root, ds)
