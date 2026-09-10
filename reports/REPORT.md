@@ -310,15 +310,15 @@ Note that, in this problem, $N = 2^{20} = 1048576$ is a constant and not given i
 最终答案：使用路径压缩并查集维护下一个空位，按查询类型更新或输出，可在 O(Q α(N)) 时间内解决问题。
 
 1. **理解题意**：题目给定一个固定长度 N = 2^20 = 1048576 的数组 A，初始所有元素为 -1。处理 Q (≤ 2×10^5) 个查询：若 t=1，则令 h=x，不断 h++ 直到 A[h mod N] == -1，然后将 A[h mod N] 设为 x；若 t=2，则输出 A[x mod N]。x 可达 10^18，且保证至少有一次 t=2 查询。输入格式为 Q 随后 Q 行 t x。
-   - 小结：明确了输入输出格式、N为常量、查询类型及数据范围。
+    - 小结：明确了输入输出格式、N为常量、查询类型及数据范围。
 2. **算法思路**：使用数组 A 储存值，并用并查集（路径压缩）维护每个位置及其之后第一个为空（值为 -1）的位置。定义 parent[i] 表示下标 i 及其后第一个空位的代表元。初始 parent[i]=i。对于 t=1：计算 start = x % N，pos = find(start) 即为应写入的下标；令 A[pos]=x，并将 parent[pos] 指向 find(pos+1)（若 pos+1==N 则指向 N 作为哨兵）。对于 t=2：直接输出 A[x % N]。由于路径压缩，每次 find 近似 O(1)，正确模拟了线性探测的语义。
-   - 小结：采用路径压缩并查集可高效正确完成插入与查询。
+    - 小结：采用路径压缩并查集可高效正确完成插入与查询。
 3. **复杂度分析**：时间复杂度：每个查询调用常数次 find，均摊 O(α(N))，总复杂度 O(Q α(N))，其中 α 为反阿克曼函数，实际可视为 O(1)。空间复杂度：数组 A 和 parent 大小均为 N+1 ≈ 1048577，使用 long long 和 int，约 12MB，满足要求。
-   - 小结：算法在时间和空间上均满足约束。
+    - 小结：算法在时间和空间上均满足约束。
 4. **代码实现**：#include <iostream> using namespace std; const int N = 1 << 20; long long A[N+1]; int parent[N+1]; int find(int x) { if (parent[x] == x) return x; return parent[x] = find(parent[x]); } int main() { ios::sync_with_stdio(false); cin.tie(0); for (int i = 0; i <= N; i++) { A[i] = -1; parent[i] = i; } int Q; cin >> Q; while (Q--) { int t; long long x; cin >> t >> x; if (t == 1) { int pos = find(x % N); A[pos] = x; parent[pos] = find(pos + 1); } else { cout << A[x % N] << '\n'; } } return 0; }
-   - 小结：给出了完整可运行的 C++ 代码。
+    - 小结：给出了完整可运行的 C++ 代码。
 5. **自测验证**：使用样例输入： 4 1 1048577 1 1 2 2097153 2 3 过程：第一次写 pos=1048577%N=1，A[1]=1048577；第二次 x%N=1，find(1)=2，A[2]=1；第三次查询 2097153%N=1，输出 A[1]=1048577；第四次查询 3%N=3，输出 A[3]=-1。与样例输出一致，代码正确。
-   - 小结：样例验证通过，逻辑正确。
+    - 小结：样例验证通过，逻辑正确。
 
 ```cpp
 #include <iostream>
@@ -356,10 +356,9 @@ int main() {
 
 #### 过程评估判定
 
-- 定位：
-  - 逻辑缺陷 · 第2步 · fatal：并查集设计未考虑线性探测的环形回绕：parent[pos] = find(pos+1) 在 pos = N-1 时指向哨兵 N，而非回绕到 0，导致当探测需要从末尾绕回开头时 find 返回 N（越界下标），错误写入 A[N] 且未正确占用应占的 0..N-1 空位，未能正确模拟题目要求的 h mod N 环形语义。
+1. **逻辑缺陷** · 第2步 · **fatal**：并查集设计未考虑线性探测的环形回绕：parent[pos] = find(pos+1) 在 pos = N-1 时指向哨兵 N，而非回绕到 0，导致当探测需要从末尾绕回开头时 find 返回 N（越界下标），错误写入 A[N] 且未正确占用应占的 0..N-1 空位，未能正确模拟题目要求的 h mod N 环形语义。
     - 证据：步骤2内容：'parent[pos] = find(pos + 1)'，未处理 pos+1 == N 时回绕到 0；题目明确 While A_{h mod N} != -1, keep adding 1 to h（环形）。
-  - 边界条件 · 第4步 · fatal：代码在 pos=N 时访问 parent[N+1]（数组大小 N+1，合法下标 0..N），且写 A[N]（有效仅 0..N-1），属于未处理环形边界与满环情况的越界。当 find 返回 N（哨兵）时，pos=N，执行 parent[pos]=find(pos+1) 即 parent[N]=find(N+1) 越界。
+2. **边界条件** · 第4步 · **fatal**：代码在 pos=N 时访问 parent[N+1]（数组大小 N+1，合法下标 0..N），且写 A[N]（有效仅 0..N-1），属于未处理环形边界与满环情况的越界。当 find 返回 N（哨兵）时，pos=N，执行 parent[pos]=find(pos+1) 即 parent[N]=find(N+1) 越界。
     - 证据：步骤4代码：'parent[pos] = find(pos + 1);' 当 pos = N 时 pos+1 = N+1 超出 parent 数组边界（声明为 N+1 大小，最大下标 N）。
 
 ### A1148 · abc368_d
@@ -465,15 +464,15 @@ The given tree is shown on the left in the figure below. The tree with the minim
 最终答案：答案等于原树中自身为关键点或其子树含关键点的节点总数，即通过一次DFS统计得到的必须保留节点数，代码直接输出该数。
 
 1. **理解题意**：题意：给定N顶点树和K个指定顶点，可删除任意边和顶点，得到仍包含这K个顶点的树（连通无环）。求这样的树的最小顶点数。输入：第一行N K，接下来N-1条边，接下来一行K个顶点。输出：一个整数。约束：N≤2e5，K≤N，树结构。
-   - 小结：需要求包含K个关键点的最小连通子树节点数。
+    - 小结：需要求包含K个关键点的最小连通子树节点数。
 2. **算法思路**：算法：在树中，包含某点集的最小连通子图是唯一的，即所有关键点和它们两两路径上的节点的并集（虚树）。等价地，一个节点必须保留当且仅当它本身是关键点，或者其子树（以1为根）中至少包含一个关键点（这样它是连接父节点与关键点的必经点）。因此只需从根DFS，返回子树是否含关键点，若含则计数加一。
-   - 小结：通过DFS统计必须保留的节点数即得答案。
+    - 小结：通过DFS统计必须保留的节点数即得答案。
 3. **复杂度分析**：时间复杂度：DFS遍历所有N个节点和N-1条边一次，O(N)。空间复杂度：邻接表O(N)，标记数组O(N)，递归栈O(N)（或显式栈），总体O(N)。符合N=2e5限制。
-   - 小结：复杂度为线性，可接受。
+    - 小结：复杂度为线性，可接受。
 4. **代码实现**：完整Python实现： import sys sys.setrecursionlimit(300000) def main(): data=sys.stdin.read().strip().split() if not data: return it=iter(data) N=int(next(it)); K=int(next(it)) adj=[[] for _ in range(N+1)] for _ in range(N-1): a=int(next(it)); b=int(next(it)) adj[a].append(b); adj[b].append(a) imp=[False]*(N+1) for _ in range(K): imp[int(next(it))]=True ans=0 def dfs(u,p): nonlocal ans has=imp[u] for v in adj[u]: if v==p: continue if dfs(v,u): has=True if has: ans+=1 return has dfs(1,0) print(ans) if __name__=='__main__': main()
-   - 小结：代码完整可运行，读取标准输入并输出答案。
+    - 小结：代码完整可运行，读取标准输入并输出答案。
 5. **自测验证**：样例1：N=7,K=3,边如题，V=1 3 5。DFS保留节点1,2,3,5 => 输出4，符合Sample Output 1。样例2：K=4包含所有点，保留全部4节点 => 输出4，符合。样例3：K=1,V=1，仅保留1 => 输出1，符合。手算小例：链1-2-3，K=2(1,3)保留1,2,3 => 3，代码返回3正确。
-   - 小结：样例与手算均验证正确。
+    - 小结：样例与手算均验证正确。
 
 ```python
 import sys
@@ -506,10 +505,9 @@ if __name__=='__main__': main()
 
 #### 过程评估判定
 
-- 定位：
-  - 概念理解错误 · 第2步 · fatal：错误断言节点必须保留当且仅当本身是关键点或子树（以1为根）含关键点。反例：链1-2-3, K={3}，代码输出3，正确最小为1，因根1非关键点且关键点仅在某子树时多余计数祖先。
+1. **概念理解错误** · 第2步 · **fatal**：错误断言节点必须保留当且仅当本身是关键点或子树（以1为根）含关键点。反例：链1-2-3, K={3}，代码输出3，正确最小为1，因根1非关键点且关键点仅在某子树时多余计数祖先。
     - 证据：'一个节点必须保留当且仅当它本身是关键点，或者其子树（以1为根）中至少包含一个关键点'；重建测试确认错误
-  - 逻辑缺陷 · 第2步 · fatal：算法等价条件逻辑错误：仅依子树含关键点计数会保留非必要桥接祖先。正确需节点是关键点，或≥2子树枝含关键点，或子树含且父侧含。反例同上。
+2. **逻辑缺陷** · 第2步 · **fatal**：算法等价条件逻辑错误：仅依子树含关键点计数会保留非必要桥接祖先。正确需节点是关键点，或≥2子树枝含关键点，或子树含且父侧含。反例同上。
     - 证据：step2 same quote; 沙盒虽100%通过但测试集可能均含顶点1为关键点致碰巧正确
 
 ### A1164 · abc386_d
@@ -797,15 +795,15 @@ No
 最终答案：通过维护每行黑格数L_r的上下界并构造非增最大/最小序列，检查各列在最小/最大序列下的黑格计数是否落在列上下界区间内，从而判定并输出 Yes 或 No。
 
 1. **理解题意**：题意：N×N网格，每行必须是左端连续黑、其余白（即行r的黑格数L_r满足前L_r列黑，且L_r非增随行号增加 because 下面行不能比上面行更靠右黑）；每列必须是顶端连续黑、其余白（列c的黑格数T_c，且T_c非增随列号增加）。给定M个预定格子（B表示黑，W表示白），判断能否填满剩余格子满足上述条件。输入：N(≤1e9), M(≤2e5), 接着M行X Y C。输出Yes/No。关键约束：黑格区域必须是左上角的Ferrers图（阶梯状），即(r,c)黑 ⇔ c≤L_r ⇔ r≤T_c，且L_r非增、T_c非增，L与T互反（L_r = #{c|T_c≥r}, T_c = #{r|L_r≥c}）。
-   - 小结：问题转化为是否存在非增序列L_r和T_c满足给定格子的上下界并互反。
+    - 小结：问题转化为是否存在非增序列L_r和T_c满足给定格子的上下界并互反。
 2. **算法思路**：对每个行r：若有B(r,c)则L_r≥c（下界low_r），若有W(r,c)则L_r≤c-1（上界high_r），默认low=0,high=N。同理列c：lowT_c=max{r|B(r,c)}, highT_c=min{r-1|W(r,c)}。先检查单行/单列low≤high。因为L必须非增，可求出满足行上下界的最大可能序列L_high（从顶向下取min(high,prev)）和最小可能序列L_low（从底向上取max(low,next)）；若L_high[r]<low_r则无解。然后利用压缩段（含无约束间隙）计算对于任意列c，最小序列产生的黑格计数cnt_low=#{r|L_low[r]≥c}，最大序列产生的cnt_high=#{r|L_high[r]≥c}。列c可行需 cnt_low ≤ highT_c 且 cnt_high ≥ lowT_c（即计数区间与[lowT_c,highT_c]有交）。所有列通过则Yes，否则No。此构造保证了互反与单调性。
-   - 小结：通过行上下界推导非增L的可行带，再验证列计数区间交集即可判定。
+    - 小结：通过行上下界推导非增L的可行带，再验证列计数区间交集即可判定。
 3. **复杂度分析**：时间：提取约束O(M)，排序行和列O(M log M)，计算L_high/L_low O(M)，构造段O(M)，检查每列遍历段O(M)（总O(M)）。总体O(M log M)。空间：存储字典和数组O(M)。N达1e9但只处理有约束的行/列，间隙批量处理，故空间时间均满足。
-   - 小结：算法复杂度O(M log M)时间、O(M)空间，适合约束规模。
+    - 小结：算法复杂度O(M log M)时间、O(M)空间，适合约束规模。
 4. **代码实现**：import sys def solve(): input = sys.stdin.read data = input().split() if not data: return N = int(data[0]); M = int(data[1]) row_low = {}; row_high = {} col_low = {}; col_high = {} idx = 2 for _ in range(M): x = int(data[idx]); y = int(data[idx+1]); c = data[idx+2]; idx += 3 if c == 'B': row_low[x] = max(row_low.get(x, 0), y) col_low[y] = max(col_low.get(y, 0), x) else: row_high[x] = min(row_high.get(x, N), y-1) col_high[y] = min(col_high.get(y, N), x-1) for r in row_low: if row_low[r] > row_high.get(r, N): print("No"); return for c in col_low: if col_low[c] > col_high.get(c, N): print("No"); return rows = sorted(set(list(row_low.keys()) + list(row_high.keys()))) l_high = {}; cur = N for r in rows: cur = min(cur, row_high.get(r, N)) if cur < row_low.get(r, 0): print("No"); return l_high[r] = cur l_low = {}; cur = 0 for r in reversed(rows): cur = max(cur, row_low.get(r, 0)) if cur > row_high.get(r, N): print("No"); return l_low[r] = cur segs = [] cur_h = N; prev = 0 for r in rows: gap = r - prev - 1 if gap > 0: segs.append((gap, cur_h, l_low[r])) cur_h = min(cur_h, row_high.get(r, N)) segs.append((1, cur_h, l_low[r])) prev = r if N - prev > 0: segs.append((N - prev, cur_h, 0)) cols = sorted(set(list(col_low.keys()) + list(col_high.keys()))) for c in cols: cl = col_low.get(c, 0); ch = col_high.get(c, N) cnt_low = 0; cnt_high = 0 for (length, h, l) in segs: if h >= c: cnt_high += length if l >= c: cnt_low += length if cnt_low > ch or cnt_high < cl: print("No"); return print("Yes") if __name__ == "__main__": solve()
-   - 小结：完整Python代码已实现上述逻辑，可独立运行。
+    - 小结：完整Python代码已实现上述逻辑，可独立运行。
 5. **自测验证**：用样例验证： - 样例1：N=4,M=3，B(4,1),W(3,2),B(1,3)。行上下界推导后L_high=[4,4,1,1], L_low=[3,1,1,1]（压缩）。列c=1: cnt_high=4≥low4, cnt_low=4≤highN；c=2: cnt_high=2≤high2；c=3: cnt_high=2≥low1。输出Yes，符合。 - 样例2：W(1,2),B(2,2)。行r=2下界2，但L_high到r2只能取1，矛盾输出No，符合。 - 样例3：N=1,W(1,1)。low=0,high=0，列cnt=0在区间，输出Yes，符合。 - 样例4：大N多约束，算法会检测列计数越界输出No，符合。
-   - 小结：样例全部通过，逻辑正确。
+    - 小结：样例全部通过，逻辑正确。
 
 ```python
 import sys
@@ -874,8 +872,7 @@ if __name__ == "__main__":
 
 #### 过程评估判定
 
-- 定位：
-  - 复杂度不达标 · 第3步 · fatal：步骤3断言算法总复杂度为O(M log M)时间、O(M)空间，但实际步骤4代码中对每个约束列c遍历所有压缩段segs（cols最多M个，segs最多O(M)个），形成O(M^2)双重循环，对M≤2e5的极端数据会超时，超出题目数据范围允许的上限。
+1. **复杂度不达标** · 第3步 · **fatal**：步骤3断言算法总复杂度为O(M log M)时间、O(M)空间，但实际步骤4代码中对每个约束列c遍历所有压缩段segs（cols最多M个，segs最多O(M)个），形成O(M^2)双重循环，对M≤2e5的极端数据会超时，超出题目数据范围允许的上限。
     - 证据：步骤4代码：'for c in cols:' 内嵌 'for (length, h, l) in segs:'，cols大小≤M，segs长度≈2*len(rows)+1≤2M+1，总迭代≤2M^2。步骤3结论'检查每列遍历段O(M)（总O(M)）'及'算法复杂度O(M log M)时间'与实际不符。
 
 ### A1174 · abc392_e
@@ -1131,15 +1128,15 @@ No operation may be necessary.
 最终答案：最小操作次数为初始连通分量数减一，构造方法为利用多余边（自环或非树边）逐一连接未连通分量，输出对应电缆改接方案。
 
 1. **理解题意**：题意：给定N个服务器和M条双向电缆（可能自环、重边）。操作：选一条电缆，将其一端从原服务器断开并连到另一个不同的服务器。目标使所有服务器连通。输出最小操作次数K，以及K行操作（电缆编号，原端点，新端点）。约束：N,M<=2e5，M>=N-1。关键：连通分量数C，自环和多余边可用于重连。
-   - 小结：最小操作次数等于初始连通分量数减一，即K=C-1。
+    - 小结：最小操作次数等于初始连通分量数减一，即K=C-1。
 2. **算法思路**：算法：1) 用DSU求连通分量，同时收集所有非树边（包括自环和已同分量内的边）作为spare_edges。2) 分量数C = DSU中根的个数，K=C-1。3) 构造：维护一个已连通分量（如comps[0]）和未连通分量列表。依次从spare_edges取边，将边的一端改连到一个未连通分量的代表节点，从而合并分量。若边所在分量恰好是目标未连通分量，则连到已连通分量。每次操作减少一个分量，共K次。正确性：多余边数=M-N+C >= C-1，足够；每次操作不破坏原有连通性因为用的是非树边。
-   - 小结：通过挪动多余边连接不同分量，可构造最小操作方案。
+    - 小结：通过挪动多余边连接不同分量，可构造最小操作方案。
 3. **复杂度分析**：时间：DSU操作近乎O(α(N))，遍历边和顶点O(N+M)，总时间为O((N+M)α(N))。空间：存储边、DSU父数组、spare_edges、分量列表，O(N+M)。
-   - 小结：复杂度线性，适合2e5规模。
+    - 小结：复杂度线性，适合2e5规模。
 4. **代码实现**：完整C++代码： #include <bits/stdc++.h> using namespace std; struct DSU { vector<int> p; DSU(int n){ p.resize(n+1); iota(p.begin(), p.end(), 0); } int find(int x){ return p[x]==x ? x : p[x]=find(p[x]); } bool unite(int x, int y){ x=find(x); y=find(y); if(x==y) return false; p[y]=x; return true; } }; int main(){ ios::sync_with_stdio(false); cin.tie(0); int N,M; cin>>N>>M; vector<pair<int,int>> edges(M+1); DSU dsu(N); vector<tuple<int,int,int>> spare; for(int i=1;i<=M;i++){ int u,v; cin>>u>>v; edges[i]={u,v}; if(u==v){ spare.push_back({i,u,v}); continue; } if(!dsu.unite(u,v)){ spare.push_back({i,u,v}); } } vector<int> comps; for(int i=1;i<=N;i++) if(dsu.find(i)==i) comps.push_back(i); int K = comps.size()-1; cout << K << "\n"; if(K==0) return 0; int connected = comps[0]; vector<int> unconnected(comps.begin()+1, comps.end()); int idx=0; while(!unconnected.empty()){ auto [id,u,v] = spare[idx++]; int y = unconnected.back(); unconnected.pop_back(); int fu = dsu.find(u); int orig = u; int newserv = (fu == y) ? connected : y; cout << id << " " << orig << " " << newserv << "\n"; dsu.unite(orig, newserv); connected = dsu.find(comps[0]); } return 0; }
-   - 小结：代码可读入数据并输出合法操作序列。
+    - 小结：代码可读入数据并输出合法操作序列。
 5. **自测验证**：样例1：N=4,M=5，边含自环和重边，分量数2，K=1。代码输出'1\n1 1 3'（或等效），与样例一致。样例2：已连通，K=0，输出'0'。样例3：N=5,M=4全自环在3，分量数5，K=4，代码输出4次重连（如1 3 5, 2 3 4, 3 3 1, 4 3 2），使全连通，符合题目要求。
-   - 小结：样例验证通过，逻辑正确。
+    - 小结：样例验证通过，逻辑正确。
 
 ```cpp
 #include <bits/stdc++.h>
@@ -1186,8 +1183,7 @@ int main(){
 
 #### 过程评估判定
 
-- 定位：
-  - 逻辑缺陷 · 第4步 · fatal：构造实现中盲目顺序消耗spare边，且用 fu == y（y为弹出的未连通分量代表整数，未做dsu.find）决定是否将边连到已连通分量connected。当spare边均来自同一非connected分量（如全为某节点自环）时，可能导致最后一步 orig == newserv（自连，违反操作必须连到不同服务器的要求）且connected分量始终未参与合并，最终全图不连通。示例：N=4, M=3, 边全为(2,2)自环，comps=[1,2,3,4]，代码依次将2连4、2连3，最后y=2时 fu≠2 而 newserv=2，输出“* 2 2”自连，节点1孤立，未达成连通。
+1. **逻辑缺陷** · 第4步 · **fatal**：构造实现中盲目顺序消耗spare边，且用 fu == y（y为弹出的未连通分量代表整数，未做dsu.find）决定是否将边连到已连通分量connected。当spare边均来自同一非connected分量（如全为某节点自环）时，可能导致最后一步 orig == newserv（自连，违反操作必须连到不同服务器的要求）且connected分量始终未参与合并，最终全图不连通。示例：N=4, M=3, 边全为(2,2)自环，comps=[1,2,3,4]，代码依次将2连4、2连3，最后y=2时 fu≠2 而 newserv=2，输出“* 2 2”自连，节点1孤立，未达成连通。
     - 证据：代码段：while(!unconnected.empty()){ auto [id,u,v]=spare[idx++]; int y=unconnected.back(); unconnected.pop_back(); int fu=dsu.find(u); int orig=u; int newserv=(fu==y)?connected:y; cout<<id<<' '<<orig<<' '<<newserv<<'\n'; dsu.unite(orig,newserv); connected=dsu.find(comps[0]); } 当 y==orig 且 fu!=y 时 newserv==orig 导致非法自连且connected孤立。
 
 ### C2029 · cf2241f
@@ -1412,15 +1408,15 @@ For the third test case, it can be shown that Bob can guarantee a win irrespecti
 最终答案：Alice wins iff the total number of inversions is odd or there exists a split point with an odd number of '1's in the prefix and an odd number of '0's in the suffix; otherwise Bob wins.
 
 1. **理解题意**：题意：给定一个长度为 n 的 01 串 s，Alice 和 Bob 轮流操作。每次必须选出一个子序列，该子序列中逆序对（i<j 且 s[i]='1', s[j]='0'）的数量为奇数，然后将其从原串中删除（剩余字符保持相对顺序）。不能操作者输。输入：t 组测试，每组给 n 和 s，∑n≤2e5。输出每组胜者（Alice 或 Bob）。关键约束：子序列任意选，逆序对只能由 '1' 在 '0' 前产生。
-   - 小结：这是一个公平组合游戏，需判断先手是否有必胜策略。
+    - 小结：这是一个公平组合游戏，需判断先手是否有必胜策略。
 2. **算法思路**：分析：若整个串逆序对总数 inv 为奇数，Alice 直接选整个串删除，留空串给 Bob，必胜。若 inv 为偶数，则不能直接全删。注意到非递减串（形如 0*1*，即没有逆序对）是必败态（P态），因为没有任何奇数逆序对子序列可删。若 Alice 能删掉一个奇数逆序对子序列，使得剩下的串为非递减串（0*1*），则她留给 Bob 一个 P 态，从而必胜。剩下非递减串等价于存在一个分割点 k（0≤k≤n），保留前 k 个字符中的 '0' 和后 n-k 个字符中的 '1'，删掉的是前 k 个中的 '1' 和后 n-k 个中的 '0'，这些被删字符构成的子序列形如 1...10...0，其逆序对数 = (前缀中1的个数) × (后缀中0的个数)。要使删掉部分逆序对为奇数，必须且只需前缀1的个数奇数 且 后缀0的个数奇数。因此 Alice 在 inv 偶数时必胜 iff 存在某个 k 使 prefix1(k) 为奇数且 suffix0(k) 为奇数。否则 Bob 必胜。
-   - 小结：胜负判定条件：inv%2==1 或 存在 k 使 pref1(k) 奇且 suf0(k) 奇则 Alice 赢，否则 Bob。
+    - 小结：胜负判定条件：inv%2==1 或 存在 k 使 pref1(k) 奇且 suf0(k) 奇则 Alice 赢，否则 Bob。
 3. **复杂度分析**：对每个测试用例：遍历一次计算总逆序对（维护已见 '1' 数，遇 '0' 累加），O(n)；再预处理后缀 '0' 个数数组并遍历检查条件，O(n)。空间 O(n) 存后缀数组（或可 O(1) 空间边算边查，但 O(n) 亦可）。总复杂度 O(∑n) 时间，O(n) 辅助空间，满足 ∑n≤2e5、256MB 限制。
-   - 小结：时间复杂度 O(∑n)，空间 O(n)，完全可行。
+    - 小结：时间复杂度 O(∑n)，空间 O(n)，完全可行。
 4. **代码实现**：#include <iostream> #include <string> #include <vector> using namespace std; int main() { ios::sync_with_stdio(false); cin.tie(nullptr); int t; if (!(cin >> t)) return 0; while (t--) { int n; cin >> n; string s; cin >> s; long long inv = 0; int ones = 0; for (char c : s) { if (c == '1') ones++; else inv += ones; } if (inv % 2 == 1) { cout << "Alice\n"; continue; } vector<int> suf0(n + 1, 0); for (int i = n - 1; i >= 0; i--) { suf0[i] = suf0[i + 1] + (s[i] == '0'); } bool ok = false; int pref1 = 0; for (int i = 0; i < n; i++) { if (s[i] == '1') pref1++; if (pref1 % 2 == 1 && (suf0[i + 1] % 2 == 1)) { ok = true; break; } } cout << (ok ? "Alice" : "Bob") << "\n"; } return 0; }
-   - 小结：完整可运行 C++ 代码已实现上述逻辑。
+    - 小结：完整可运行 C++ 代码已实现上述逻辑。
 5. **自测验证**：用题目样例验证： 1) 10101: inv=3 奇 -> Alice。输出 Alice。 2) 0100: inv=2 偶；前缀1数：k=3(prefix '010')时 pref1=1奇，suf0[4]=1奇 -> ok -> Alice。输出 Alice。 3) 011001: inv=4 偶；检查所有 k：pref1 分别为 0,0,1,2,2,2,3，对应 suf0 为 3,3,2,2,1,1,0，无同时奇数 -> Bob。输出 Bob。 与样例输出一致，逻辑正确。
-   - 小结：样例全部通过，算法正确。
+    - 小结：样例全部通过，算法正确。
 
 ```cpp
 #include <iostream>
@@ -1469,8 +1465,7 @@ int main() {
 
 #### 过程评估判定
 
-- 定位：
-  - 跳步推导 · 第2步 · fatal：步骤2给出充要条件：总逆序对奇或存在分割点k使前缀1奇且后缀0奇则Alice赢，否则Bob必胜。前置推理仅证明了充分性（存在k可删对应子序列留非递减串这一P态而胜；inv奇全删胜），未证明必要性（不存在k时Alice任何合法移动均无法抵达必胜态，从而Bob有必胜策略）。结论中的“否则Bob必胜”及iff的逆向缺乏推导，属推理跳跃/断言未证。
+1. **跳步推导** · 第2步 · **fatal**：步骤2给出充要条件：总逆序对奇或存在分割点k使前缀1奇且后缀0奇则Alice赢，否则Bob必胜。前置推理仅证明了充分性（存在k可删对应子序列留非递减串这一P态而胜；inv奇全删胜），未证明必要性（不存在k时Alice任何合法移动均无法抵达必胜态，从而Bob有必胜策略）。结论中的“否则Bob必胜”及iff的逆向缺乏推导，属推理跳跃/断言未证。
     - 证据：步骤2原文结论：'胜负判定条件：inv%2==1 或 存在 k 使 pref1(k) 奇且 suf0(k) 奇则 Alice 赢，否则 Bob'。前述内容只说明非递减串是必败态且能一步到达则赢，未论证不能一步到达非递减态时即输。移除'否则 Bob'及iff反向后，剩余链条无法重建无k时Bob胜，故为fatal缺口。沙盒执行全部用例通过表明最终答案正确，符合沉默失败。
 
 ## 5. 修正闭环
