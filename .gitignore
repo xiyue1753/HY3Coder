@@ -32,7 +32,9 @@ data/cache/
 /data/cases/
 
 # 一次性/历史脚本（抓题登录、一次性数据修正、demo 展示工作台；
-# 仅本地保留以便复核，不随公开仓库发布）
+# 仅本地保留以便复核，不随公开仓库发布。
+# 例外：scripts/fix_extreme_mislabel.py —— 它记录交付题集的难度极端错标如何校正，
+# 复核与复现都需要，随仓库发布，故不在下面的清单里）
 scripts/ingest_abc.py
 scripts/ingest_cf.py
 scripts/ingest_cf_github.py
@@ -42,7 +44,6 @@ scripts/batch_ingest_cf.py
 scripts/cf_cookie_session.py
 scripts/build_questions.py
 scripts/fix_bad_cases.py
-scripts/fix_extreme_mislabel.py
 scripts/fix_question_format.py
 scripts/rewrite_reference.py
 scripts/verify_ref_rewrite.py
@@ -57,6 +58,17 @@ scripts/make_exec_evidence.py
 # 大体积公开镜像题集（TACO algorithm.jsonl ~82MB，可由公开 HF 数据源重建，
 # 不入公开仓库；完整数据保存在本地 dataset-full 分支）
 data/questions/algorithm.jsonl
+
+# 交互演示的运行期留档（题池/会话快照/判定记录）：现场生成，不进统计，不入库
+data/questions/interactive.jsonl
+data/outputs/interact_sessions.jsonl
+data/outputs/eval_interactive.jsonl
+data/outputs/refine_interactive.jsonl
+
+# 演示录像等大体积媒体（本地留存，不入库）
+*.mp4
+*.mov
+*.mkv
 
 # 临时展示/归档（一次性展示页与中间 json，不入库）
 /archive/

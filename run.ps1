@@ -18,11 +18,17 @@
 # =============================================================================
 param()
 
-# 若用户显式指定了解释器则优先使用，否则用 tensor_env 的 python
+# 若用户显式指定了解释器则优先使用，否则按候选顺序找 tensor_env 的 python
 if ($env:REX_PYTHON) {
     $PY = $env:REX_PYTHON
 } else {
-    $PY = "D:\.conda\envs\tensor_env\python.exe"
+    $candidates = @(
+        (Join-Path $env:USERPROFILE ".conda\envs\tensor_env\python.exe"),
+        $(if ($env:CONDA_PREFIX) { Join-Path $env:CONDA_PREFIX "python.exe" }),
+        "D:\.conda\envs\tensor_env\python.exe"     # 本机 conda 装在 D 盘时的位置
+    )
+    $PY = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    if (-not $PY) { $PY = "python" }   # 都没有就退回 PATH 上的 python
 }
 
 if (-not (Test-Path $PY)) {
