@@ -47,10 +47,10 @@ web/ 仪表盘（总览/单题回放/golden/抽检/交互式解题）  ·  cli.p
 |---|---|---|---|---|---|
 | 算法·公开对照 | TACO（agentica-org/DeepCoder-Preview-Dataset） | Apache-2.0 | 350 活跃 | difficulty∈{easy→basic, medium→medium, hard→hard} | 官方难度标签 |
 | 算法·公开集(弃用) | CodeForces 镜像（同上源） | Apache-2.0 | 350 deprecated | — | 已标 metadata.deprecated，抽样/评测自动排除 |
-| 算法·自建 | AtCoder ABC（scripts/ingest_abc.py 抓取） | 竞赛题（抓题面+公开 AC 解） | 175 | 官方分值 100→basic, 200-400→medium, 500+→hard | 官方分值 + layer_basis |
+| 算法·自建 | AtCoder ABC（公开赛题独立产线抓取） | 竞赛题（抓题面+公开 AC 解） | 175 | 官方分值 100→basic, 200-400→medium, 500+→hard | 官方分值 + layer_basis |
 
 - 自建题产线（响应任务书"公开集为主 + 自建补充"）：
-  `ingest_abc.py`（抓题面+AC 解）→ 官方样例 + 人工边界用例（gen_hidden_cases.py，期望由参考解跑出）→ `abc_selfbuilt.jsonl`；
+  独立抓取产线（抓题面 + AC 解）→ 官方样例 + 人工边界用例（gen_hidden_cases.py，期望由参考解跑出）→ `abc_selfbuilt.jsonl`；
   多解构造题以 `judge=special` 入库（SPJ checker，见 §5.5）。独立文件便于扩充，web/browse 合并展示；
   进入 run-eval 前需并入评估池（见 §10 数据流说明）。
 - 分层抽样（`datasets/sampling.py`，自动过滤 deprecated）：
@@ -167,8 +167,8 @@ class RefineRecord(BaseModel):
 - `checker_code`/`checker_language`：`special` 模式的判定程序（可信代码，Python/C++，
   由人工为题目编写）。stdin 协议见 `executor/judge.py`：`原题输入\n@@REX_USER_OUTPUT@@\n被测输出`，
   输出 `AC` 表示合法。
-- 接入点：① 评测 `run_test_cases(judge=..., checker_code=...)` ② 入库
-  `ingest_abc.py --judge special --checker-file ...`（此时自动找 AC 也用 checker 而非样例比对）。
+- 接入点：① 评测 `run_test_cases(judge=..., checker_code=...)` ② 入库产线以
+  `--judge special --checker-file ...` 标注（此时自动找 AC 也用 checker 而非样例比对）。
 - checker 运行仍走沙盒（继承超时/输出上限），不信任输入输出内容。
 
 自建题 SPJ 清单（5 题，checker 在 `scripts/checkers/`）：

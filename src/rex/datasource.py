@@ -1,16 +1,15 @@
 """数据源注册中心：全项目唯一权威的数据文件声明。
 
-设计目标：**数据源与调用解耦**——题集/评测/refine/golden/audit/cases 等一切
+设计目标：**数据源与调用解耦**——题集/评测/refine/golden/audit 等一切
 数据文件的物理位置只在本模块声明一次，其余代码（store / api / cli /
-make_report / 前端提示 / ingest 脚本）一律通过本模块的访问器取路径，
+make_report / 前端提示）一律通过本模块的访问器取路径，
 不再手写文件名。以后"删/加/改数据源"只改这里，调用方零改动。
 
 组织方式：
     - 以**数据集 dataset** 为主维度：每个数据集是一道题池（题集文件 +
       评测输出文件 + refine 输出文件）。当前活跃数据集：abc_selfbuilt
-      （AtCoder ABC 自建 175 题）、cf_selfbuilt（Codeforces 自建，抓取中）。
-    - 非数据集类 artifact 单独注册：golden（真实）、audit、
-      cases 用例目录、交互评测输出。
+      （AtCoder ABC 自建 175 题）、cf_selfbuilt（Codeforces 自建 184 题）。
+    - 非数据集类 artifact 单独注册：golden（真实）、audit、交互评测输出。
 
 历史命名（无需再理解）：
     - eval_selfbuilt_all.jsonl  = abc_selfbuilt 数据集的正式评测输出
@@ -77,7 +76,7 @@ DATASETS: tuple[Dataset, ...] = (
     ),
     Dataset(
         key="cf_selfbuilt",
-        label="Codeforces 自建（175 题）",
+        label="Codeforces 自建（184 题）",
         enabled=True,
         questions="cf_selfbuilt.jsonl",
         evals="eval_cf_all_t0.jsonl",          # 正式评测输出（temperature=0 全量重跑）
@@ -97,8 +96,6 @@ DEPRECATED_KEYS = ("algorithm", "taco", "math")
 INTERACTIVE_EVAL = "eval_interactive.jsonl"
 #: 人工抽检标注记录。
 AUDIT_FILE = "audit_records.jsonl"
-#: 测试用例源目录（data/cases，ingest 脚本生成）。
-CASES_DIRNAME = "cases"
 #: 真实评测检出 golden 文件名（合成 golden_algorithm.jsonl 已删除，常量保留兼容读取，文件不存在时自然为空）。
 GOLDEN_SYNTHETIC_FILE = "golden_algorithm.jsonl"
 GOLDEN_REAL_FILE = "golden_real_algorithm.jsonl"
@@ -139,10 +136,6 @@ def outputs_dir(root: str | Path) -> Path:
 
 def golden_dir(root: str | Path) -> Path:
     return Path(root) / "data" / "golden"
-
-
-def cases_dir(root: str | Path) -> Path:
-    return Path(root) / "data" / CASES_DIRNAME
 
 
 # -- 文件定位 ----------------------------------------------------------------
@@ -253,9 +246,9 @@ def _read_jsonl(path: Path, model) -> list:
 # ---------------------------------------------------------------------------
 __all__ = [
     "Dataset", "DATASETS", "DEPRECATED_KEYS",
-    "INTERACTIVE_EVAL", "GOLDEN_FILES", "AUDIT_FILE", "CASES_DIRNAME",
+    "INTERACTIVE_EVAL", "GOLDEN_FILES", "AUDIT_FILE",
     "active_datasets", "dataset", "dataset_by_questions",
-    "questions_dir", "outputs_dir", "golden_dir", "cases_dir",
+    "questions_dir", "outputs_dir", "golden_dir",
     "questions_path", "evals_path", "refine_path",
     "interactive_evals_path", "golden_paths", "audit_path",
     "active_eval_filenames",

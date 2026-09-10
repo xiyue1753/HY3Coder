@@ -403,6 +403,272 @@ BOUNDARY_INPUTS: dict[str, list[str]] = {
 }
 
 
+# ============ 补缺批次（2026-09-10）：原先缺隐藏用例的题 ============
+BOUNDARY_INPUTS.update({
+    # 609A USB Flash Drives: 单盘刚好 / 两盘需全用 / 满量
+    "cf609a": ["1\n1\n1", "2\n1000\n500\n500", "100\n100000\n" + "1000\n" * 100],
+    # 1811B Conveyor Belts: n=2 最小 / 满 n
+    "cf1811b": ["2\n2 1 1 1 2\n4 4 4 1 1", "1\n1000000000 1 1 1000000000 1000000000"],
+    # 1909F1 Small Permutation: n=1 两态 / 混合
+    "cf1909f1": ["1\n1\n0", "1\n1\n1", "2\n2\n0 2\n3\n0 1 3"],
+    # 950B Intercepted Message: 单块 / 等和各异
+    "cf950b": ["1 1\n1\n1", "2 2\n1 2\n2 1", "3 1\n1 2 3\n6"],
+    # 1996G Penacony: 最小 n / 完全图
+    "cf1996g": ["1\n3 1\n1 2", "1\n3 3\n1 2\n1 3\n2 3"],
+    # 1968G2 Division + LCP: 单字符 / 全同 / 非回文
+    "cf1968g2": ["1\n1 1 1\na", "1\n3 1 3\naaa", "1\n2 2 2\nab"],
+    # 1491D Zookeeper: u=v / u>v 极值
+    "cf1491d": ["1\n1 1", "2\n1 2\n1073741823 1"],
+    # 1009C Annoying Present: n=m=1 / 极值 x,d
+    "cf1009c": ["1 1\n0 0", "2 2\n-1000 1000\n1000 -1000"],
+    # 725B Food on the Plane: 最小行 / 行上界
+    "cf725b": ["1a", "1000000000000000000f", "6c"],
+    # 275B Convex Shape: 2x2 对角 / 单行
+    "cf275b": ["2 2\nBW\nWB", "1 3\nBBB"],
+    # 1073D Berland Fair: 单摊 / T 上界
+    "cf1073d": ["1 1\n1", "2 1000000000000000000\n1000000000 1000000000"],
+    # 513B1 Permutations(easy): n=1 / n 上界
+    "cf513b1": ["1 1", "4 1", "8 1"],
+    # 76D Plus and xor: 全零 / 64 位上界
+    "cf76d": ["0\n0", "18446744073709551615\n18446744073709551615", "0\n18446744073709551615"],
+    # 1912E Evaluate It and Back Again: 零 / 极值（special）
+    "cf1912e": ["0 0", "1000000000000000000 -1000000000000000000"],
+    # 508A Pasha and Pixels: 1x1 / 4 格成方块 / 格上界
+    "cf508a": ["1 1 1\n1 1", "2 2 4\n2 2\n1 1\n2 1\n1 2", "1000 1000 1\n1000 1000"],
+    # 1821D Black Cells: n=1 / 段相邻 / l,r 上界
+    "cf1821d": ["1\n1 1\n1\n1", "1\n3 10\n1 5 10\n2 6 11", "1\n2 1000000000\n1 1000000000\n1 1000000000"],
+    # 1868C Travel Plan: n=1 / n 上界
+    "cf1868c": ["1\n1 1", "1\n1000000000000000000 100000", "1\n1 100000"],
+    # 1988D Omnipotent Monster Killer: n=1 / 两测试点各最小
+    "cf1988d": ["1\n1\n1", "2\n2\n1 2\n1 2\n3\n5 4 3\n1 2\n2 3"],
+    # 617C Watering Flowers: 单花 / 两花各归一方
+    "cf617c": ["1 0 0 1 1\n2 2", "2 0 0 10 0\n1 0\n0 1"],
+    # 912B New Year's Eve: k=1 / k=n / 上界
+    "cf912b": ["1 1", "1000000000000000000 1", "2 2", "1000000000000000000 1000000000000000000"],
+    # 1486B Eastern Exhibition: n=1 / 两点 / 重合点
+    "cf1486b": ["1\n1\n0 0", "1\n2\n0 0\n1000000000 1000000000", "1\n3\n0 0\n0 0\n0 0"],
+    # 510B Fox And Two Dots: 最小 2x2 / 全同
+    "cf510b": ["2 2\nAA\nAA", "2 2\nAB\nBA", "3 3\nAAA\nABA\nAAA"],
+    # 1249E By Elevator or Stairs: n=2 最小 / c 上界 / 三步
+    "cf1249e": ["2 1\n1\n1", "2 1000\n1000\n1000", "3 1\n1 1\n1 1"],
+    # 106E Space Rescuers: n=1 / 对角极值
+    "cf106e": ["1\n0 0 0", "2\n-10000 -10000 -10000\n10000 10000 10000"],
+    # 1271A Suits: 全 1 / 全上界
+    "cf1271a": ["1\n1\n1\n1\n1\n1", "100000\n100000\n100000\n100000\n1000\n1000"],
+    # 719A Vitya in the Countryside: n=1 两端 / 上升下降
+    "cf719a": ["1\n0", "1\n15", "2\n0 1", "2\n15 14"],
+    # 1956D Nene and the Mex Operator: n=1 / n 上界
+    "cf1956d": ["1\n0", "18\n" + "10000000 " * 17 + "10000000"],
+    # 105B Dark Assembly: n=k=1 / n=8 全档
+    "cf105b": [
+        "1 1 1\n1 0",
+        "8 8 9999\n9999 100\n1 0\n1 10\n1 20\n1 30\n1 40\n1 50\n1 60\n1 70",
+    ],
+    # 1216F Wi-Fi: 无路由位 / 全可放
+    "cf1216f": ["1 1\n1", "1 1\n0", "3 1\n111"],
+    # 1130C Connect: 1x1 / 2x2 全陆
+    "cf1130c": ["1\n1 1\n1 1\n0", "2\n1 1\n2 2\n00\n00"],
+    # 2000D Right Left Wrong: n=2 LR / RL
+    "cf2000d": ["1\n2\n1 1\nLR", "1\n2\n100000 100000\nRL"],
+    # 493B Vasya and Wrestling: 单方 / 平局
+    "cf493b": ["1\n1", "1\n-1", "2\n1\n-1", "2\n1000000000\n-1000000000"],
+    # 744A Hongcow Builds A Nation: 无路 / 星形
+    "cf744a": ["1 0 1\n1", "3 0 1\n2", "3 2 1\n2\n1 2\n2 3"],
+    # 1598A Computer Game: 最小 n / 全陷阱
+    "cf1598a": ["1\n3\n000\n000", "1\n3\n010\n101"],
+    # 1392F Omkar and Landslide: n=1 / 紧邻
+    "cf1392f": ["1\n0", "2\n0 1", "3\n0 1 2"],
+    # 75E Ship's Shortest Path: 起点终点在外侧
+    "cf75e": ["0 -100 0 100\n4\n-10 -10 -10 10 10 10 10 -10", "-100 0 100 0\n4\n-10 -10 -10 10 10 10 10 -10"],
+    # 380C Sereja and Brackets: 单查询 / 嵌套
+    "cf380c": ["()\n1\n1 2", "((()))\n2\n1 6\n2 5"],
+    # 282E Sausage Maximization: 单元素 / 全同极值
+    "cf282e": ["1\n0", "2\n0 0", "3\n1000000000000 1000000000000 1000000000000"],
+    # 2117E Lost Soul: n=2 相同/同值
+    "cf2117e": ["1\n2\n1 2\n1 2", "1\n2\n1 1\n1 1"],
+    # 1351C Skier: 单位移 / 往返
+    "cf1351c": ["1\nS", "1\nNS", "2\nNNN\nSSS"],
+    # 584B Kolya and Tanya: n=1,2 已有 → 3 / 上界
+    "cf584b": ["3", "100000", "5"],
+    # 117A Elevator: 单乘客 / s>f 反向 / 上界
+    "cf117a": ["1 2\n1 2 0", "2 100000000\n1 100000000 100000000\n100000000 1 0"],
+    # 258B Little Elephant and Elections: 下界 / 上界
+    "cf258b": ["7", "1000000000"],
+    # 1971H ±1: n=2 最小 / 反号
+    "cf1971h": ["1\n2\n1 2\n-1 -2\n2 -2", "1\n2\n1 -1\n1 -1\n1 -1"],
+    # 325A Square and Rectangles: 单位方格 / 满坐标
+    "cf325a": ["1\n0 0 1 1", "1\n0 0 31400 31400"],
+    # 1196D2 RGB Substring: n=k=1 / 全同 / 子串=2
+    "cf1196d2": ["1\n1 1\nR", "1\n3 3\nRGB", "1\n3 2\nBBB"],
+    # 146B Lucky Mask: 相邻 / b 上界幸运数
+    "cf146b": ["1 4", "100000 4", "100000 44444"],
+    # 327C Magic Five: 单字符 k=1 / 全零 k 上界
+    "cf327c": ["1\n1", "0\n1000000000", "55\n1000000000"],
+    # 444A DZY Loves Physics: 无边 / 双点一边
+    "cf444a": ["1 0\n1000000", "2 1\n1000000 1000000\n1 2 1000"],
+    # 895C Square Subsets: 单元素 1 / 70 / 重复
+    "cf895c": ["1\n1", "1\n70", "2\n70 70"],
+    # 1717B Madoka and Underground Competitions: n=k=1 / n=4,k=2
+    "cf1717b": ["1\n1 1 1 1", "1\n4 2 3 1"],
+    # 1260A Heating: 全 1 / 全上界 / c=1,s 大
+    "cf1260a": ["1\n1 1", "1\n10000 10000", "1\n1 10000"],
+    # 1139D Steps to One: m=3 / 上界
+    "cf1139d": ["3", "100000"],
+    # 71D Solitaire: 最小 3x3 同花顺
+    "cf71d": ["3 3\n2S 3S 4S\n5S 6S 7S\n8S 9S TS"],
+    # 1166E LCMs Must be Large: 单日 / 双日互补
+    "cf1166e": ["1 2\n1 1", "1 2\n1 2", "2 3\n1 1\n1 3"],
+    # 1641C Anonymity Is Important: 最简 / 条件+查询
+    "cf1641c": ["1 1\n1 1", "1 2\n0 1 1 0\n1 1"],
+    # 230B T-primes: 1 / 上界 / 重复平方数
+    "cf230b": ["1\n1", "1\n1000000000000", "2\n4 4"],
+    # 1929B Sasha and the Drawing: k 最小 / 满对角 / n 上界
+    "cf1929b": ["1\n2 1", "1\n2 6", "1\n100000000 399999998"],
+    # 1169A Circle Metro: n=4 两排布
+    "cf1169a": ["4 1 2 3 4", "4 1 4 2 3"],
+    # 1305E Kuroni and the Score Distribution: m 最小 / 满 n（special）
+    "cf1305e": ["1 0", "1 1", "5000 0", "5000 1000000000"],
+    # 844A Diversity: 单字符 / 全字母 / 不可行
+    "cf844a": ["a\n1", "a\n26", "abcdefghijklmnopqrstuvwxyz\n26"],
+    # 513B2 Permutations(hard): n=1 / n=50
+    "cf513b2": ["1 1", "50 1"],
+    # 69D Dot: d=1 / 大向量
+    "cf69d": ["0 0 1 1\n1 0", "0 0 1 200\n200 0"],
+    # 960D Full Binary Tree Queries: 单查询 / 旋转+查询
+    "cf960d": ["1\n3 1", "2\n1 1 0\n3 1"],
+    # 825C Multi-judge Solving: 单题 / 上界
+    "cf825c": ["1 1\n1", "1 1000000000\n1000000000"],
+    # 332A Down the Hatch!: 单回合 a / b / 长串
+    "cf332a": ["4\na", "4\nb", "4\nabbbba"],
+    # 49B Sum: 单边 / 双边上界
+    "cf49b": ["1 1000", "1000 1", "1000 1000"],
+    # 1974C Beautiful Triple Pairs: n=3 全同 / 全异
+    "cf1974c": ["1\n3\n1 1 1", "1\n3\n1 2 3"],
+    # 1179A Valeriy and Deque: q=1 / 大 m
+    "cf1179a": ["2 1\n1 2\n1", "2 2\n1 1\n1000000000000000000\n1"],
+    # 1054C Candies Distribution: n=1 / 两孩全零（special）
+    "cf1054c": ["1\n0\n0", "1\n1\n1", "2\n0 0\n0 0"],
+    # 859B Lazy Security Guard: 最小 / 上界
+    "cf859b": ["1", "1000000", "2"],
+    # 1485F Copy or Prefix Sum: 单元素 正/负/零
+    "cf1485f": ["1\n1\n0", "1\n1\n1000000000", "1\n1\n-1000000000"],
+    # 1077E Thematic Contests: 单题 / 同题 / 三种
+    "cf1077e": ["1\n1", "2\n1 1", "3\n1 1 1"],
+    # 2121H Ice Baby: 单区间 / 两区间极值
+    "cf2121h": ["1\n1\n1 1", "1\n2\n1 1\n1 1000000000"],
+    # 1443E Long Permutation: 单查询 / 旋转+查询
+    "cf1443e": ["2 1\n1 1 1", "2 2\n1 1 2\n2 1"],
+    # 1327C Game with Chips: 2x2 单芯片 / 3x3 单芯片（special）
+    "cf1327c": ["2 2 1\n1 1\n2 2", "3 3 1\n1 1\n3 3"],
+    # 1185C2 Exam in BerSU: 单学生 / 全满时
+    "cf1185c2": ["1 1\n1", "2 100\n100 100"],
+    # 54A Presents: 无假日 / 全假日 / 部分假日
+    "cf54a": ["1 1\n0", "365 365\n0", "365 1\n3 1 2 3"],
+    # 312B Archer: 全 1 / 极小概率
+    "cf312b": ["1 1 1 1", "1 100 1 100"],
+    # 1612C Chat Ban: k=1 / 上界
+    "cf1612c": ["1\n1 1", "1\n1000000000 1000000000000000000"],
+    # 1391C Cyclic Permutations: n=3 / 上界
+    "cf1391c": ["3", "1000000"],
+    # 1062A A Prank: 单元素 / 相邻 / 上界
+    "cf1062a": ["1\n1", "1\n1000", "2\n1 2"],
+    # 352A Jeff and Digits: 单 0 / 单 5 / 九个 5
+    "cf352a": ["1\n0", "1\n5", "9\n5 5 5 5 5 5 5 5 5"],
+    # 1334E Divisor Paths: D=1 / D=2
+    "cf1334e": ["1\n1\n1 1", "2\n1\n2 1"],
+    # 1918D Blocking Elements: 单元素 / 上界
+    "cf1918d": ["1\n1\n1", "1\n1\n1000000000"],
+    # 1798E Multitest Generator: n=2 两态
+    "cf1798e": ["1\n2\n1 1", "1\n2\n1 2"],
+    # 500B New Year Permutation: n=1 / 可交换对
+    "cf500b": ["1\n1\n0", "2\n2 1\n01\n10"],
+    # 1593E Gardener and Tree: 单点 / 两点 / 大 k
+    "cf1593e": ["1\n\n1 1", "1\n\n2 1\n1 2", "1\n\n2 200000\n1 2"],
+    # 2230C Arrange the Numbers in a Circle: 单元素 / 重复
+    "cf2230c": ["1\n1\n1", "1\n1\n1000000000", "1\n2\n1 1"],
+    # 371C Hamburgers: 单料 r=0 / 大 r
+    "cf371c": ["B\n1 1 1\n1 1 1\n0", "S\n1 1 1\n1 1 1\n1000000000000"],
+    # 1253B Silly Mistake: 单人入 / 出入 / 一对（special）
+    "cf1253b": ["1\n1", "1\n-1", "2\n1 -1"],
+    # 27B Tournament: 缺两场之一（special）
+    "cf27b": ["3\n1 2\n1 3", "3\n2 1\n3 1"],
+    # 915C Permute Digits: 单位数 / 相同
+    "cf915c": ["1\n1", "9\n9"],
+    # 810A Straight: 单科满分 / 双科满分
+    "cf810a": ["1 1\n1", "2 100\n100 100"],
+    # 622D Optimal Number Permutation: 最小 / 上界
+    "cf622d": ["1", "2", "500000"],
+    # 1739E Cleaning Robot: 全净 / 一格脏
+    "cf1739e": ["2\n00\n00", "2\n00\n01"],
+    # 459C Pashmak and Buses: 最小 / 上界
+    "cf459c": ["1 1 1", "2 1 1", "1000 1000000000 1000"],
+    # 1696D Permutation Graph: n=1 / 升序 / 降序
+    "cf1696d": ["1\n1\n1", "1\n2\n1 2", "1\n2\n2 1"],
+    # 1520E Arranging The Sheep: 单格空 / 单格羊 / 两格
+    "cf1520e": ["1\n1\n.", "1\n1\n*", "1\n2\n.*"],
+    # 1257D Yet Another Monster Killing: 单怪单英 / 上界
+    "cf1257d": ["1\n1\n1\n1\n1 1", "1\n1\n1000000000\n1\n1000000000 1"],
+    # 1991C Absolute Zero: 单元素 0 / 上界（special）
+    "cf1991c": ["1\n1\n0", "1\n1\n1000000000"],
+    # 568A Primes or Palindromes: p/q ≤ 1 三态
+    "cf568a": ["1 1", "1 2", "3 2"],
+    # 44B Cola: 单升 / 全上界
+    "cf44b": ["1 0 0 0", "10000 5000 5000 5000"],
+    # 1042B Vitamins: 单维生素 / 全维生素 / 大价
+    "cf1042b": ["1\n1 A", "1\n1 ABC", "1\n100000 ABC"],
+    # 1272A Three Friends: 三点重合 / 两端
+    "cf1272a": ["1\n1 1 1", "1\n1000000000 1 1000000000"],
+    # 1230B Ania and Minimizing: 不改 / 改满 / 两位
+    "cf1230b": ["1 0\n1", "1 1\n1", "2 1\n10"],
+    # 20C Dijkstra?: m=0 / 单边（special）
+    "cf20c": ["2 0", "2 1\n1 2 1"],
+    # 1408D Searchlights: 同点 / 极值
+    "cf1408d": ["1 1\n0 0\n0 0", "1 1\n1000000 1000000\n0 0"],
+    # 915D Almost Acyclic Graph: 单向 / 双向环
+    "cf915d": ["2 1\n1 2", "2 2\n1 2\n2 1"],
+    # 53C Little Frog: 最小 / 偶数 / 上界（special）
+    "cf53c": ["1", "4", "10000"],
+    # 131C The World is a Theatre: 边界组合 4+1 / 满
+    "cf131c": ["4 1 5", "30 30 60"],
+    # 792D Paths in Complete Binary Tree: n=1 / n=3 / n=7
+    "cf792d": ["1 1\n1\nU", "3 1\n1\nU", "7 2\n1\nL\n7\nU"],
+    # 597B Restaurant: 单订单 / 相邻
+    "cf597b": ["1\n1 1", "2\n1 2\n2 3"],
+    # 645B Mischievous Mess Makers: 单牛 / 上界
+    "cf645b": ["1 1", "100000 100000"],
+    # 682B Alyona and Mex: 单元素 / 上界 / 两位
+    "cf682b": ["1\n1", "1\n1000000000", "2\n1 2"],
+    # 352B Jeff and Periods: 单元素 / 上界值 / 相邻对
+    "cf352b": ["1\n1", "1\n100000", "2\n1 1"],
+    # 437B The Child and Set: 最小 / 上界 / 不可行（special）
+    "cf437b": ["1 1", "100000 100000", "100000 1"],
+    # 991C Candies: n=1 / 上界
+    "cf991c": ["1", "1000000000000000000"],
+    # 166E Tetrahedron: n=1 / 上界
+    "cf166e": ["1", "10000000"],
+    # 292B Network Topology: 星形 / 链式
+    "cf292b": ["4 3\n2 1\n2 3\n2 4", "5 4\n1 2\n2 3\n3 4\n4 5"],
+    # 384A Coder: 1 / 3 / 4（special）
+    "cf384a": ["1", "3", "4"],
+    # 437C The Child and Toy: 无边 / 单边
+    "cf437c": ["1 0\n1", "2 1\n1 2\n1 2"],
+    # 1102C Doors Breaking and Repairing: 单门最小 / 全上界
+    "cf1102c": ["1 1 1\n1", "1 100000 100000\n100000"],
+    # 15C Industrial Nim: 最小 / x,m 上界
+    "cf15c": ["1\n1 1", "1\n10000000000000000 1"],
+    # 707B Bakery: 单边有仓 / k=0 无仓
+    "cf707b": ["4 1 1\n1 2 5\n3", "2 1 0\n1 2 1"],
+    # 1250A Berstagram: 单帖单赞 / 同帖重复赞
+    "cf1250a": ["1 1\n1", "1 2\n1 1"],
+    # 61D Eternal Victory: 单城 / 零权边
+    "cf61d": ["1", "2\n1 2 0"],
+    # 755B PolandBall and Game: 无交集 / 有交集
+    "cf755b": ["1 1\na\nb", "1 1\na\na"],
+    # 347A Difference Row: 两点相同 / 升序
+    "cf347a": ["2\n0 0", "3\n1 2 3"],
+})
+
+
 def run_output(code: str, inp: str) -> tuple[str | None, str]:
     """运行参考解，返回 (stdout, error)。"""
     res = run_code(code, stdin=inp, timeout=20, language="cpp")

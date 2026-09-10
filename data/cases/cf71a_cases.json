@@ -1,6 +1,0 @@
-[
-  {"input": "4\nword\nlocalization\ninternationalization\npneumonoultramicroscopicsilicovolcanoconiosis", "output": "word\nl10n\ni18n\np43s", "hidden": false},
-  {"input": "1\nword", "output": "word", "hidden": true},
-  {"input": "1\naaaaaaaaaa", "output": "aaaaaaaaaa", "hidden": true},
-  {"input": "2\nab\nabcdefghijk", "output": "ab\na9k", "hidden": true}
-]

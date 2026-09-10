@@ -1,9 +1,0 @@
-[
-  {"input": "21", "output": "1", "hidden": false},
-  {"input": "998244353", "output": "0", "hidden": false},
-  {"input": "264428617", "output": "32", "hidden": false},
-  {"input": "1", "output": "0", "hidden": true},
-  {"input": "2", "output": "0", "hidden": true},
-  {"input": "2000000000000", "output": "0", "hidden": true},
-  {"input": "999999999999", "output": "1", "hidden": true}
-]

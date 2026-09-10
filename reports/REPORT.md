@@ -111,12 +111,16 @@ diff_score≥80 的极高档仅 5 题（[60,100) 共 35 题），样本太小—
 ### A1098（algorithm / hard）
 - 判定：**SILENT_FAILURE**（置信度 0.95）
 - 题目：Score : $400$ points
-
-
 
-
 
-
+
+
+
+
+
+
+
+
 
 ### Problem Statement
 There is a sequence $A = (…
@@ -135,12 +139,16 @@ You are given a tree with $N$ vertic…
 ### A1164（algorithm / medium）
 - 判定：**SILENT_FAILURE**（置信度 0.90）
 - 题目：Score : $425$ points
-
-
 
-
 
-
+
+
+
+
+
+
+
+
 
 ### Problem Statement
 There is an $N \times N$ g…
@@ -150,12 +158,16 @@ There is an $N \times N$ g…
 ### A1174（algorithm / hard）
 - 判定：**SILENT_FAILURE**（置信度 0.90）
 - 题目：Score : $450$ points
-
-
 
-
 
-
+
+
+
+
+
+
+
+
 
 ### Problem Statement
 There are $N$ servers numb…
@@ -252,12 +264,16 @@ Al…
 
 - **`A1042`**（AtCoder-自建 · `abc257_d` · medium）
   - 题面：Score : $400$ points
-
-
 
-
 
-
+
+
+
+
+
+
+
+
 
 ### Problem Statement
 There are $N$ trampolines on a two-dimensional planar town where Takahashi lives.  The $i$-th trampoline i…
@@ -584,6 +600,8 @@ severity 驱动 verdict 的每条规则都有单测覆盖：fatal 加 CORRECT �
 | C2011 cf144b | `2 2 3 3\n0`、退化矩形且 `r=0` | `n≥1`、`xa≠xb,ya≠yb`、`r≥1` | 合法 n=1 / 合法矩形+r=1 |
 
 **影响与实证**：回验（用修复前题库对同一模型代码重跑比对）确认，被坏用例"错杀"（原答案判定 False、修复后恢复 True）的有 **A1124、A1155、C2011 三题**——模型代码在合法输入域实际全部正确（修复后用例全过，A1124 另经 3000 组随机对拍与参考解 0 不一致）；其中 A1155 的过程评估 fatal（runtime exception）也只在非法输入下触发，属坏用例诱导的误报。其余清除了坏用例的题目修复前后判定一致（如 A1025、C2009 等从未误判），唯一例外是 **A1016——其模型代码编译失败为真实实现缺陷（0% 通过），与 hidden 无关**。这类失败模式（坏用例污染答案判定，过程评估再基于错误的沙盒事实给出误报，如 A1124 的 overflow 误报）是全量复核要拦截的对象。全库答案准确率由复核前的 89.7% 升至 90.5%。
+
+**补缺（2026-09-10）**：此前仍有部分题目因未纳入 `BOUNDARY_INPUTS` 而缺少 hidden 用例（ABC 13 题、CF 129 题）。本次沿用同一方法补齐——为这 142 题各设计 1–4 条合法边界输入，期望输出由参考解跑出，并复用上述核对（自动一致性 + SPECIAL 题 checker 判定），其中 6 条经 checker 判为非法的输入已替换为合法输入（涉 4 题）。补缺后两平台自建集 **359 题全部含 hidden 用例**，hidden 总数由 647 增至 1019，新增用例的一致性校验与 checker 判定全部通过。
 
 ### B.5 边界
 

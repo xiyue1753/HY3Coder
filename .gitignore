@@ -5,10 +5,6 @@
 # 登录脚本与 cookie 数据（含凭证处理，不入 git）
 scripts/cf_login.py
 scripts/cf_cookie_test.py
-data/cases/cf_cookies*.json
-data/cases/ref_originals.json
-# 抓题中间缓存（题面 HTML 等，不入 git）
-data/cases/_batch*_prompts/
 
 # Python
 __pycache__/
@@ -25,14 +21,14 @@ data/outputs/*
 # HF 数据集缓存（中间数据，保留在项目内但不入库）
 data/cache/
 
-# 大体积公开镜像题集（TACO algorithm.jsonl ~82MB，可由 scripts/build_questions.py
-# 从 HF 数据源重建，不入公开仓库；完整数据保存在本地 dataset-full 分支）
+# 大体积公开镜像题集（TACO algorithm.jsonl ~82MB，可由公开 HF 数据源重建，
+# 不入公开仓库；完整数据保存在本地 dataset-full 分支）
 data/questions/algorithm.jsonl
 
 # 临时展示/归档（一次性展示页与中间 json，不入库）
 /archive/
 
-# 展示类 HTML 报告（由 scripts/make_*_html.py 可再生，不入库）
+# 展示类 HTML 报告（本地生成物，不入库）
 /reports/*.html
 
 # 内部开发文档与留档数据（实现日志/抓取指南/真实模型输出留档，

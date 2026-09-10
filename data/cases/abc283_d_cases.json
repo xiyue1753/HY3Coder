@@ -1,6 +1,0 @@
-[
-  {"input": "((a)ba)", "output": "Yes", "hidden": false},
-  {"input": "(a(ba))", "output": "No", "hidden": false},
-  {"input": "(((())))", "output": "Yes", "hidden": false},
-  {"input": "abca", "output": "No", "hidden": false}
-]

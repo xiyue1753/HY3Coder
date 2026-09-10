@@ -6,7 +6,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 大规模分层题集 | 自建 AtCoder ABC 175 题（主推）+ Codeforces 自建 175 题（含 GitHub 公开题解源），按基础/中等/困难三档分层，附来源与可复现分层规则 |
+| 大规模分层题集 | 自建 AtCoder ABC 175 题（主推）+ Codeforces 自建 184 题（含 GitHub 公开题解源），按基础/中等/困难三档分层，附来源与可复现分层规则 |
 | 分步求解 | 求解 Agent 产出结构化分步过程（每步含结论与前置依赖），自动提取可执行代码 |
 | 过程评估 | 逐步自含性检查 + 全局回溯两轮审查；两个独立验证视角 + ARBITER 总仲裁交付最终结果 |
 | 错误定位归类 | 6 类基线（题意误读/概念错误/计算错误/条件遗漏/跳步推导/格式不符）+ 算法扩展（逻辑缺陷/边界条件/复杂度不达标） |
@@ -66,9 +66,8 @@ copy .env.example .env
 .\run.ps1 exec -m src.cli audit --results data/outputs/eval_selfbuilt_all_t0.jsonl --sample 30
 .\run.ps1 serve        # 打开 http://127.0.0.1:8000
 
-# 7. 自建 AtCoder ABC 题集评测 / 全量展示 / 抽检（真实 Hy3 调用）
+# 7. 自建 AtCoder ABC 题集评测 / 抽检（真实 Hy3 调用）
 .\run.ps1 exec -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --resume --concurrency 4
-& D:\ProgramData\anaconda3\python.exe scripts/make_selfbuilt_report_html.py --records data/outputs/eval_selfbuilt_all_t0.jsonl --questions data/questions/abc_selfbuilt.jsonl --out reports/selfbuilt_report.html
 .\run.ps1 exec -m src.cli audit --results data/outputs/eval_selfbuilt_all_t0.jsonl --questions data/questions/abc_selfbuilt.jsonl --sample 30
 
 # 8. 测试
@@ -100,8 +99,8 @@ copy .env.example .env
 | 自建 AtCoder ABC（算法·主推） | AtCoder ABC 比赛原题 + AC 参考解 | 数据版权归 AtCoder，仅供研究 |
 
 题集（`data/questions/*.jsonl`）：
-- **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题，主推）**：由独立产线抓题面+AC 参考解+人工设计隐藏用例入库（`scripts/ingest_abc.py`），难度按 ABC 分值映射三档，含 SPJ 多解构造题（checker 判题）；
-- **自建集 `cf_selfbuilt.jsonl`（Codeforces 175 题，与 ABC 大致同规模）**：同产线，参考解 150 题来自 CF 公开 AC 提交（提交页抓取）、25 题来自 GitHub 公开题解仓库（`ingest_cf_github.py`，绕开 CF 反爬的提交页限流，题目页抓取 + GitHub 解样例沙盒验证），分层 basic34/medium83/hard58；
+- **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题，主推）**：由独立产线抓题面 + AC 参考解 + 人工设计隐藏边界用例入库，难度按 ABC 分值映射三档（basic34/medium82/hard59），含 SPJ 多解构造题（checker 判题）；
+- **自建集 `cf_selfbuilt.jsonl`（Codeforces 184 题，与 ABC 大致同规模）**：同产线，参考解来自 CF 公开 AC 提交与 GitHub 公开题解仓库（绕开 CF 反爬的提交页限流，题目页抓取 + GitHub 解样例沙盒验证），分层 basic34/medium83/hard67；
 - TACO/CodeContests 公开镜像题集曾以 `algorithm.jsonl` 命名，2026-09 起废弃该命名（数据隔离，未来按独立数据集如 `taco` 注册），不再进入仪表盘/统计；
 - SILENT_FAILURE 由真实评测检出并留档核验（样本数据本地保留，不随公开仓库发布，模型输出细节不外泄）。
 - **数据文件位置统一由注册中心 `src/rex/datasource.py` 声明。**
@@ -125,11 +124,12 @@ Hy3_APP2/
 │   └── metrics/   compute.py  stats.py
 ├── src/web/  api.py  static/index.html      # FastAPI 仪表盘
 ├── src/cli.py                               # typer 入口
-├── data/questions/  abc_selfbuilt.jsonl(175) cf_selfbuilt.jsonl(175)
-├── data/outputs/    eval_selfbuilt_all_t0.jsonl(175, ABC) + eval_cf_all_t0.jsonl(175, CF) + audit_records.jsonl
+├── data/questions/  abc_selfbuilt.jsonl(175) cf_selfbuilt.jsonl(184)
+├── data/outputs/    eval_selfbuilt_all_t0.jsonl(175, ABC) + eval_cf_all_t0.jsonl(184, CF) + audit_records.jsonl
 │                    （.gitignore 排除，运行后生成；历史分片归档于 _archived/）
-├── scripts/         build_questions.py build_golden_real.py
-│                    audit_sample.py check_answers.py ingest_abc.py make_report.py
+├── scripts/         评测主流程与数据可再生脚本
+│                    evaluate.py check_answers.py refine_failed.py make_report.py
+│                    gen_hidden_cases.py gen_cf_hidden_cases.py normalize_tags.py 等
 ├── reports/         分析报告（REPORT.md 与方法论文档）
 └── tests/           pytest（FakeHy3 + 沙盒隔离 + refine 闭环）
 ```

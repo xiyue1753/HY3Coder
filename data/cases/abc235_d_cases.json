@@ -1,6 +1,0 @@
-[
-  {"input": "3 72", "output": "4", "hidden": false},
-  {"input": "2 5", "output": "-1", "hidden": false},
-  {"input": "2 611", "output": "12", "hidden": false},
-  {"input": "2 767090", "output": "111", "hidden": false}
-]

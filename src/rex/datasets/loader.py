@@ -10,8 +10,8 @@ loading script / 磁盘占用过大而不可用，故采用上述镜像与替代
 数学/MATH 评测场景已放弃（2026-09-03），不再加载该数据集。
 
 Loader normalizes every raw row into QuestionItem. Building the local question
-set is a separate step (scripts/build_questions.py) so the pipeline itself
-never depends on network access.
+set is a separate offline step so the pipeline itself never depends on network
+access.
 """
 from __future__ import annotations
 
