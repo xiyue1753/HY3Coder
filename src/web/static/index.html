@@ -156,9 +156,8 @@
           <div class="muted text-sm mb-1">题目描述</div>
           <textarea id="iPrompt2" rows="5" class="w-full" placeholder="输入算法题描述（支持 Markdown 与 LaTeX 公式）"></textarea>
           <div id="iSamplesPreview" class="text-sm muted" style="display:none;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-top:6px"></div>
-          <div class="muted text-sm mb-1 mt-3">输入输出样例（多组用空行分隔，格式：输入\n…\n输出\n…）</div>
+          <div class="muted text-sm mb-1 mt-3">输入输出样例（多组用空行分隔，格式：输入\n…\n输出\n…；求解时作为沙盒测试用例，不填则只做过程评估）</div>
           <textarea id="iSamples" rows="5" class="w-full" placeholder="输入：&#10;3&#10;5&#10;输出：&#10;8&#10;&#10;输入：&#10;1 2&#10;输出：&#10;3"></textarea>
-          <input type="text" id="iAnswer" class="w-full mt-3" placeholder="期望输出/标准答案（可选，无样例时用于文本比对）">
 
           <!-- 参考解：题集自带 AC 解，可在此直接试运行（沙盒逐用例回显） -->
           <div class="ref-box">

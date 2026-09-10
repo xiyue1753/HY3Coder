@@ -402,7 +402,7 @@ async function interact(){
     const body = { scene, prompt, refine:$('#iRefine').checked };
     const samples=parseSamples($('#iSamples').value);
     body.samples = samples;
-    if($('#iAnswer').value) body.answer = $('#iAnswer').value;
+    if(REF.standardAnswer) body.answer = REF.standardAnswer;   // 题集带上的标准答案（界面上不再单独填）
     // 交给后端留档：题目来源 + 参考解（参考解试运行由服务端自己再跑一遍作为证据）
     if(REF.qid){
       body.origin_question_id=REF.qid;
@@ -590,7 +590,7 @@ function showModelInProgress(){
 // ---------- 从题集载入题目（只含公开用例；隐藏用例只给数量） ----------
 let PICK={total:0};
 // 当前载入的题目（题目来源标签、试运行走题集用例还是手填样例，都看这个）
-let REF={qid:null,title:null,sourceId:null,nPublic:0,nHidden:0};
+let REF={qid:null,title:null,sourceId:null,standardAnswer:'',nPublic:0,nHidden:0};
 function openPicker(){$('#pickModal').classList.add('show');loadPickList()}
 function closePicker(){$('#pickModal').classList.remove('show')}
 async function loadPickList(){
@@ -619,10 +619,11 @@ async function pickQuestion(qid){
   const q=await j('/api/lab/questions/'+qid);
   $('#iPrompt2').value=q.prompt||'';
   $('#iSamples').value=samplesToText(q.samples);
-  $('#iAnswer').value=q.standard_answer||'';
   $('#iRefCode').value=q.reference_solution||'';
   if(q.reference_language)$('#iRefLang').value=q.reference_language;
-  REF={qid:q.id,title:q.title,sourceId:q.source_id||null,nPublic:q.n_public||0,nHidden:q.n_hidden||0};
+  // 标准答案不再单列输入框：题集带上的值随请求一起走，回放页仍能显示
+  REF={qid:q.id,title:q.title,sourceId:q.source_id||null,standardAnswer:q.standard_answer||'',
+       nPublic:q.n_public||0,nHidden:q.n_hidden||0};
   $('#iSrcTag').textContent='题集载入 · '+q.id;
   $('#iRefTag').textContent=q.reference_solution
     ?`题集自带参考解 · ${q.reference_language==='cpp'?'C++':'Python'}`:'该题未提供参考解';
@@ -636,8 +637,8 @@ async function pickQuestion(qid){
   if(col)col.scrollTop=0;   // 回到题面，别让滚动位置停在样例区
 }
 function clearQuestion(){
-  REF={qid:null,title:null,sourceId:null,nPublic:0,nHidden:0};
-  $('#iPrompt2').value='';$('#iSamples').value='';$('#iAnswer').value='';$('#iRefCode').value='';
+  REF={qid:null,title:null,sourceId:null,standardAnswer:'',nPublic:0,nHidden:0};
+  $('#iPrompt2').value='';$('#iSamples').value='';$('#iRefCode').value='';
   $('#iSrcTag').textContent='手动输入';
   $('#iRefTag').textContent='未载入';
   previewSamples();
