@@ -99,6 +99,19 @@ nav.toc .lvl3{padding-left:1.1em; color:var(--muted); font-size:.95em}
   border:1px solid var(--line); border-radius:999px;
 }
 .prompt-toggle:hover{background:var(--accent-soft)}
+/* 典型案例：题目 / 求解过程 / 判定 三块折叠 */
+details.case-sec{margin:.7em 0; border:1px solid var(--line-soft); border-radius:6px; background:#fff}
+details.case-sec>summary{
+  cursor:pointer; padding:8px 14px; font-weight:600; color:#111827; list-style:none;
+  background:#f6f9fc; border-radius:5px; display:flex; align-items:center; gap:8px;
+}
+details.case-sec>summary::-webkit-details-marker{display:none}
+details.case-sec>summary::before{content:"\\25B8"; color:var(--accent); font-size:.85em}
+details.case-sec[open]>summary::before{content:"\\25BE"}
+details.case-sec[open]>summary{border-bottom:1px solid var(--line-soft); border-radius:5px 5px 0 0}
+details.case-sec>.sec-body{padding:10px 16px 14px}
+details.case-sec>.sec-body>*:first-child{margin-top:.3em}
+details.case-sec>.sec-body>*:last-child{margin-bottom:.3em}
 .md-bound{word-break:break-word}
 .md-bound p{margin:.55em 0}
 .md-bound h1,.md-bound h2,.md-bound h3,.md-bound h4{
@@ -225,6 +238,30 @@ def _wrap_prompts(body: str) -> str:
     return re.sub(r'<pre><code class="language-prompt">(.*?)</code></pre>', repl, body, flags=re.S)
 
 
+CASE_SECS = ("题目", "HY3 求解过程", "过程评估判定")
+
+
+def _collapsible(body: str) -> str:
+    """把典型案例里的三段（题目 / 求解过程 / 判定）折成 <details>，压缩页面占用。"""
+    pat = re.compile(r"<h4[^>]*>(" + "|".join(CASE_SECS) + r")</h4>")
+    out: list[str] = []
+    pos = 0
+    for m in pat.finditer(body):
+        out.append(body[pos:m.start()])
+        rest = body[m.end():]
+        nxt = re.search(r"<h[1-4][ >]", rest)
+        end = m.end() + (nxt.start() if nxt else len(rest))
+        inner = body[m.end():end].strip()
+        opened = " open" if m.group(1) == "过程评估判定" else ""
+        out.append(
+            f'<details class="case-sec"{opened}><summary>{m.group(1)}</summary>'
+            f'<div class="sec-body">{inner}</div></details>\n'
+        )
+        pos = end
+    out.append(body[pos:])
+    return "".join(out)
+
+
 def render(src: Path, out: Path) -> None:
     text = src.read_text(encoding="utf-8")
     md = markdown.Markdown(
@@ -233,6 +270,7 @@ def render(src: Path, out: Path) -> None:
     )
     body = md.convert(text)
     body = _wrap_prompts(body)
+    body = _collapsible(body)
     # 表格套一层可横向滚动的容器，窄屏下不挤压
     body = body.replace("<table>", '<div class="tw"><table>').replace("</table>", "</table></div>")
     # 附录大标题单独一个类，打印时另起一页
