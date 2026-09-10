@@ -118,6 +118,63 @@ def _run_proc(cmd: list[str], stdin, timeout, work, env, t0) -> SandboxResult:
         )
 
 
+@dataclass
+class Prepared:
+    """一次准备、多次运行：python 落盘脚本，C++ 编译一次后反复执行。
+
+    试运行要逐用例回显，若每个用例都重新编译 C++（约 1s/次），用例一多就很浪费；
+    故把「准备」与「运行」拆开。正式评测仍走 ``run_code`` 单次调用，判定口径不变。
+
+    注意：所有用例共用同一个工作目录（标准竞赛题只读 stdin、写 stdout，不受影响）。
+    """
+    argv: list[str] | None      # None = 准备失败（编译错误等）
+    work: Path
+    env: dict
+    error: str | None = None
+    compile_duration: float = 0.0
+
+    def run(self, stdin: str = "", timeout: float = 10.0) -> SandboxResult:
+        if self.argv is None:
+            return SandboxResult(-1, "", "", False, 0.0, error=self.error)
+        return _run_proc(self.argv, stdin, timeout, self.work, self.env, time.time())
+
+
+def prepare(code: str, language: str = "python",
+            compile_timeout: float = 60.0) -> Prepared:
+    """准备可执行程序：python 写脚本文件，cpp 用 g++ 编译一次。
+
+    与 ``run_code`` 走同一套编译参数与强制 UTF-8 环境变量，保证输出一致。
+    """
+    work = Path(tempfile.mkdtemp(prefix="rex_sandbox_"))
+    env = os.environ.copy()
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    if language != "cpp":
+        target = work / "_rex_prog.py"
+        target.write_text(code, encoding="utf-8")
+        return Prepared([sys.executable, str(target)], work, env)
+
+    src = work / "_rex_prog.cpp"
+    exe = work / "_rex_prog.exe"
+    src.write_text(code, encoding="utf-8")
+    t0 = time.time()
+    try:
+        proc = subprocess.run(
+            [GPP, "-std=c++17", "-O2", "-Wl,--stack,268435456",
+             str(src), "-o", str(exe)],
+            capture_output=True, timeout=compile_timeout,
+            cwd=str(work), env=env, creationflags=_CREATE_NO_WINDOW,
+        )
+    except subprocess.TimeoutExpired:
+        return Prepared(None, work, env,
+                        error=f"compile timeout after {compile_timeout}s")
+    if proc.returncode != 0 or not exe.exists():
+        err = proc.stderr.decode("utf-8", errors="replace")[:_MAX_OUTPUT]
+        return Prepared(None, work, env,
+                        error="compile failed: " + (err[:400] or "g++ error"))
+    return Prepared([str(exe)], work, env, compile_duration=time.time() - t0)
+
+
 def _run_cpp(code: str, stdin, timeout, work, env, compile_timeout) -> SandboxResult:
     """Compile C++ (C++17) with g++ then run the executable."""
     t0 = time.time()

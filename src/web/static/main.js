@@ -21,6 +21,7 @@ document.querySelectorAll('.nav-item').forEach(el=>{
     if(v==='detail'&&!STATE.questions.length)loadQuestions();
     if(v==='golden')loadGolden();
     if(v==='audit')loadAudit();
+    if(v==='interact'&&!MODEL.cfg)loadModelCfg();   // 进交互页前先拿到模型配置（门禁依赖它）
   };
 });
 
@@ -384,8 +385,16 @@ function setPhaseUI(phase, mode, elapsed){
   renderPhasePills(mode);
 }
 async function interact(){
+  // 模型未配置就不发起调用：直接开配置弹窗并给出提示（对齐 Hy3_APP 的门禁逻辑）
+  if(!(MODEL.cfg&&MODEL.cfg.has_credentials)){
+    const h=$('#iGateHint');
+    if(h)h.innerHTML='<span style="color:var(--warn)">需先在「模型配置」里填 API Key 才能调用模型</span>';
+    openCfgModal();
+    return;
+  }
   const btn=$('#iGo');btn.disabled=true;btn.textContent='求解中…';
   resetResultArea();
+  showModelInProgress();
   const scene='algorithm';
   try{
     const prompt = $('#iPrompt2').value;
@@ -423,8 +432,224 @@ async function interact(){
     body.style.alignItems='center';body.style.justifyContent='center';
     body.innerHTML=`<div class="finding"><b>出错：</b>${escapeHtml(e.message||String(e))}</div>`;
   }
-  finally{btn.disabled=false;btn.textContent='开始求解'}
+  finally{btn.textContent='开始求解';renderModelInfo()}
 }
+
+// ---------- 模型调用配置（弹窗布局与逻辑对齐 Hy3_APP 的「模型接入设置」） ----------
+// 演示与复现都要求看得出「这次调用的是哪个模型」，因此把运行期配置显式暴露出来：
+// 侧栏入口 → 弹窗里改提供方 / Key / Base URL / Model，未配置时求解入口直接拦住。
+let MODEL={cfg:null};
+function hostOf(url){try{return new URL(url).host}catch(e){return url||'—'}}
+// 侧栏位置窄，提供方用短名（hy3 → TokenHub）
+const PROVIDER_SHORT={hy3:'TokenHub',openai:'OpenAI',deepseek:'DeepSeek',vllm:'本地推理',custom:''};
+function providerShort(c){
+  if(!c)return '';
+  const s=PROVIDER_SHORT[c.provider];
+  return s||hostOf(c.base_url);
+}
+async function loadModelCfg(){
+  try{MODEL.cfg=await j('/api/config/model');}catch(e){MODEL.cfg=null;}
+  renderModelInfo();fillCfgForm();
+}
+function renderModelInfo(){
+  const c=MODEL.cfg,ok=!!(c&&c.has_credentials);
+  const short=ok?`${c.model} · ${providerShort(c)}`:'未配置';
+  const tag=$('#iModelTag');
+  if(tag)tag.textContent=ok?`模型：${c.model} · ${hostOf(c.base_url)}`:'模型：未配置';
+  const chip=$('#cfgChip');
+  if(chip)chip.textContent=ok?short:'未配置模型';
+  const btn=$('#iGo');if(btn)btn.disabled=!ok;
+  const hint=$('#iGateHint');
+  if(hint)hint.innerHTML=ok?'':'<span style="color:var(--warn)">需先在「模型配置」里填 API Key 才能调用模型</span>';
+}
+function applyPreset(key){
+  const p=(MODEL.cfg&&MODEL.cfg.presets&&MODEL.cfg.presets[key])||null;
+  if(!p)return;
+  if(p.base_url)$('#cUrl').value=p.base_url;
+  if(p.model)$('#cModel').value=p.model;
+}
+function fillCfgForm(){
+  const c=MODEL.cfg;if(!c)return;
+  const sel=$('#cProvider');
+  sel.innerHTML=Object.entries(c.providers||{}).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+  sel.value=c.provider||'hy3';
+  $('#cUrl').value=c.base_url||'';
+  $('#cModel').value=c.model||'';
+  $('#cReasoning').value=c.reasoning||'';
+  $('#cTemp').value=c.temperature==null?'':c.temperature;
+  $('#cTimeout').value=c.timeout==null?'':c.timeout;
+  $('#cKey').value='';
+  $('#cKey').placeholder=c.api_key_set?`留空 = 保留当前 Key（${c.api_key_masked}）`:'粘贴 API Key';
+  $('#cTestRes').className='testres';
+  $('#cTestRes').textContent=c.has_credentials?'当前已配置：'+c.model:'尚未配置模型';
+}
+function openCfgModal(){fillCfgForm();$('#cfgModal').classList.add('show')}
+function closeCfgModal(){$('#cfgModal').classList.remove('show')}
+function toggleKeyVisible(){
+  const el=$('#cKey');el.type=el.type==='password'?'text':'password';
+}
+function cfgBody(){
+  const num=v=>{const n=parseFloat(v);return Number.isFinite(n)?n:null};
+  return {
+    provider:$('#cProvider').value,
+    base_url:$('#cUrl').value.trim()||null,
+    model:$('#cModel').value.trim()||null,
+    reasoning:$('#cReasoning').value.trim()||null,
+    temperature:num($('#cTemp').value),
+    timeout:num($('#cTimeout').value),
+    api_key:$('#cKey').value.trim()||null,   // 留空 = 保留已存 Key
+  };
+}
+async function testCfg(){
+  const btn=$('#cTest'),res=$('#cTestRes');
+  btn.disabled=true;const old=btn.textContent;btn.textContent='测试中…';
+  res.className='testres';res.textContent='正在请求模型端点（约需数秒）…';
+  try{
+    const r=await fetch('/api/config/model/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfgBody())});
+    const d=await r.json();
+    res.className='testres '+(d.ok?'ok':'bad');
+    res.textContent=d.ok?`连接成功 · ${d.model} · ${hostOf(d.base_url)} · ${d.elapsed}s · 返回：${d.reply||''}`
+      :`连接失败：${d.error||'未知错误'}`;
+  }catch(e){res.className='testres bad';res.textContent='连接失败：'+(e.message||e)}
+  finally{btn.disabled=false;btn.textContent=old}
+}
+async function saveCfg(){
+  const btn=$('#cSave');btn.disabled=true;const old=btn.textContent;btn.textContent='保存中…';
+  try{
+    const r=await fetch('/api/config/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfgBody())});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'保存失败');
+    MODEL.cfg=d;renderModelInfo();fillCfgForm();
+    $('#cTestRes').className='testres ok';
+    $('#cTestRes').textContent=`已保存：${d.model} · ${hostOf(d.base_url)}（写入本地 .env）`;
+    setTimeout(closeCfgModal,600);
+  }catch(e){
+    $('#cTestRes').className='testres bad';$('#cTestRes').textContent='保存失败：'+(e.message||e);
+  }finally{btn.disabled=false;btn.textContent=old}
+}
+function showModelInProgress(){
+  const c=MODEL.cfg||{},el=$('#iProgressModel');
+  if(!el)return;
+  el.innerHTML=c.has_credentials
+    ?`调用模型：<b style="color:var(--txt)">${escapeHtml(c.model)}</b> · ${escapeHtml(hostOf(c.base_url))} · 推理强度 ${escapeHtml(c.reasoning||'—')} · 温度 ${c.temperature}`
+    :'';
+}
+
+// ---------- 从题集载入题目（只含公开用例；隐藏用例只给数量） ----------
+let PICK={total:0};
+// 当前载入的题目（题目来源标签、试运行走题集用例还是手填样例，都看这个）
+let REF={qid:null,title:null,nPublic:0,nHidden:0};
+function openPicker(){$('#pickModal').classList.add('show');loadPickList()}
+function closePicker(){$('#pickModal').classList.remove('show')}
+async function loadPickList(){
+  const list=$('#pList');
+  list.innerHTML='<div class="muted text-sm">加载中…</div>';
+  const p=new URLSearchParams({limit:'60'});
+  const kw=$('#pSearch').value.trim();if(kw)p.set('keyword',kw);
+  const ds=$('#pDs').value;if(ds)p.set('ds',ds);
+  try{
+    const d=await j('/api/lab/questions?'+p.toString());
+    PICK.total=d.total;
+    $('#pCount').textContent=`共 ${d.total} 题，显示前 ${d.items.length} 题`;
+    list.innerHTML=d.items.map(x=>`<div class="pick-item" onclick="pickQuestion('${x.id}')">
+      <div class="flex items-center gap-2"><span class="pid">${x.id}</span>
+        <span class="tag">${x.difficulty}</span>
+        <span class="muted" style="font-size:11px">公开 ${x.n_public} / 隐藏 ${x.n_hidden}</span></div>
+      <div class="pv">${escapeHtml(x.title)}</div>
+      <div class="pv">${escapeHtml(x.preview)}</div>
+    </div>`).join('')||'<div class="muted text-sm">没有匹配的题目</div>';
+  }catch(e){list.innerHTML=`<div class="muted text-sm">加载失败：${escapeHtml(e.message||e)}</div>`}
+}
+function samplesToText(list){
+  return (list||[]).map(s=>`输入：\n${s.input}\n输出：\n${s.output}`).join('\n\n');
+}
+async function pickQuestion(qid){
+  const q=await j('/api/lab/questions/'+qid);
+  $('#iPrompt2').value=q.prompt||'';
+  $('#iSamples').value=samplesToText(q.samples);
+  $('#iAnswer').value=q.standard_answer||'';
+  $('#iRefCode').value=q.reference_solution||'';
+  if(q.reference_language)$('#iRefLang').value=q.reference_language;
+  REF={qid:q.id,title:q.title,nPublic:q.n_public||0,nHidden:q.n_hidden||0};
+  $('#iSrcTag').textContent='题集载入 · '+q.id;
+  $('#iRefTag').textContent=q.reference_solution
+    ?`题集自带参考解 · ${q.reference_language==='cpp'?'C++':'Python'}`:'该题未提供参考解';
+  previewSamples();
+  const out=$('#iRefResult');out.className='text-sm muted mt-2';
+  out.textContent=q.n_hidden
+    ?`已载入 ${q.id}：公开用例 ${q.n_public} 个，另有 ${q.n_hidden} 个隐藏用例不外发；点「试运行」跑公开用例。`
+    :`已载入 ${q.id}：公开用例 ${q.n_public} 个，点「试运行」跑一遍。`;
+  closePicker();
+  const col=document.querySelector('.col-scroll');
+  if(col)col.scrollTop=0;   // 回到题面，别让滚动位置停在样例区
+}
+function clearQuestion(){
+  REF={qid:null,title:null,nPublic:0,nHidden:0};
+  $('#iPrompt2').value='';$('#iSamples').value='';$('#iAnswer').value='';$('#iRefCode').value='';
+  $('#iSrcTag').textContent='手动输入';
+  $('#iRefTag').textContent='未载入';
+  previewSamples();
+  const out=$('#iRefResult');out.className='text-sm muted mt-2';out.textContent='尚未试运行';
+}
+
+// ---------- 参考解试运行：沙盒逐用例回显 ----------
+async function refRun(){
+  const btn=$('#iRefRun'),out=$('#iRefResult');
+  const code=$('#iRefCode').value;
+  if(!code.trim()){
+    out.className='text-sm mt-2';out.innerHTML='<span style="color:var(--warn)">先「从题集载入」一题，或手动粘贴一段代码</span>';
+    return;
+  }
+  btn.disabled=true;const old=btn.textContent;btn.textContent='试运行中…';
+  out.className='text-sm muted mt-2';
+  out.innerHTML='<span class="spin"></span> 沙盒编译并逐个用例执行…';
+  try{
+    const body={code,language:$('#iRefLang').value};
+    if(REF.qid)body.question_id=REF.qid;
+    else body.samples=parseSamples($('#iSamples').value);
+    const r=await fetch('/api/lab/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'试运行失败');
+    renderRefRun(d);
+  }catch(e){
+    out.className='text-sm mt-2';
+    out.innerHTML=`<span style="color:var(--bad)">试运行失败：${escapeHtml(e.message||String(e))}</span>`;
+  }finally{btn.disabled=false;btn.textContent=old}
+}
+function renderRefRun(d){
+  const out=$('#iRefResult');out.className='text-sm mt-2';
+  if(!d.total){
+    out.innerHTML=`<div class="finding"><b>无法运行：</b>${escapeHtml(d.error||'没有可运行的用例')}</div>`;
+    return;
+  }
+  const allOk=d.passed===d.total;
+  let h=`<div class="run-sum">
+    <span class="tag ${allOk?'v-CORRECT':'v-ANSWER_INCORRECT'}">${allOk?'全部用例通过':'存在失败用例'}</span>
+    <span class="muted">${d.passed}/${d.total} 通过 · ${escapeHtml(d.language||'')} · judge=${escapeHtml(d.judge||'exact')} · ${d.elapsed}s</span>
+    ${REF.nHidden?`<span class="muted">（另有 ${REF.nHidden} 个隐藏用例未公开）</span>`:''}
+  </div>`;
+  h+=(d.cases||[]).map(c=>`<div class="case-run ${c.passed?'pass':'fail'}">
+    <div class="hd"><b>用例 ${c.index+1}</b>
+      <span style="color:${c.passed?'var(--ok)':'var(--bad)'}">${c.passed?'PASS':'FAIL'}</span>
+      <span style="margin-left:auto">${c.duration}s</span></div>
+    <pre>输入：
+${escapeHtml(c.input)}
+期望：
+${escapeHtml(c.expected)}
+实际：
+${escapeHtml(c.got?c.got.replace(/\s+$/,''):'(无输出)')}</pre>
+    ${c.error?`<div style="color:var(--bad);margin-top:4px">${escapeHtml(c.error)}</div>`:''}
+  </div>`).join('');
+  out.innerHTML=h;
+}
+
+// 弹窗通用：点击遮罩 / ESC 关闭（对齐 Hy3_APP 的交互）
+document.addEventListener('click',e=>{
+  if(e.target&&e.target.classList&&e.target.classList.contains('modal'))e.target.classList.remove('show');
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')document.querySelectorAll('.modal.show').forEach(m=>m.classList.remove('show'));
+});
 
 // ---------- 主题切换（仿 Hy_APP：data-theme + localStorage 持久化） ----------
 function applyTheme(t){
@@ -443,6 +668,13 @@ function toggleTheme(){
 document.addEventListener("DOMContentLoaded", ()=>{
   const btn = document.getElementById("themeBtn");
   if (btn) btn.addEventListener("click", toggleTheme);
+  // 弹窗内按钮接线（模型配置：测试连接 / 保存 / 关闭 / 切提供方；选题弹窗：关闭）
+  const wire=(sel,fn,ev="click")=>{const el=document.querySelector(sel);if(el)el.addEventListener(ev,fn);};
+  wire("#cTest",testCfg);
+  wire("#cSave",saveCfg);
+  wire("#cClose",closeCfgModal);
+  wire("#cProvider",e=>applyPreset(e.target.value),"change");
+  wire("#pClose",closePicker);
   try {
     const saved = localStorage.getItem("rex_theme");
     if (saved) applyTheme(saved);
@@ -453,3 +685,4 @@ document.addEventListener("DOMContentLoaded", ()=>{
 // ---------- init ----------
 loadOverview();
 loadQuestions();   // 初始即加载题目列表，无需切换页面
+loadModelCfg();    // 模型配置：侧栏与交互页的模型标识、求解门禁都依赖它

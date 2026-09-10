@@ -1,10 +1,11 @@
 """Run public + hidden test cases against solver-produced code."""
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass, field
 
 from rex.executor.judge import run_checker
-from rex.executor.sandbox import run_code
+from rex.executor.sandbox import prepare, run_code
 from rex.models import Judge, TestCase
 
 _MAX_REPORTED_FAILURES = 5
@@ -18,6 +19,20 @@ class TestRunResult:
     failed_public: list[int] = field(default_factory=list)  # 失败公开用例序号
     failed_hidden: int = 0                                   # 失败隐藏用例数（不泄露内容）
     error: str | None = None                                 # 编译/运行级错误
+    timed_out: bool = False
+
+
+@dataclass
+class CaseRun:
+    """单个用例的执行明细（试运行展示用；判定口径与 run_test_cases 一致）。"""
+    index: int                      # 用例序号，从 0 起
+    input: str
+    expected: str
+    got: str                        # 实际 stdout（截断前由沙盒统一限长）
+    passed: bool
+    duration: float
+    hidden: bool = False
+    error: str | None = None        # 该用例的运行/编译错误
     timed_out: bool = False
 
 
@@ -120,3 +135,43 @@ def run_test_cases(
         error=compile_err,
         timed_out=False,
     )
+
+
+def run_cases_detailed(
+    code: str,
+    test_cases: list[TestCase],
+    timeout: float = 10.0,
+    language: str = "python",
+    judge: Judge | str = Judge.EXACT,
+    checker_code: str | None = None,
+    checker_language: str = "python",
+    checker_timeout: float = 20.0,
+) -> list[CaseRun]:
+    """逐个用例执行并保留明细（输入/期望/实际输出/耗时/错误）。
+
+    判定口径与 ``run_test_cases`` 完全一致（exact 走文本比对含浮点容差，
+    special 走 checker），区别只在于返回逐用例明细而非聚合通过率——
+    供交互式界面的「试运行」展示用，不参与批量评测口径。
+    """
+    special = Judge(judge) == Judge.SPECIAL
+    prog = prepare(code, language=language)
+    runs: list[CaseRun] = []
+    try:
+        for i, tc in enumerate(test_cases):
+            res = prog.run(tc.input, timeout=timeout)
+            if res.error:
+                passed = False
+            elif special:
+                passed = bool(checker_code) and run_checker(
+                    checker_code, checker_language, tc.input, res.stdout,
+                    timeout=checker_timeout)[0]
+            else:
+                passed = _text_match(res.stdout, tc.output)
+            runs.append(CaseRun(
+                index=i, input=tc.input, expected=tc.output, got=res.stdout,
+                passed=passed, duration=res.duration, hidden=tc.hidden,
+                error=res.error, timed_out=res.timed_out,
+            ))
+    finally:
+        shutil.rmtree(prog.work, ignore_errors=True)
+    return runs

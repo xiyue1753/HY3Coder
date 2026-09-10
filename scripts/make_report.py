@@ -563,9 +563,11 @@ def build() -> str:
         w("\n| 语义档 | diff_score 区间 | 样本 | 答案准确率 | 过程正确率 | 95% CI |")
         w("|---|---|---|---|---|---|")
         for row in ut:
+            # 嵌套引号写在 f-string 里要 3.12+（PEP 701），项目环境是 3.9，故先在循环里算好
+            ci = (f"[{row['ci_low'] * 100:.1f}%, {row['ci_high'] * 100:.1f}%]"
+                  if row["ci_low"] is not None else "—")
             w(f"| {row['name']} | [{row['ds_lo']},{row['ds_hi']}) | {row['n']} | "
-              f"{pct(row['answer'])} | {pct(row['process'])} | "
-              f"{'[' + f'{row['ci_low'] * 100:.1f}%, {row['ci_high'] * 100:.1f}%]' if row['ci_low'] is not None else '—'} |")
+              f"{pct(row['answer'])} | {pct(row['process'])} | {ci} |")
         # 临界点判定：过程正确率首次显著下降处（跳过空档）
         filled = [r for r in ut if r["n"] > 0]
         procs = [r["process"] for r in filled]
@@ -825,8 +827,10 @@ def main() -> None:
         print("只想要草稿：--out <其它路径>；确实要覆盖：加 --force（手工改动会丢）")
         return
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    # 固定 LF：写入时不随平台做换行转换，保证生成结果与仓库中的版本逐字节一致
-    args.out.write_text(build(), encoding="utf-8", newline="\n")
+    # 固定 LF：写入时不随平台做换行转换，保证生成结果与仓库中的版本逐字节一致。
+    # 项目环境是 Python 3.9，write_text(newline=...) 要到 3.10 才有，故走 open()。
+    with args.out.open("w", encoding="utf-8", newline="\n") as f:
+        f.write(build())
     print(f"report written -> {args.out}")
 
 

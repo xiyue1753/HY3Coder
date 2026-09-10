@@ -33,9 +33,14 @@
     <div class="nav-item" data-view="interact"><span class="dot"></span>交互式解题</div>
     <a class="nav-item" href="/browse"><span class="dot"></span>题集浏览器</a>
   </div>
-  <div style="position:absolute;bottom:18px;left:0;right:0;text-align:center;color:var(--sub);font-size:11px">
-    过程评估 · 错误定位 · 自我修正
+  <div class="side-foot">
+    <button class="side-btn" id="cfgBtn" onclick="openCfgModal()">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.45.6.82.7"/></svg>
+      模型配置
+    </button>
+    <div class="cfg-chip" id="cfgChip">模型：加载中…</div>
   </div>
+  <div class="side-copy">过程评估 · 错误定位 · 自我修正</div>
 </aside>
 
 <main>
@@ -132,23 +137,57 @@
   <!-- ===== 屏 5：交互式解题 ===== -->
   <section id="view-interact" class="fade" style="display:none">
     <div class="panel">
-      <h3 class="text-base font-medium mb-3">交互式解题（实时演示）</h3>
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-medium">交互式解题（实时演示）</h3>
+        <div class="flex items-center gap-2">
+          <span class="tag" id="iModelTag">模型：加载中…</span>
+          <button class="fbtn" onclick="openCfgModal()">模型配置</button>
+        </div>
+      </div>
       <div class="grid" style="grid-template-columns:1fr 1fr;gap:20px;align-items:start">
         <!-- 左：输入区（算法竞赛场景） -->
-        <div>
+        <div class="col-scroll">
+          <div class="flex items-center gap-2 mb-2 text-sm">
+            <span class="muted">题目来源</span>
+            <span class="tag" id="iSrcTag">手动输入</span>
+            <button class="fbtn" onclick="openPicker()">从题集载入…</button>
+            <button class="fbtn" onclick="clearQuestion()">清空</button>
+          </div>
           <div class="muted text-sm mb-1">题目描述</div>
           <textarea id="iPrompt2" rows="5" class="w-full" placeholder="输入算法题描述（支持 Markdown 与 LaTeX 公式）"></textarea>
           <div id="iSamplesPreview" class="text-sm muted" style="display:none;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-top:6px"></div>
           <div class="muted text-sm mb-1 mt-3">输入输出样例（多组用空行分隔，格式：输入\n…\n输出\n…）</div>
-          <textarea id="iSamples" rows="6" class="w-full" placeholder="输入：&#10;3&#10;5&#10;输出：&#10;8&#10;&#10;输入：&#10;1 2&#10;输出：&#10;3"></textarea>
+          <textarea id="iSamples" rows="5" class="w-full" placeholder="输入：&#10;3&#10;5&#10;输出：&#10;8&#10;&#10;输入：&#10;1 2&#10;输出：&#10;3"></textarea>
           <input type="text" id="iAnswer" class="w-full mt-3" placeholder="期望输出/标准答案（可选，无样例时用于文本比对）">
-          <div class="flex items-center gap-4 mt-3">
+
+          <!-- 参考解：题集自带 AC 解，可在此直接试运行（沙盒逐用例回显） -->
+          <div class="ref-box">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <b class="text-sm">参考解</b>
+                <span class="tag" id="iRefTag">未载入</span>
+                <select id="iRefLang" class="fbtn">
+                  <option value="auto">自动识别语言</option>
+                  <option value="cpp">C++</option>
+                  <option value="python">Python</option>
+                </select>
+              </div>
+              <button class="btn ghost" id="iRefRun" onclick="refRun()">试运行</button>
+            </div>
+            <textarea id="iRefCode" rows="8" class="w-full mono" style="font-size:12px"
+              placeholder="从题集载入后这里会填入该题自带的参考解；也可手动粘一段代码试运行"></textarea>
+            <div class="hint">试运行 = 在沙盒里用上面的公开用例跑这段代码，逐用例回显输入、期望与实际输出，用来验证用例自洽性。</div>
+            <div id="iRefResult" class="text-sm muted mt-2">尚未试运行</div>
+          </div>
+
+          <div class="flex items-center gap-4 mt-3 flex-wrap">
             <label class="flex items-center gap-2 text-sm muted"><input type="checkbox" id="iRefine" class="accent-[#2dd4bf]"> 演示修正闭环</label>
             <button class="btn" id="iGo" onclick="interact()">开始求解</button>
+            <span class="text-sm" id="iGateHint"></span>
           </div>
         </div>
         <!-- 右：结果区 -->
-        <div id="iResult" class="muted text-sm" style="max-height:calc(100vh - 150px);overflow-y:auto;align-self:start;position:sticky;top:20px">
+        <div id="iResult" class="muted text-sm col-scroll" style="align-self:start;position:sticky;top:20px">
           <div class="panel" style="background:var(--panel2);min-height:300px;display:flex;flex-direction:column;color:var(--sub)">
             <div id="iProgress" style="display:none;padding:2px 4px 12px;border-bottom:1px dashed var(--line);margin-bottom:12px">
               <div style="display:flex;align-items:center;gap:8px;font-size:13px">
@@ -157,6 +196,7 @@
                 <span id="iProgressMsg" style="color:var(--txt)">准备中…</span>
                 <span id="iProgressElapsed" class="muted" style="margin-left:auto;font-size:12px"></span>
               </div>
+              <div class="muted" id="iProgressModel" style="font-size:12px;margin-top:4px"></div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px" id="iProgressSteps"></div>
             </div>
             <div id="iResultBody" style="flex:1;display:flex;align-items:center;justify-content:center">结果将显示在这里</div>
@@ -166,6 +206,58 @@
     </div>
   </section>
 </main>
+
+<!-- 模型接入设置（弹窗布局与逻辑对齐 Hy3_APP） -->
+<div class="modal" id="cfgModal">
+  <div class="box">
+    <h3>模型接入设置</h3>
+    <div class="field"><label>模型提供方</label>
+      <select id="cProvider"></select>
+      <div class="hint">默认 Hy3（腾讯 TokenHub）。本仓库的评估数据即由 HY3 产出；换成其它 OpenAI 兼容端点也能跑，用于对照。</div>
+    </div>
+    <div class="field"><label>API Key</label>
+      <div class="keyrow">
+        <input id="cKey" type="text" autocomplete="off" placeholder="留空 = 保留当前 Key">
+        <button id="cKeyEye" type="button" title="显 / 隐" onclick="toggleKeyVisible()">👁</button>
+      </div>
+      <div class="hint" id="cKeyHint">只写入本地 .env（已 gitignore）；接口不回显完整 Key，也不写日志。</div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Base URL</label><input id="cUrl" placeholder="https://tokenhub.tencentmaas.com/v1"></div>
+      <div class="field"><label>Model</label><input id="cModel" placeholder="hy3"></div>
+    </div>
+    <div class="row3">
+      <div class="field"><label>推理强度（Hy3 特有）</label><input id="cReasoning" placeholder="no_think / low / high"></div>
+      <div class="field"><label>温度</label><input id="cTemp" type="number" min="0" max="2" step="0.1"></div>
+      <div class="field"><label>超时（秒）</label><input id="cTimeout" type="number" min="10" step="10"></div>
+    </div>
+    <div class="testres" id="cTestRes"></div>
+    <div class="row">
+      <button id="cTest">测试连接</button>
+      <button class="btn" id="cSave">保存</button>
+      <button class="btn ghost" id="cClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 从题集载入题目 -->
+<div class="modal" id="pickModal">
+  <div class="box" style="width:840px">
+    <h3>从题集载入题目</h3>
+    <div class="flex items-center gap-2 mb-2">
+      <input id="pSearch" class="search" style="flex:1;width:auto" placeholder="搜索题号 / 标题 / 题面关键词…"
+        onkeydown="if(event.key==='Enter')loadPickList()">
+      <select id="pDs" class="fbtn" onchange="loadPickList()">
+        <option value="">全部数据集</option>
+        <option value="abc_selfbuilt">ABC 自建</option>
+        <option value="cf_selfbuilt">Codeforces 自建</option>
+      </select>
+      <span class="muted text-sm" id="pCount"></span>
+    </div>
+    <div class="pick-list" id="pList"></div>
+    <div class="row"><button id="pClose">关闭</button></div>
+  </div>
+</div>
 
 <script src="/static/main.js"></script>
 </body>

@@ -401,11 +401,13 @@ def render(src: Path, out: Path) -> None:
         title = m.group(1).strip()
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
-        TEMPLATE.format(title=html.escape(title), head_extra=HEAD_EXTRA, css=CSS,
-                        toc=_build_toc(md.toc_tokens), body=body.strip(), page_js=PAGE_JS),
-        encoding="utf-8", newline="\n",
-    )
+    page = TEMPLATE.format(title=html.escape(title), head_extra=HEAD_EXTRA, css=CSS,
+                           toc=_build_toc(md.toc_tokens), body=body.strip(),
+                           page_js=PAGE_JS)
+    # 显式 newline="\n" 保持仓库里的 LF（Windows 默认会写 CRLF，导致整文件 diff）；
+    # 项目环境是 Python 3.9，write_text(newline=...) 要到 3.10 才有，故走 open()。
+    with out.open("w", encoding="utf-8", newline="\n") as f:
+        f.write(page)
     print(f"html written -> {out}")
 
 

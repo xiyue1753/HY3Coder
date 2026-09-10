@@ -82,8 +82,8 @@
   .round-tabs{display:flex;gap:8px;flex-wrap:wrap}
   .round-tab{padding:6px 14px;border-radius:6px;border:1px solid var(--line);color:var(--sub);cursor:pointer;font-size:13px;transition:.18s}
   .round-tab.active{background:var(--pri);border-color:var(--pri);color:#fff;box-shadow:0 2px 14px var(--pri-ring)}
-  input[type=text],textarea,select{background:var(--input-bg);border:1px solid var(--input-border);border-radius:8px;color:var(--txt);padding:9px 12px;font-size:13px;outline:none;transition:.18s}
-  input[type=text]:focus,textarea:focus{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-ring)}
+  input[type=text],input[type=number],textarea,select{background:var(--input-bg);border:1px solid var(--input-border);border-radius:8px;color:var(--txt);padding:9px 12px;font-size:13px;outline:none;transition:.18s}
+  input[type=text]:focus,input[type=number]:focus,textarea:focus{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-ring)}
   .btn{background:linear-gradient(120deg,var(--pri),var(--pri2));color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer;transition:.2s;font-weight:500}
   .btn:hover{filter:brightness(1.12);box-shadow:0 4px 20px var(--pri-ring)}
   .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -124,3 +124,70 @@
   .step-in{animation:stepIn .35s ease both}
   /* 置信度说明 tooltip */
   .conf-help{cursor:help;border-bottom:1px dotted var(--line)}
+
+  /* ===== 侧栏底部：模型配置入口（对齐 Hy3_APP 的设置入口） ===== */
+  .side-foot{position:absolute;bottom:54px;left:10px;right:10px}
+  .side-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 10px;
+    background:none;border:1px solid var(--line);border-radius:8px;color:var(--sub);cursor:pointer;
+    font-size:12.5px;transition:.18s}
+  .side-btn:hover{color:var(--txt);border-color:var(--pri);background:var(--pri-weak)}
+  .cfg-chip{margin-top:7px;text-align:center;font-size:11px;color:var(--sub);font-family:var(--mono);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .side-copy{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:var(--sub);font-size:11px}
+
+  /* ===== 交互式解题：左列滚动 + 参考解面板 ===== */
+  .col-scroll{max-height:calc(100vh - 150px);overflow-y:auto}
+  .ref-box{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px;
+    background:var(--panel-tint)}
+  .hint{color:var(--sub);font-size:11.5px;margin-top:5px;line-height:1.5}
+  .spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--pri);
+    border-radius:50%;display:inline-block;animation:rot .8s linear infinite}
+
+  /* ===== 试运行结果：逐用例明细 ===== */
+  .case-run{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:6px;font-size:12px}
+  .case-run.pass{border-left:3px solid var(--ok)}
+  .case-run.fail{border-left:3px solid var(--bad)}
+  .case-run .hd{display:flex;align-items:center;gap:8px;color:var(--sub);flex-wrap:wrap}
+  .case-run .hd b{color:var(--txt)}
+  .case-run pre{margin:6px 0 0;padding:6px 8px;background:var(--input-bg);border:1px solid var(--line);
+    border-radius:6px;white-space:pre-wrap;word-break:break-all;font-family:var(--mono);
+    font-size:11.5px;max-height:120px;overflow:auto}
+  .run-sum{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12.5px}
+
+  /* ===== 弹窗（对齐 Hy3_APP 的设置弹窗：遮罩 + 卡片） ===== */
+  .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;
+    align-items:center;justify-content:center}
+  .modal.show{display:flex}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;
+    width:560px;max-width:94vw;max-height:90vh;overflow:auto;box-shadow:0 18px 60px rgba(0,0,0,.45);
+    animation:popIn .18s ease}
+  .modal .box h3{margin:0 0 14px;font-size:15px;font-weight:600}
+  .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+  .modal .row button{background:none;border:1px solid var(--line);border-radius:8px;color:var(--sub);
+    cursor:pointer;padding:8px 16px;font-size:13px;transition:.18s}
+  .modal .row button:hover{color:var(--txt);border-color:var(--pri)}
+  .modal .row button:disabled{opacity:.55;cursor:not-allowed}
+  @keyframes popIn{from{opacity:0;transform:scale(.97) translateY(-6px)}to{opacity:1;transform:none}}
+
+  .field{margin-bottom:12px}
+  .field>label{display:block;color:var(--sub);font-size:12px;margin-bottom:5px}
+  .field select,.field input{width:100%}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .keyrow{display:flex;gap:6px}
+  .keyrow input{flex:1}
+  .keyrow button{background:none;border:1px solid var(--line);border-radius:8px;color:var(--sub);
+    cursor:pointer;padding:0 10px}
+  .keyrow button:hover{color:var(--txt);border-color:var(--pri)}
+  .testres{font-size:12.5px;min-height:18px;color:var(--sub);word-break:break-word}
+  .testres.ok{color:var(--ok)}
+  .testres.bad{color:var(--bad)}
+
+  /* ===== 题集选择弹窗 ===== */
+  .pick-list{max-height:52vh;overflow-y:auto;display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px}
+  .pick-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer;transition:.15s}
+  .pick-item:hover{border-color:var(--pri);background:var(--pri-weak)}
+  .pick-item .pid{font-family:var(--mono);font-size:12px;color:var(--pri)}
+  .pick-item .pv{color:var(--sub);font-size:11.5px;margin-top:3px;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}

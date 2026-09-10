@@ -6,6 +6,13 @@ Endpoints (all data under Hy3_APP2/data/):
   GET  /api/questions/{qid}— 单题详情（步骤 + findings + refine 轮次）
   GET  /api/golden         — 沉默失败 golden 样本库
   GET  /api/audit          — 人工抽检记录
+  GET  /api/meta           — 数据源元信息（路径/命令）
+  GET  /api/config/model   — 当前模型调用配置（Key 只回显掩码）
+  POST /api/config/model   — 保存模型配置（写内存 + 本地 .env）
+  POST /api/config/model/test — 模型连通性测试
+  GET  /api/lab/questions  — 选题列表（交互式解题工作台）
+  GET  /api/lab/questions/{qid} — 选题详情（题面/公开样例/自带参考解）
+  POST /api/lab/run        — 试运行：沙盒跑代码，逐用例回显
   POST /api/interact       — 交互式解题（同步，保留兼容）
   POST /api/interact/job   — 交互式解题（异步 job：后台线程 + 阶段进度）
   GET  /api/interact/job/{job_id}      — 查询 job 状态/中间结果
@@ -15,6 +22,7 @@ Endpoints (all data under Hy3_APP2/data/):
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 import uuid
@@ -27,6 +35,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from rex.config import Config
+from rex.executor.sandbox import detect_language
+from rex.hy3_client import Hy3Client
 from rex.metrics.compute import audit_metrics, compute_metrics, refine_comparison
 from rex.models import EvalRecord, GoldenSample, QuestionItem, RefineRecord
 from rex.pipeline import load_jsonl
@@ -138,6 +148,153 @@ def meta() -> dict:
     }
 
 
+# ===========================================================================
+# 模型调用配置：读写 + 连通性测试
+# 演示/复现都要求「看得出这次调用的是哪个模型」，故把运行期配置显式暴露出来。
+# Key 只落本地 .env（已 gitignore），接口只回显掩码，留空即保持原值。
+# ===========================================================================
+PROVIDERS: dict[str, dict] = {
+    "hy3": {"label": "Hy3（默认 · 腾讯 TokenHub）",
+            "base_url": "https://tokenhub.tencentmaas.com/v1", "model": "hy3"},
+    "openai": {"label": "OpenAI 兼容",
+               "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
+    "deepseek": {"label": "DeepSeek",
+                 "base_url": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
+    "vllm": {"label": "本地 vLLM / Ollama",
+             "base_url": "http://127.0.0.1:8000/v1", "model": "local"},
+    "custom": {"label": "自定义", "base_url": "", "model": ""},
+}
+
+_ENV_KEYS = {
+    "base_url": "HY3_BASE_URL", "model": "HY3_MODEL",
+    "reasoning": "HY3_REASONING_EFFORT", "api_key": "HY3_API_KEY",
+}
+
+
+def _guess_provider(base_url: str, model: str) -> str:
+    """按 Base URL / 模型名回推提供方，供前端下拉框定位。"""
+    u = (base_url or "").lower()
+    if "tokenhub" in u or "hy3" in (model or "").lower():
+        return "hy3"
+    if "openai" in u:
+        return "openai"
+    if "deepseek" in u:
+        return "deepseek"
+    if "localhost" in u or "127.0.0.1" in u:
+        return "vllm"
+    return "custom"
+
+
+def _mask_key(key: str) -> str:
+    """只回显尾部 4 位——页面不回传完整 Key。"""
+    k = (key or "").strip()
+    return ("*" * max(0, len(k) - 4) + k[-4:]) if k else ""
+
+
+def _write_env(updates: dict[str, str]) -> None:
+    """就地更新项目根 .env 的 HY3_* 键，保留注释与其它变量（如 AtCoder cookie）。"""
+    path = ROOT / ".env"
+    lines = path.read_text(encoding="utf-8").split("\n") if path.exists() else []
+    seen: set[str] = set()
+    for i, ln in enumerate(lines):
+        m = re.match(r"^\s*([A-Za-z_0-9]+)\s*=", ln)
+        if m and m.group(1) in updates:
+            lines[i] = f"{m.group(1)} = {updates[m.group(1)]}"
+            seen.add(m.group(1))
+    for k, v in updates.items():
+        if k not in seen:
+            lines.append(f"{k} = {v}")
+    # 显式 newline="\n"（不依赖平台默认的换行转换）；项目环境是 Python 3.9，
+    # Path.write_text(newline=...) 要到 3.10 才有，故走 open()。
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines).rstrip("\n") + "\n")
+
+
+class ModelConfigIn(BaseModel):
+    """模型接入配置；字段为 None 表示不改动该项。"""
+    provider: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    reasoning: str | None = None
+    temperature: float | None = None
+    timeout: float | None = None
+    api_key: str | None = None      # None / 空串 = 保留已存 Key
+
+
+def _cfg_payload() -> dict:
+    return {
+        "providers": {k: v["label"] for k, v in PROVIDERS.items()},
+        "presets": PROVIDERS,
+        "provider": _guess_provider(CFG.hy3_base_url, CFG.hy3_model),
+        "base_url": CFG.hy3_base_url,
+        "model": CFG.hy3_model,
+        "reasoning": CFG.hy3_reasoning_effort,
+        "temperature": CFG.temperature,
+        "timeout": CFG.timeout,
+        "api_key_masked": _mask_key(CFG.hy3_api_key),
+        "api_key_set": bool(CFG.hy3_api_key),
+        "has_credentials": CFG.has_credentials,
+        "env_file": ".env",
+    }
+
+
+@app.get("/api/config/model")
+def get_model_config() -> dict:
+    """当前生效的模型调用配置（Key 只给掩码）。"""
+    return _cfg_payload()
+
+
+@app.post("/api/config/model")
+def set_model_config(req: ModelConfigIn) -> dict:
+    """保存模型配置：更新内存 CFG（后续 job 立即生效）并落本地 .env。"""
+    if req.base_url is not None:
+        CFG.hy3_base_url = req.base_url.strip()
+    if req.model is not None:
+        CFG.hy3_model = req.model.strip()
+    if req.reasoning is not None:
+        CFG.hy3_reasoning_effort = req.reasoning.strip()
+    if req.temperature is not None:
+        CFG.temperature = float(req.temperature)
+    if req.timeout is not None:
+        CFG.timeout = float(req.timeout)
+    if req.api_key:                     # 留空 = 不动已存 Key
+        CFG.hy3_api_key = req.api_key.strip()
+    updates = {
+        _ENV_KEYS["base_url"]: CFG.hy3_base_url,
+        _ENV_KEYS["model"]: CFG.hy3_model,
+        _ENV_KEYS["reasoning"]: CFG.hy3_reasoning_effort,
+    }
+    if req.api_key:
+        updates[_ENV_KEYS["api_key"]] = CFG.hy3_api_key
+    _write_env(updates)
+    return _cfg_payload()
+
+
+@app.post("/api/config/model/test")
+def test_model_config(req: ModelConfigIn) -> dict:
+    """连通性测试：用表单里的值（未填的用当前配置）发一条最小请求。"""
+    key = (req.api_key or CFG.hy3_api_key or "").strip()
+    base = (req.base_url or CFG.hy3_base_url or "").strip()
+    model = (req.model or CFG.hy3_model or "").strip()
+    if not key:
+        return {"ok": False, "model": model, "base_url": base, "error": "未填 API Key"}
+    client = Hy3Client(
+        api_key=key, base_url=base, model=model,
+        reasoning_effort=(req.reasoning or CFG.hy3_reasoning_effort),
+        timeout=min(60.0, req.timeout or CFG.timeout), max_retries=0,
+    )
+    t0 = time.time()
+    try:
+        reply = client.chat("ping", system="你是连通性探针，回复 pong 即可。")
+        return {"ok": True, "model": model, "base_url": base,
+                "elapsed": round(time.time() - t0, 2), "reply": (reply or "")[:80]}
+    except Exception as e:  # noqa: BLE001 — 连通性探测要把失败原因原样回给页面
+        return {"ok": False, "model": model, "base_url": base,
+                "elapsed": round(time.time() - t0, 2), "error": str(e)[:300]}
+    finally:
+        client.close()
+
+
 @app.get("/api/questions")
 def questions(scene: str | None = None, verdict: str | None = None,
               tier: str | None = None, source: str | None = None,
@@ -229,6 +386,121 @@ def audit() -> list[dict]:
     return [a.model_dump() for a in load_audits(ROOT)]
 
 
+# ===========================================================================
+# 交互式解题工作台：题集选题（只暴露公开用例）+ 参考解试运行
+# ===========================================================================
+class LabSample(BaseModel):
+    """算法题输入输出样例（试运行用例）。"""
+    input: str
+    output: str
+
+
+class LabRunIn(BaseModel):
+    code: str
+    language: str = "auto"           # auto / python / cpp
+    question_id: str | None = None   # 给定时用该题公开用例 + 该题判题模式
+    samples: list[LabSample] = []    # 未给题集时用手填样例
+    timeout: float = 10.0
+
+
+def _question_map() -> dict[str, QuestionItem]:
+    return {q.id: q for q in _load_questions()}
+
+
+@app.get("/api/lab/questions")
+def lab_questions(keyword: str | None = None, ds: str | None = None,
+                  limit: int = 30, offset: int = 0) -> dict:
+    """选题列表：题面预览 + 公开用例数（隐藏用例只给数量，不外发内容）。"""
+    qs = _load_questions()
+    prefix = {"abc_selfbuilt": "A", "cf_selfbuilt": "C"}.get(ds or "")
+    if prefix:
+        qs = [q for q in qs if q.id.startswith(prefix)]
+    if keyword:
+        kw = keyword.lower()
+        qs = [q for q in qs
+              if kw in q.id.lower() or kw in q.title.lower() or kw in q.prompt.lower()]
+    total = len(qs)
+    return {
+        "items": [{
+            "id": q.id, "title": q.title, "difficulty": q.difficulty.value,
+            "source": q.source, "source_id": q.source_id,
+            "n_public": sum(1 for t in q.test_cases if not t.hidden),
+            "n_hidden": sum(1 for t in q.test_cases if t.hidden),
+            "preview": re.sub(r"\s+", " ", q.prompt)[:120],
+        } for q in qs[offset:offset + limit]],
+        "total": total, "limit": limit, "offset": offset,
+    }
+
+
+@app.get("/api/lab/questions/{qid}")
+def lab_question(qid: str) -> dict:
+    """选题详情：题面 + 公开样例 + 标准答案 + 题集自带参考解。"""
+    q = _question_map().get(qid)
+    if q is None:
+        raise HTTPException(404, f"question {qid} not found")
+    public = [t for t in q.test_cases if not t.hidden]
+    ref = q.reference_solution or ""
+    return {
+        "id": q.id, "title": q.title, "prompt": q.prompt,
+        "difficulty": q.difficulty.value, "source": q.source, "source_id": q.source_id,
+        "standard_answer": q.standard_answer,
+        "samples": [{"input": t.input, "output": t.output} for t in public],
+        "n_public": len(public), "n_hidden": len(q.test_cases) - len(public),
+        "reference_solution": ref,
+        "reference_language": detect_language(ref) if ref else None,
+        "judge": q.judge.value, "checker_language": q.checker_language,
+    }
+
+
+@app.post("/api/lab/run")
+def lab_run(req: LabRunIn) -> dict:
+    """试运行：在沙盒里跑给定代码，逐用例回显输入/期望/实际输出与耗时。
+
+    指定 ``question_id`` 时用该题公开用例并沿用其判题模式（special 走 checker）；
+    否则用手填样例，走 EXACT 文本比对（与正式评测同一套判定函数）。
+    """
+    from rex.executor.tests import run_cases_detailed
+    from rex.models import Judge, TestCase
+
+    if not (req.code or "").strip():
+        return {"language": None, "total": 0, "passed": 0, "pass_rate": None,
+                "elapsed": 0.0, "cases": [], "error": "没有可运行的代码"}
+    lang = req.language if req.language in ("python", "cpp") else detect_language(req.code)
+    judge, checker, checker_lang, qid = Judge.EXACT, None, "python", None
+    if req.question_id:
+        q = _question_map().get(req.question_id)
+        if q is None:
+            raise HTTPException(404, f"question {req.question_id} not found")
+        qid, judge, checker, checker_lang = q.id, q.judge, q.checker_code, q.checker_language
+        samples = [LabSample(input=t.input, output=t.output)
+                   for t in q.test_cases if not t.hidden]
+    else:
+        samples = req.samples
+    if not samples:
+        return {"language": lang, "question_id": qid, "total": 0, "passed": 0,
+                "pass_rate": None, "elapsed": 0.0, "cases": [],
+                "error": "没有可运行的用例：请选择题目或填写输入输出样例"}
+    if Judge(judge) == Judge.SPECIAL and not checker:
+        return {"language": lang, "question_id": qid, "total": 0, "passed": 0,
+                "pass_rate": None, "elapsed": 0.0, "cases": [],
+                "error": "该题为 SPJ 判题，但题集未提供 checker 代码，无法试运行"}
+    t0 = time.time()
+    runs = run_cases_detailed(
+        req.code, [TestCase(input=s.input, output=s.output) for s in samples],
+        timeout=req.timeout, language=lang, judge=judge,
+        checker_code=checker, checker_language=checker_lang,
+    )
+    passed = sum(1 for r in runs if r.passed)
+    return {
+        "language": lang, "question_id": qid, "judge": Judge(judge).value,
+        "total": len(runs), "passed": passed, "pass_rate": passed / len(runs),
+        "elapsed": round(time.time() - t0, 2),
+        "cases": [{"index": r.index, "input": r.input, "expected": r.expected,
+                   "got": r.got, "passed": r.passed, "duration": round(r.duration, 3),
+                   "error": r.error} for r in runs],
+    }
+
+
 class InteractSample(BaseModel):
     """算法题输入输出样例（作为沙盒测试用例 + 拼入题目描述）。"""
     input: str
@@ -308,6 +580,14 @@ def _start_interact_job(req: InteractRequest) -> dict:
     def _run() -> None:
         from rex.pipeline import Pipeline
 
+        # 未配置模型就不要进入求解：直接给出可操作的提示（前端在入口处也做了门禁）
+        if not CFG.has_credentials:
+            job["phase"] = "failed"
+            job["error"] = "未配置模型：请在「模型配置」里填入 API Key 与 Base URL"
+            job["message"] = job["error"]
+            job["queue"].append({"phase": "failed", "message": job["message"], "elapsed": 0.0})
+            job["event"].set()
+            return
         pipe = Pipeline(CFG)
         job["phase"] = "solve"
         job["message"] = "正在生成分步解答…"
@@ -406,6 +686,12 @@ def _job_payload(job: dict) -> dict:
         "error": job["error"],
         "elapsed": job["elapsed"],
         "cost_calls": job["cost_calls"],
+        # 本次调用实际使用的模型（演示/复现都要看得出调用的是哪个模型）
+        "model": {
+            "name": CFG.hy3_model,
+            "base_url": CFG.hy3_base_url,
+            "provider": _guess_provider(CFG.hy3_base_url, CFG.hy3_model),
+        },
         "status": "done" if job["phase"] == "done" else
                   ("failed" if job["phase"] == "failed" else "running"),
     }
