@@ -261,38 +261,30 @@ Al…
 
 **层次基线**：本节按**当前**（2026-09-10 补充 hidden 后）t0 口径计——答案错误 29 条、答案正确但被判过程有错（误报率分母）19 条。补充前（2026-09-09 抽检当时）为 **28 / 20**，定位 27/28 = 96.4%、三层复核 match 18。这一条之差来自被抽检的 `C2063`：补充 hidden 后其答案由对转错、verdict 由 SILENT_FAILURE 修正为 PROCESS_INCORRECT（见 §1 基线修订说明），故从误报率分母移入定位分母，且系统对其复杂度缺陷的定位经人工复核为命中。
 
-## 7. 真实评测检出的 SILENT_FAILURE 样本留档
+## 7. 真实评测检出的 SILENT_FAILURE 样本
 
-真实 Hy3 评测中 verifier 检出 `SILENT_FAILURE`（2 条：答案正确但过程存在根本缺陷），逐条留档如下。每条含题目源（contest）、检测时间、定位缺陷与步骤、沙盒通过率；flaw_answer 为当时模型的真实求解输出（含代码），非人工编造。检出计数已计入第 1 节判定分布。
+temperature=0 全量评测（359 题）共检出 `SILENT_FAILURE` 15 条（4.2%），即答案在公开+隐藏用例上全部通过、但 verifier 判定推理链存在 fatal 缺陷的样本。这 15 条全部落在人工抽检的样本内，fatal 分级经复核全部属实（见第 6 节）。逐题的完整求解过程与代码、findings 与沙盒事实见 `data/outputs/eval_abc_selfbuilt_t0.jsonl` 与 `eval_cf_selfbuilt_t0.jsonl`，不在此处重复粘贴。
 
-- **`A1042`**（AtCoder-自建 · `abc257_d` · medium）
-  - 题面：Score : $400$ points
+| 题目 | 平台 | 难度 | 致命定位（步骤 · 类型） |
+|---|---|---|---|
+| `A1098` | ABC | hard | step2 逻辑缺陷、step4 边界条件 |
+| `A1148` | ABC | hard | step2 概念理解错误、step2 逻辑缺陷 |
+| `A1164` | ABC | medium | step3 复杂度不达标 |
+| `A1174` | ABC | hard | step4 逻辑缺陷 |
+| `C2029` | CF | medium | step2 跳步推导 |
+| `C2058` | CF | medium | step1 跳步推导 |
+| `C2062` | CF | hard | step2 逻辑缺陷、step4 逻辑缺陷 |
+| `C2079` | CF | medium | step2 逻辑缺陷 |
+| `C2106` | CF | hard | step2 概念理解错误、step2 逻辑缺陷 |
+| `C2108` | CF | hard | step1 跳步推导 |
+| `C2117` | CF | medium | step2 概念理解错误 |
+| `C2125` | CF | medium | step2 逻辑缺陷 |
+| `C2133` | CF | hard | step2 条件遗漏、step2 逻辑缺陷 |
+| `C2136` | CF | medium | step2 概念理解错误、step2 逻辑缺陷 |
+| `C2160` | CF | hard | step2 概念理解错误、step2 逻辑缺陷 |
 
 
-
-
-
-
-
-
-
-
-
-### Problem Statement
-There are $N$ trampolines on a two-dimensional planar town where Takahashi lives.  The $i$-th trampoline i…
-  - 缺陷类型：概念理解错误
-  - 来源说明：真实评测检出：2026-09-03T17:06:38 · 来源 eval_selfbuilt_all.jsonl · 沙盒通过率 1.0 · answer_correct=True · verifier=SILENT_FAILURE · 缺陷定位: step2[concept] 二分上界估算错误：误将最大曼哈顿距离等同于最大坐标差2e9，实际|x_i-x_j|+|y_i-y_j|最大可达4e9（x,y分别取±1e9极值），导致设定上界2e9+10可能不足。代码继承此错误(hi=2000000010)。在极端输入下会输出错误答案，但当前测试集全过使最终答案碰巧正确。
-  - 陷阱步骤数：5（含代码 ✓）
-- **`A1148`**（AtCoder-自建 · `abc368_d` · hard）
-  - 题面：Score : $425$ points
-
-### Problem Statement
-You are given a tree with $N$ vertices numbered $1$ to $N$. The $i$-th edge connects vertices $A_i$ and $B_i$.
-
-Cons…
-  - 缺陷类型：概念理解错误
-  - 来源说明：真实评测检出：2026-09-03T02:03:03 · 来源 eval_selfbuilt_all.jsonl · 沙盒通过率 1.0 · answer_correct=True · verifier=SILENT_FAILURE · 缺陷定位: step2[concept] 算法思路错误地要求节点u在‘自身为关键点或某个子节点子树含关键点’时必须保留以连通到上层（根）。实际上极小连通子树只需连通所有关键点彼此之间，并不要求连通到原树根；若根不是关键点且仅有单侧分支含关键点，根及传递链上的非关键点不应全部保留（例如树1-2，V={2}时最小顶点数为1，但所述算法会输出2）。该步骤结论‘通过D; step2[logic] 算法思路错误地认为只要节点子树中含有关键点（或自身为关键点）就必须保留以连通到上层，但未区分根节点无父节点的情况：若所有关键点均位于根的某一子树中（如K=1且关键点非根），根及其无关祖先不应被保留，最小子树应仅含关键点本身（或对应连通块）。该DFS会统计从根到关键点的整条路径，得到错误过程结论，但代码在沙盒测试中可能因
-  - 陷阱步骤数：5（含代码 ✓）
+典型形态有三类：声明复杂度与实现不符（剪枝/上界失效、最坏情形退化）、关键引理（贪心最优性、博弈必胜性、组合计数）缺证明、边界条件遗漏。这些缺陷公开小样例覆盖不到，只有过程评估能抓住——也正是「只看答案」的评测会系统性漏掉的部分。
 
 ## 8. 能力画像与边界分析
 

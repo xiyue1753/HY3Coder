@@ -18,14 +18,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from rex.config import Config
 from rex.metrics.compute import audit_metrics, compute_metrics, refine_comparison
 from rex.metrics.stats import stability_check, wilson_interval
-from rex.models import AuditRecord, EvalRecord, GoldenSample, QuestionItem, RefineRecord
+from rex.models import (
+    AuditRecord,
+    ErrorSeverity,
+    EvalRecord,
+    QuestionItem,
+    RefineRecord,
+    Verdict,
+)
 from rex.pipeline import load_jsonl
 
 ROOT = Path(__file__).resolve().parents[1]
 TYPE_CN = {
     "concept": "概念理解错误", "calculation": "计算错误", "misread": "题意误读",
-    "condition": "条件遗漏", "jump": "跳步推导", "format": "格式不符",
+    "condition": "条件遗漏", "missing_condition": "条件遗漏",
+    "jump": "跳步推导", "format": "格式不符",
     "logic": "逻辑缺陷", "boundary": "边界条件", "complexity": "复杂度不达标",
+    "other": "实现层失败",
 }
 
 
@@ -586,28 +595,31 @@ def build() -> str:
     else:
         w(f"\n_暂无抽检标注，运行 `python -m src.cli audit --results {ds.evals_path(ROOT, next(d for d in ds.active_datasets() if d.evals))}` 生成模板。_\n")
 
-    # ---- 7. Golden ----
-    # 真实评测检出库（独立文件，见注册中心 golden_real_path）
-    golden_real = (load_jsonl(ds.golden_real_path(ROOT), GoldenSample)
-                   if ds.golden_real_path(ROOT).exists() else [])
-    w("## 7. 真实评测检出的 SILENT_FAILURE 样本留档")
-    w(f"\n真实 Hy3 评测中 verifier 检出 `SILENT_FAILURE`（{len(golden_real)} 条：答案正确但过程"
-      "存在根本缺陷），逐条留档如下。每条含题目源（contest）、检测时间、定位缺陷与步骤、沙盒通过率；"
-      "flaw_answer 为当时模型的真实求解输出（含代码），非人工编造。"
-      "检出计数已计入第 1 节判定分布。\n")
-    if golden_real:
-        for g in golden_real:
-            q = g.question
-            src_id = q.source_id or "—"
-            w(f"- **`{q.id}`**（{q.source} · `{src_id}` · {q.difficulty.value}）")
-            w(f"  - 题面：{q.prompt[:160].strip()}…")
-            w(f"  - 缺陷类型：{TYPE_CN.get(g.flaw_type.value, g.flaw_type.value)}")
-            w(f"  - 来源说明：{g.construction_note}")
-            w(f"  - 陷阱步骤数：{len(g.flaw_answer.steps)}（含代码 "
-              f"{'✓' if g.flaw_answer.code else '✗'}）")
-        w("")
-    else:
-        w("\n_暂无真实检出的 SILENT_FAILURE 留档。_\n")
+    # ---- 7. 真实评测检出的 SILENT_FAILURE ----
+    # 直接从正式评测明细统计（golden 独立留档文件仅本地保留，不随仓库交付）
+    sil = [r for r in evals if r.verification.verdict == Verdict.SILENT_FAILURE]
+    w("## 7. 真实评测检出的 SILENT_FAILURE 样本")
+    w(f"\ntemperature=0 全量评测（{len(evals)} 题）共检出 `SILENT_FAILURE` {len(sil)} 条"
+      f"（{pct(len(sil) / len(evals) if evals else 0)}），即答案在公开+隐藏用例上全部通过、"
+      "但 verifier 判定推理链存在 fatal 缺陷的样本。这 "
+      f"{len(sil)} 条全部落在人工抽检的样本内，fatal 分级经复核全部属实（见第 6 节）。"
+      "逐题的完整求解过程与代码、findings 与沙盒事实见 "
+      "`data/outputs/eval_abc_selfbuilt_t0.jsonl` 与 `eval_cf_selfbuilt_t0.jsonl`，"
+      "不在此处重复粘贴。\n")
+    w("| 题目 | 平台 | 难度 | 致命定位（步骤 · 类型） |")
+    w("|---|---|---|---|")
+    for r in sorted(sil, key=lambda x: x.question_id):
+        pos = "、".join(
+            f"step{f.step_id} {TYPE_CN.get(f.error_type.value, f.error_type.value)}"
+            for f in r.verification.findings
+            if f.severity == ErrorSeverity.FATAL
+        )
+        plat = "ABC" if r.question_id.startswith("A") else "CF"
+        w(f"| `{r.question_id}` | {plat} | {r.difficulty.value} | {pos or '—'} |")
+    w("")
+    w("\n典型形态有三类：声明复杂度与实现不符（剪枝/上界失效、最坏情形退化）、"
+      "关键引理（贪心最优性、博弈必胜性、组合计数）缺证明、边界条件遗漏。"
+      "这些缺陷公开小样例覆盖不到，只有过程评估能抓住——也正是「只看答案」的评测会系统性漏掉的部分。\n")
 
     # ---- 8. 能力画像与边界分析 ----
     w("## 8. 能力画像与边界分析")

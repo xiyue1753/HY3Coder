@@ -107,7 +107,7 @@ minor 记在 finding 上，verdict 没有单独的 minor 档。带 minor 但无 
 
 ### 5.4 SILENT_FAILURE 的实证
 
-359 条里评估器自然检出 **15 条 SILENT_FAILURE（4.2%）**，即一批"用例全过、答案判对，但过程有根本缺陷"的题目。这 15 条**全部落在抽检样本内**，人工复核 15 条 fatal **全部属实（match）**。分布上 hard 8 / medium 7，CF 11 / ABC 4，明显偏向中高难度。这些样本说明只看答案的评测会漏掉这类缺陷，部分留档在 `data/golden/golden_real_algorithm.jsonl`（本地）。
+359 条里评估器自然检出 **15 条 SILENT_FAILURE（4.2%）**，即一批"用例全过、答案判对，但过程有根本缺陷"的题目。这 15 条**全部落在抽检样本内**，人工复核 15 条 fatal **全部属实（match）**。分布上 hard 8 / medium 7，CF 11 / ABC 4，明显偏向中高难度。这些样本说明只看答案的评测会漏掉这类缺陷；15 条的逐题记录（含代码与 findings）见 `data/outputs/eval_*_t0.jsonl`，报告 §7 给出定位清单。
 
 ### 5.5 ReAct 修正闭环（答案错样本 36 条）
 
