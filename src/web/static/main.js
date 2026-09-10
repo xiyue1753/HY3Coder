@@ -176,9 +176,9 @@ async function loadGolden(){
       <span class="tag v-SILENT_FAILURE">${TYPE_CN[x.flaw_type]||x.flaw_type}</span>
       <b>${x.question.title}</b><span class="tag">${x.question.scene}</span></div>
     <div class="text-sm muted mb-2">${x.question.prompt}</div>
-    <div class="text-sm muted mb-2">标准答案：<span class="mono">${x.question.standard_answer}</span> · 陷阱答案：<span class="mono">${x.flaw_answer.final_answer}</span></div>
+    <div class="text-sm muted mb-2">标准答案：<span class="mono">${x.question.standard_answer}</span> · 留档答案：<span class="mono">${x.flaw_answer.final_answer}</span></div>
     <div class="text-sm" style="color:var(--warn)">构造说明：${x.construction_note}</div>
-    <div class="mt-2"><details><summary class="text-sm muted cursor-pointer">查看陷阱过程</summary>
+    <div class="mt-2"><details><summary class="text-sm muted cursor-pointer">查看当时过程</summary>
       ${(x.flaw_answer.steps||[]).map(s=>`<div class="step-card err" style="margin:6px 0"><div class="k">${s.kind} · STEP ${s.id}</div><div>${s.content}</div><div class="text-sm" style="color:var(--pri2)">→ ${s.conclusion}</div></div>`).join('')}
     </details></div></div>`).join('');
 }

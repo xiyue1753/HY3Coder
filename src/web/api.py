@@ -4,7 +4,7 @@ Endpoints (all data under Hy3_APP2/data/):
   GET  /api/summary        — 评估总览指标（含 refine 前后对比）
   GET  /api/questions      — 题目列表（scene/verdict 过滤）
   GET  /api/questions/{qid}— 单题详情（步骤 + findings + refine 轮次）
-  GET  /api/golden         — 沉默失败 golden 样本库
+  GET  /api/golden         — SILENT_FAILURE 留档库
   GET  /api/audit          — 人工抽检记录
   GET  /api/meta           — 数据源元信息（路径/命令）
   GET  /api/config/model   — 当前模型调用配置（Key 只回显掩码）

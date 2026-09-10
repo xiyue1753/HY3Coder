@@ -207,6 +207,8 @@ ol.cards.findings>li{border-left-color:#e4a2a2; background:#fffdfd}
 <li><a href="#1">1. 评估总览</a></li>
 <li class="lvl3"><a href="#11">1.1 记忆暴露检测</a></li>
 <li class="lvl3"><a href="#12">1.2 与任务要求的逐条对照</a></li>
+<li class="lvl3"><a href="#13">1.3 题集来源与构建方式</a></li>
+<li class="lvl3"><a href="#14">1.4 应用形态与演示链路</a></li>
 <li><a href="#2">2. 分层退化分析</a></li>
 <li class="lvl3"><a href="#21">2.1 统一难度轴</a></li>
 <li class="lvl3"><a href="#22">2.2 平台难度轴</a></li>
@@ -396,8 +398,8 @@ ol.cards.findings>li{border-left-color:#e4a2a2; background:#fffdfd}
 <tbody>
 <tr>
 <td>题集要有标准答案、可自动校验、分难度、说明来源</td>
-<td>每题带可执行的 AC 参考解与测试用例，公开用例和隐藏用例都在，多解题目用 SPJ 判定；难度双轨分层，平台官方分与 Hy3 多专家评审各一套</td>
-<td><code>data/questions/*.jsonl</code>；分层方法见附录 A</td>
+<td>每题带可执行的 AC 参考解与测试用例，公开用例和隐藏用例都在，多解题目用 SPJ 判定；难度按统一难度分分层，平台官方档只作采样与对照</td>
+<td><code>data/questions/*.jsonl</code>；分层方法见附录 A；理由见 §1.3</td>
 </tr>
 <tr>
 <td>过程正确性判定、错误定位、错误归类、"答案对但过程不成立"识别</td>
@@ -421,6 +423,18 @@ ol.cards.findings>li{border-left-color:#e4a2a2; background:#fffdfd}
 </tr>
 </tbody>
 </table></div>
+<p>答案轴与过程轴分开取证，是这套判定能成立的前提。执行反馈（沙盒跑公开与隐藏用例、与标准答案比对）只用来确定<strong>答案</strong>这一轴；<strong>过程</strong>这一轴的判定要求双视角读推理链后给出逐步定位与证据，prompt 里明确写了"最终答案正确 ≠ 过程正确，不得因答案正确而放行"。两轴最后由 pipeline 的固定规则汇合：答案对且无 fatal → CORRECT，答案对但有 fatal → SILENT_FAILURE，答案错则只可能是过程错或答案错（规则见附录 B、DESIGN §6.4）。第 7 节那 15 条答案正确却被判过程 fatal 的样本，就是过程轴独立于答案轴产出判定的直接证据。</p>
+<h3 id="13">1.3 题集来源与构建方式</h3>
+<p>题集按自建方式构建：来源是 AtCoder ABC 与 Codeforces 的官方赛题，构造链路是抓题面、取平台 AC 提交作参考解、官方样例加人工边界用例，分层依据见附录 A。这与任务对评测样本的要求一致——样本由参与者自行收集或构造，并说明来源、构造方式与覆盖范围，自建链路正好把这几项都落在明面上。</p>
+<p>另一个原因是判定方式的匹配。本系统把标准答案定义为可执行参考解加测试用例，答案真值由沙盒执行给出；多解构造题还需要 SPJ 按题目谓词判定。</p>
+<p>公开解答集（GSM8K、MATH、MBPP、ProcessBench 这类）多按"答案唯一、可做文本比对"构造：题面配一份参考解答，判对错靠逐行比对，基本不含多解构造题，也不要求每题带可执行参考解与可复现用例。而多解构造题恰恰是过程评估最容易失手的地方——同一份输出可以有多个合法形态，只比答案会把合法解判错，只看最终答案也看不出"答案合法但过程不成立"。自建题集里这类题共 21 道（ABC 6 / CF 15），checker 以 <code>checker_code</code> 内联在题目记录里，评测不依赖外部判定装置；隐藏用例则用来挡"恰好通过公开样例"。</p>
+<p>代价是缺少与公开基准直接可比的数字。这一点用平台官方 ELO 作外部锚点校验来部分弥补：统一难度分与 ABC 官方 ELO 的 Spearman 相关为 0.706、与 CF 为 0.816（见附录 A）。</p>
+<h3 id="14">1.4 应用形态与演示链路</h3>
+<p>本报告的所有读数由 CLI 批量产出（<code>run-eval</code> / <code>run-refine</code> / <code>audit</code> / <code>check-answers</code>，复现命令见附录）；应用侧把这些能力装进一个可运行的界面：FastAPI 后端加单文件 SPA，本地 <code>.\run.ps1 serve</code> 后打开 <code>127.0.0.1:8000</code>，含评估总览、单题回放、Golden 库、人工抽检、交互式解题、题集浏览器六个视图。</p>
+<p><img alt="fig5" src="figures/ui_dashboard_overview.png" /></p>
+<p><strong>Fig. 5</strong> 仪表盘评估总览：顶部为已评估题量、答案准确率、过程正确率与沉默失败检出四项指标，下方依次是分层退化、判定分布、错误类型分布与知识点能力画像。</p>
+<p>其中"交互式解题"是按现场演示设计的链路：从题集载入题目（连同该题自带参考解）→ 在服务端沙盒里试运行参考解、逐用例回显输入、期望与实际输出 → Hy3 逐 Step 流式求解（步骤卡片依次出现，当前步正文实时增长）→ 过程评估给出 verdict 与 findings → 会话完整留档并分配新题号，可在单题回放入口按题号回看。侧栏"模型配置"可设提供方、Key、推理强度与温度，页面顶部与求解进度都标出本次调用的模型，便于录屏与复现。演示录像 <code>HY3Coder-demo.mp4</code>（79 秒）就是这条链路的完整录制。</p>
+<p>交互演示的题目、会话快照与判定记录写在独立文件里（<code>data/questions/interactive.jsonl</code>、<code>data/outputs/interact_sessions.jsonl</code>、<code>data/outputs/eval_interactive.jsonl</code>），与正式评测物理分离，不进任何统计口径。</p>
 <h2 id="2">2. 分层退化分析</h2>
 <p>本章有两条难度轴。统一难度分 <code>diff_score</code> 是本报告使用的标准，分层退化分析与后面各章的难度标注都以它为准；平台官方标签只作对照，用来看两个平台各自的原始分级。</p>
 <h3 id="21">2.1 统一难度轴</h3>
@@ -2089,7 +2103,7 @@ int main() {
 </table></div>
 <p>口径说明：定位准确率的分母是答案错的样本，以标准答案判定；误报率的分母是答案正确、却被评估器判为过程有错的样本。三层复核看的是系统对 fatal 与 minor 的分级对不对：完全相符就是分级正确；层次不符是把 minor 判成了 fatal，算误报一侧；完全不符是系统说有错而过程其实没有问题。误报率给的是一个区间，下界只算完全不符，上界把层次不符也算进去。</p>
 <h2 id="7-silent_failure">7. 真实评测检出的 SILENT_FAILURE 样本</h2>
-<p>正式评测的 359 题里，有 15 题被检出 <code>SILENT_FAILURE</code>，占 4.2%：答案在公开与隐藏用例上全部通过，verifier 却认定推理链存在致命缺陷。这些题全部落在人工抽检的样本内，致命分级经复核属实，见第 6 节。逐题的求解过程、findings 与沙盒事实在 <code>data/outputs/eval_abc_selfbuilt_t0.jsonl</code> 与 <code>eval_cf_selfbuilt_t0.jsonl</code>，这里不再重复粘贴。</p>
+<p>正式评测的 359 题里，有 15 题被检出 <code>SILENT_FAILURE</code>，占 4.2%：答案在公开与隐藏用例上全部通过，verifier 却认定推理链存在致命缺陷。这些题全部落在人工抽检的样本内，致命分级经复核属实，见第 6 节。逐题的求解过程、findings 与沙盒事实在 <code>data/outputs/eval_abc_selfbuilt_t0.jsonl</code> 与 <code>eval_cf_selfbuilt_t0.jsonl</code>，这里不再重复粘贴。这 15 条的完整留档（题目、当时模型输出、缺陷定位与沙盒事实）另存为 <code>data/golden/golden_real_algorithm.jsonl</code>，仪表盘「Golden 库」页可直接逐条查看。</p>
 <div class="tw"><table>
 <thead>
 <tr>
@@ -2341,7 +2355,7 @@ int main() {
 </tr>
 <tr>
 <td>沉默失败</td>
-<td>golden 检出率与抽检误报率联动监控</td>
+<td>留档样本的人工复核与误报率联动监控</td>
 <td>高误报时收紧定位条件，低检出时增强回溯审查</td>
 </tr>
 <tr>

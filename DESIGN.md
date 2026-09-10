@@ -176,12 +176,19 @@ class RefineRecord(BaseModel):
   `--judge special --checker-file ...` 标注（此时自动找 AC 也用 checker 而非样例比对）。
 - checker 运行仍走沙盒（继承超时/输出上限），不信任输入输出内容。
 
-自建题 SPJ 清单（5 题，checker 在 `scripts/checkers/`）：
+自建题走 SPJ 判定共 21 题（ABC 6 / CF 15）。checker 以 `checker_code` 内联在题目记录里
+（题集自包含，评测时不依赖外部文件），编写与自测用的源码留档在 `scripts/checkers/`。
+
+ABC 侧：
 - A1031 abc271_d Flip and Adjust（Yes/No + H/T 方案，DP 可达判定 + 方案校验）
 - A1072 abc315_e Prerequisites（输出依赖闭包的任意拓扑序）
 - A1076 abc299_e Nearest Black Vertex（Yes/No + 涂色串，候选域可行性判定 + BFS 校验）
 - A1103 abc216_c Many Balls（构造 A/B 操作序列到 N）
 - A1104 abc251_d At Most 3（构造 ≤300 砝码覆盖 [1,W]）
+- A1174 abc392_e（构造合法连通方案，并查集校验）
+
+CF 侧 15 题：C2025 / C2027 / C2060 / C2097 / C2100 / C2106 / C2117 / C2123 /
+C2138 / C2139 / C2148 / C2155 / C2158 / C2166 / C2173，同样以 `judge=special` 入库并配 checker。
 
 判题模式扫描记录：`abc_selfbuilt` 内 A1098 abc228_d 的 "one such" 属误报（题面里指查询存在，
 不是多解），未转为 SPJ。

@@ -14,7 +14,7 @@ make_report / 前端提示）一律通过本模块的访问器取路径，
       interactive.jsonl        = 交互题池（交互式解题现场输入的题，按题号可回放）
       interact_sessions.jsonl  = 交互解题完整会话快照（题面/用例/参考解/模型/试运行）
       refine_interactive.jsonl = 交互演示的 refine 记录（与正式 refine 严格分离）
-      golden_real_algorithm.jsonl = 真实评测检出的 golden 样本
+      golden_real_algorithm.jsonl = 真实评测检出的 SILENT_FAILURE 留档
       audit_records.jsonl      = 人工抽检标注
 """
 from __future__ import annotations
@@ -256,7 +256,7 @@ def load_interact_sessions(root: str | Path) -> list[InteractSession]:
 
 
 def load_golden(root: str | Path) -> list[GoldenSample]:
-    """合成 + 真实 golden 都纳入展示（读序：真实优先，见 GOLDEN_FILES）。"""
+    """真实评测检出的留档样本纳入展示（读序见 GOLDEN_FILES）。"""
     out: list[GoldenSample] = []
     for p in golden_paths(root):
         if p.exists():

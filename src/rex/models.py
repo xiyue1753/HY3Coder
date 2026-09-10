@@ -318,13 +318,13 @@ class AuditRecord(BaseModel):
 
 
 class GoldenSample(BaseModel):
-    """沉默失败 golden 样本：答案正确但过程存在根本缺陷（陷阱样本）。
+    """沉默失败留档样本：正式评测中检出的"答案正确但过程存在根本缺陷"样本。
 
-    用于验证评估器能否检出 SILENT_FAILURE，而非让 solver 求解。
+    留档当时模型输出、缺陷定位与沙盒事实，供逐条复核；不是让 solver 求解的题。
     """
 
     question: QuestionItem                # 题目（含标准答案/参考解）
-    flaw_answer: Answer                   # 陷阱解题过程：答案正确但过程有缺陷
+    flaw_answer: Answer                   # 留档的模型输出：答案正确但过程有缺陷
     flaw_type: ErrorType                  # 缺陷类型
     construction_note: str                # 构造说明：覆盖哪类沉默失败
     expected_verdict: Verdict = Verdict.SILENT_FAILURE

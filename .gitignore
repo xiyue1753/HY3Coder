@@ -74,10 +74,10 @@ data/outputs/refine_interactive.jsonl
 /reports/*.html
 !/reports/REPORT.html
 
-# 内部开发文档与留档数据（实现日志/抓取指南/真实模型输出留档，
-# 不随公开仓库发布；文件保留本地工作区）
+# 内部开发文档（实现日志/抓取指南等，不随公开仓库发布；文件保留本地工作区）
 /docs/
-/data/golden/
+# 注：data/golden/ 下的 SILENT_FAILURE 留档（golden_real_algorithm.jsonl）随仓库交付，
+# 故不在此忽略
 
 # 参赛任务书 PDF（内部评审材料，不入库）
 *.pdf

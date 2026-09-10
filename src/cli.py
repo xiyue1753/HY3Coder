@@ -317,7 +317,7 @@ def audit(
 
 @app.command()
 def report(out: Path = typer.Option(ROOT / "reports" / "REPORT.md")) -> None:
-    """生成分析报告（分层退化/错误分布/case 归因/修正对比/golden 检出）。"""
+    """生成分析报告（分层退化/错误分布/case 归因/修正对比/SILENT_FAILURE 留档）。"""
     sys.path.insert(0, str(ROOT / "scripts"))
     from make_report import build
     out.parent.mkdir(parents=True, exist_ok=True)

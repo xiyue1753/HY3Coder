@@ -732,7 +732,7 @@ def build() -> str:
         w(f"\n_暂无抽检标注，运行 `python -m src.cli audit --results {ds.evals_path(ROOT, next(d for d in ds.active_datasets() if d.evals))}` 生成模板。_\n")
 
     # ---- 7. 真实评测检出的 SILENT_FAILURE ----
-    # 直接从正式评测明细统计（golden 独立留档文件仅本地保留，不随仓库交付）
+    # 直接从正式评测明细统计（留档文件 data/golden/golden_real_algorithm.jsonl 与报告同源，随仓库交付）
     sil = [r for r in evals if r.verification.verdict == Verdict.SILENT_FAILURE]
     w("## 7. 真实评测检出的 SILENT_FAILURE 样本")
     w(f"\n正式评测的 {len(evals)} 题里，有 {len(sil)} 题被检出 `SILENT_FAILURE`，"
@@ -767,7 +767,7 @@ def build() -> str:
     w("|---|---|---|")
     w("| 复杂度控制 | 见第 3 节错误类型占比，若 `复杂度不达标`/`边界条件` 占比高，反映算法场景实现严谨性不足 | 增加静态检查前置；对声明复杂度与实现做一致性校验 |")
     w("| 跳步推导 | 算法场景 `跳步推导` 高发说明步骤颗粒度过粗 | 验证 prompt 强化逐步自含性要求 |")
-    w("| 沉默失败 | golden 检出率与抽检误报率联动监控 | 高误报时收紧定位条件，低检出时增强回溯审查 |")
+    w("| 沉默失败 | 留档样本的人工复核与误报率联动监控 | 高误报时收紧定位条件，低检出时增强回溯审查 |")
     w("| 分层退化 | 统一难度轴见 2.1，平台难度轴见 2.2，临界点取首次 8pp 以上跌落的 diff_score 档 | 对临界点之上补充针对性用例 |")
     w("")
 
