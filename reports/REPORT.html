@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HY3Coder 分析报告</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.2/marked.min.js"></script>
 <style>
 :root{
   --ink:#1f2328; --muted:#5b6673; --line:#d9dee5; --line-soft:#eceff3;
@@ -69,6 +72,22 @@ nav.toc h2{margin:0 0 .6em; font-size:1em; border:none; padding:0; color:var(--m
 nav.toc ol{list-style:none; margin:0; padding:0; columns:2; column-gap:34px}
 nav.toc ol li{margin:.18em 0; break-inside:avoid}
 nav.toc .lvl3{padding-left:1.1em; color:var(--muted); font-size:.95em}
+/* 题面：与应用侧同一套容器样式（md-bound），数学块横向可滚 */
+.prompt{
+  margin:1.1em 0; padding:14px 20px 18px; background:#fbfcfe;
+  border:1px solid var(--line-soft); border-left:3px solid var(--accent); border-radius:6px;
+  font-size:.95em; line-height:1.72;
+}
+.md-bound{word-break:break-word}
+.md-bound p{margin:.55em 0}
+.md-bound h1,.md-bound h2,.md-bound h3,.md-bound h4{
+  font-size:1em; margin:1em 0 .3em; padding:0; border:none; color:#1f2937;
+}
+.md-bound pre{background:#f2f5f8; border:1px solid var(--line-soft); border-left:none;
+  margin:.7em 0; padding:10px 12px}
+.md-bound pre,.md-bound code{font-size:.88em; white-space:pre-wrap; word-break:break-word}
+.md-bound .katex-display{margin:.5em 0; overflow-x:auto; overflow-y:hidden}
+.md-bound ul,.md-bound ol{margin:.5em 0 .7em}
 @media print{
   body{background:#fff}
   .page{box-shadow:none; max-width:none; padding:0 8mm}
@@ -464,79 +483,169 @@ nav.toc .lvl3{padding-left:1.1em; color:var(--muted); font-size:.95em}
 <li>答案正确：True，用例通过率 1.0</li>
 <li>定位：第2步 逻辑缺陷，并查集设计未考虑线性探测的环形回绕：parent[pos] = find(pos+1) 在 pos = N-1 时指向哨兵 N，而非回绕到…；第4步 边界条件，代码在 pos=N 时访问 parent[N+1]（数组大小 N+1，合法下标 0..N），且写 A[N]（有效仅 0..N-1），属于未处…</li>
 </ul>
-<p>题面全文（取自 data/questions/ 里的原始题面）：</p>
-<pre><code class="language-text">Score : $400$ points
+<p>题面全文（原始题面，取自 <code>data/questions/</code>）：</p>
+<div class="prompt md-bound" data-prompt="1">Score : $400$ points
 
-Problem Statement
+
+
+
+
+
+
+### Problem Statement
 There is a sequence $A = (A_0, A_1, \dots, A_{N - 1})$ with $N = 2^{20}$ terms. Initially, every term is $-1$.
+
 
 Process $Q$ queries in order. The $i$-th query $(1 \leq i \leq Q)$ is described by an integer $t_i$ such that $t_i = 1$ or $t_i = 2$, and another integer $x_i$, as follows.
 
+
+
+
 If $t_i = 1$, do the following in order.
+
 
 Define an integer $h$ as $h = x_i$.
 
+
 While $A_{h \bmod N} \neq -1$, keep adding $1$ to $h$. We can prove that this process ends after finite iterations under the Constraints of this problem.
+
 
 Replace the value of $A_{h \bmod N}$ with $x_i$.
 
+
+
+
+
+
 If $t_i = 2$, print the value of $A_{x_i \bmod N}$ at that time.
+
+
+
 
 Here, for integers $a$ and $b$, $a \bmod b$ denotes the remainder when $a$ is divided by $b$.
 
-Constraints
+
+
+
+
+
+
+
+
+
+
+### Constraints
+
 
 $1 \leq Q \leq 2 \times 10^5$
 
+
 $t_i \in \{ 1, 2 \} \, (1 \leq i \leq Q)$
+
 
 $0 \leq x_i \leq 10^{18} \, (1 \leq i \leq Q)$
 
+
 There is at least one $i$ $(1 \leq i \leq Q)$ such that $t_i = 2$.
+
 
 All values in input are integers.
 
-Input
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Input
 Input is given from Standard Input in the following format:
 
-'''
+
+```
 $Q$
 $t_1$ $x_1$
 $\vdots$
 $t_{Q}$ $x_{Q}$
 
-'''
+```
 
-Output
+
+
+
+
+
+
+
+
+
+
+### Output
 For each query with $t_i = 2$, print the response in one line. It is guaranteed that there is at least one such query.
 
-Sample Input 1
-'''
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Sample Input 1
+```
 4
 1 1048577
 1 1
 2 2097153
 2 3
 
-'''
+```
 
-Sample Output 1
-'''
+
+
+
+
+
+
+
+
+
+
+### Sample Output 1
+```
 1048577
 -1
 
-'''
+```
+
 
 We have $x_1 \bmod N = 1$, so the first query sets $A_1 = 1048577$.
 
+
 In the second query, initially we have $h = x_2$, for which $A_{h \bmod N} = A_{1} \neq -1$, so we add $1$ to $h$. Now we have $A_{h \bmod N} = A_{2} = -1$, so this query sets $A_2 = 1$.
+
 
 In the third query, we print $A_{x_3 \bmod N} = A_{1} = 1048577$.
 
+
 In the fourth query, we print $A_{x_4 \bmod N} = A_{3} = -1$.
 
+
 Note that, in this problem, $N = 2^{20} = 1048576$ is a constant and not given in input.
-</code></pre>
+</div>
 <h3 id="a1148-abc368_d">A1148 · abc368_d</h3>
 <ul>
 <li>难度：语义档 基础~套路，diff_score 22</li>
@@ -544,15 +653,15 @@ Note that, in this problem, $N = 2^{20} = 1048576$ is a constant and not given i
 <li>答案正确：True，用例通过率 1.0</li>
 <li>定位：第2步 概念理解错误，错误断言节点必须保留当且仅当本身是关键点或子树（以1为根）含关键点。反例：链1-2-3, K={3}，代码输出3，正确最小为1，因根1非关键…；第2步 逻辑缺陷，算法等价条件逻辑错误：仅依子树含关键点计数会保留非必要桥接祖先。正确需节点是关键点，或≥2子树枝含关键点，或子树含且父侧含。反例同上。</li>
 </ul>
-<p>题面全文（取自 data/questions/ 里的原始题面）：</p>
-<pre><code class="language-text">Score : $425$ points
+<p>题面全文（原始题面，取自 <code>data/questions/</code>）：</p>
+<div class="prompt md-bound" data-prompt="1">Score : $425$ points
 
-Problem Statement
+### Problem Statement
 You are given a tree with $N$ vertices numbered $1$ to $N$. The $i$-th edge connects vertices $A_i$ and $B_i$.
 
 Consider a tree that can be obtained by removing some (possibly zero) edges and vertices from this graph. Find the minimum number of vertices in such a tree that includes all of $K$ specified vertices $V_1,\ldots,V_K$.
 
-Constraints
+### Constraints
 
 $1 \leq K \leq N \leq 2\times 10^5$
 
@@ -564,23 +673,23 @@ The given graph is a tree.
 
 All input values are integers.
 
-Input
+### Input
 The input is given from Standard Input in the following format:
 
-'''
+```
 $N$ $K$
 $A_1$ $B_1$
 $\vdots$
 $A_{N-1}$ $B_{N-1}$
 $V_1$ $\ldots$ $V_K$
 
-'''
+```
 
-Output
+### Output
 Print the answer.
 
-Sample Input 1
-'''
+### Sample Input 1
+```
 7 3
 1 2
 1 3
@@ -590,34 +699,34 @@ Sample Input 1
 3 7
 1 3 5
 
-'''
+```
 
-Sample Output 1
-'''
+### Sample Output 1
+```
 4
 
-'''
+```
 
 The given tree is shown on the left in the figure below. The tree with the minimum number of vertices that includes all of vertices $1,3,5$ is shown on the right.
 
-Sample Input 2
-'''
+### Sample Input 2
+```
 4 4
 3 1
 1 4
 2 1
 1 2 3 4
 
-'''
+```
 
-Sample Output 2
-'''
+### Sample Output 2
+```
 4
 
-'''
+```
 
-Sample Input 3
-'''
+### Sample Input 3
+```
 5 1
 1 4
 2 3
@@ -625,14 +734,14 @@ Sample Input 3
 1 2
 1
 
-'''
+```
 
-Sample Output 3
-'''
+### Sample Output 3
+```
 1
 
-'''
-</code></pre>
+```
+</div>
 <h3 id="a1164-abc386_d">A1164 · abc386_d</h3>
 <ul>
 <li>难度：语义档 中等，diff_score 50</li>
@@ -640,100 +749,247 @@ Sample Output 3
 <li>答案正确：True，用例通过率 1.0</li>
 <li>定位：第3步 复杂度不达标，步骤3断言算法总复杂度为O(M log M)时间、O(M)空间，但实际步骤4代码中对每个约束列c遍历所有压缩段segs（cols最多M个，s…</li>
 </ul>
-<p>题面全文（取自 data/questions/ 里的原始题面）：</p>
-<pre><code class="language-text">Score : $425$ points
+<p>题面全文（原始题面，取自 <code>data/questions/</code>）：</p>
+<div class="prompt md-bound" data-prompt="1">Score : $425$ points
 
-Problem Statement
+
+
+
+
+
+
+### Problem Statement
 There is an $N \times N$ grid. Takahashi wants to color each cell black or white so that all of the following conditions are satisfied:
+
+
+
 
 For every row, the following condition holds:
 
+
+
+
 There exists an integer $i\ (0\leq i\leq N)$ such that the leftmost $i$ cells are colored black, and the rest are colored white.
+
+
+
 
 For every column, the following condition holds:
 
+
+
+
 There exists an integer $i\ (0\leq i\leq N)$ such that the topmost $i$ cells are colored black, and the rest are colored white.
+
+
+
+
+
+
 
 Out of these $N^2$ cells, $M$ of them have already been colored. Among them, the $i$-th one is at the $X_i$-th row from the top and the $Y_i$-th column from the left, and it is colored black if $C_i$ is B and white if $C_i$ is W.
 
+
 Determine whether he can color the remaining uncolored $N^2 - M$ cells so that all the conditions are satisfied.
 
-Constraints
+
+
+
+
+
+
+
+
+
+
+### Constraints
+
 
 $1\leq N\leq 10^9$
 
+
 $1\leq M\leq \min(N^2,2\times 10^5)$
+
 
 $1\leq X_i,Y_i\leq N$
 
+
 $(X_i,Y_i)\neq (X_j,Y_j)\ (i\neq j)$
+
 
 $C_i$ is B or W.
 
+
 All input numbers are integers.
 
-Input
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Input
 The input is given from Standard Input in the following format:
 
-'''
+
+```
 $N$ $M$
 $X_1$ $Y_1$ $C_1$
 $\vdots$
 $X_M$ $Y_M$ $C_M$
 
-'''
+```
 
-Output
+
+
+
+
+
+
+
+
+
+
+### Output
 If it is possible to satisfy the conditions, print Yes; otherwise, print No.
 
-Sample Input 1
-'''
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Sample Input 1
+```
 4 3
 4 1 B
 3 2 W
 1 3 B
 
-'''
+```
 
-Sample Output 1
-'''
+
+
+
+
+
+
+
+
+
+
+### Sample Output 1
+```
 Yes
 
-'''
+```
+
 
 For example, one can color the grid as in the following figure to satisfy the conditions. The cells already colored are surrounded by red borders.
 
-Sample Input 2
-'''
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Sample Input 2
+```
 2 2
 1 2 W
 2 2 B
 
-'''
+```
 
-Sample Output 2
-'''
+
+
+
+
+
+
+
+
+
+
+### Sample Output 2
+```
 No
 
-'''
+```
+
 
 No matter how the remaining two cells are colored, the conditions cannot be satisfied.
 
-Sample Input 3
-'''
+
+
+
+
+
+
+
+
+
+
+
+### Sample Input 3
+```
 1 1
 1 1 W
 
-'''
+```
 
-Sample Output 3
-'''
+
+
+
+
+
+
+
+
+
+
+### Sample Output 3
+```
 Yes
 
-'''
+```
 
-Sample Input 4
-'''
+
+
+
+
+
+
+
+
+
+
+
+### Sample Input 4
+```
 2289 10
 1700 1083 W
 528 967 B
@@ -746,14 +1002,24 @@ Sample Input 4
 1814 712 B
 936 763 B
 
-'''
+```
 
-Sample Output 4
-'''
+
+
+
+
+
+
+
+
+
+
+### Sample Output 4
+```
 No
 
-'''
-</code></pre>
+```
+</div>
 <h3 id="a1174-abc392_e">A1174 · abc392_e</h3>
 <ul>
 <li>难度：语义档 中等，diff_score 50</li>
@@ -761,52 +1027,126 @@ No
 <li>答案正确：True，用例通过率 1.0</li>
 <li>定位：第4步 逻辑缺陷，构造实现中盲目顺序消耗spare边，且用 fu == y（y为弹出的未连通分量代表整数，未做dsu.find）决定是否将边连到已连通分量co…</li>
 </ul>
-<p>题面全文（取自 data/questions/ 里的原始题面）：</p>
-<pre><code class="language-text">Score : $450$ points
+<p>题面全文（原始题面，取自 <code>data/questions/</code>）：</p>
+<div class="prompt md-bound" data-prompt="1">Score : $450$ points
 
-Problem Statement
+
+
+
+
+
+
+### Problem Statement
 There are $N$ servers numbered from $1$ to $N$ and $M$ cables numbered from $1$ to $M$.
 Cable $i$ connects servers $A_i$ and $B_i$ bidirectionally.
 
+
 By performing the following operation some number of times (possibly zero), make all servers connected via cables.
+
+
+
 
 Operation: Choose one cable and reconnect one of its ends to a different server.
 
+
+
+
 Find the minimum number of operations required and output an operation sequence achieving this minimum.
 
-Constraints
+
+
+
+
+
+
+
+
+
+
+### Constraints
+
 
 $2 \leq N \leq 2\times 10^5$
 
+
 $N-1 \leq M \leq 2\times 10^5$
+
 
 $1 \leq A_i, B_i \leq N$
 
+
 All input values are integers.
 
-Input
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Input
 The input is given from Standard Input in the following format:
 
-'''
+
+```
 $N$ $M$
 $A_1$ $B_1$
 $A_2$ $B_2$
 $\vdots$
 $A_M$ $B_M$
 
-'''
+```
 
-Output
+
+
+
+
+
+
+
+
+
+
+
+### Output
 Let the minimum number of operations be $K$. Print $K+1$ lines.
+
+
+
 
 The first line should contain $K$.
 
+
 The $(i+1)$-th line should contain three space-separated integers: the number of the cable chosen in the $i$-th operation, the server number that was originally connected at that end, and the server number to which it is connected after the operation, in this order.
+
+
+
 
 If there are multiple valid solutions, any one of them will be accepted.
 
-Sample Input 1
-'''
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Sample Input 1
+```
 4 5
 1 1
 1 2
@@ -814,56 +1154,118 @@ Sample Input 1
 3 4
 4 4
 
-'''
+```
 
-Sample Output 1
-'''
+
+
+
+
+
+
+
+
+
+
+
+### Sample Output 1
+```
 1
 1 1 3
 
-'''
+```
+
+
 
 By reconnecting the end of cable $1$ that is connected to server $1$ to server $3$, the servers can be connected via cables.
 
+
+
+
 Operations such as reconnecting the end of cable $5$ that is connected to server $4$ to server $1$, or reconnecting the end of cable $2$ that is connected to server $2$ to server $3$, will also result in all servers being connected and are considered correct.
 
-Sample Input 2
-'''
+
+
+
+
+
+
+
+
+
+
+
+### Sample Input 2
+```
 4 3
 3 4
 4 1
 1 2
 
-'''
+```
 
-Sample Output 2
-'''
+
+
+
+
+
+
+
+
+
+
+
+### Sample Output 2
+```
 0
 
-'''
+```
+
+
 
 No operation may be necessary.
 
-Sample Input 3
-'''
+
+
+
+
+
+
+
+
+
+
+
+### Sample Input 3
+```
 5 4
 3 3
 3 3
 3 3
 3 3
 
-'''
+```
 
-Sample Output 3
-'''
+
+
+
+
+
+
+
+
+
+
+
+### Sample Output 3
+```
 4
 1 3 5
 2 3 4
 3 3 2
 4 3 1
 
-'''
-</code></pre>
+```
+</div>
 <h3 id="c2029-cf2241f">C2029 · cf2241f</h3>
 <ul>
 <li>难度：语义档 基础~套路，diff_score 35</li>
@@ -871,18 +1273,18 @@ Sample Output 3
 <li>答案正确：True，用例通过率 1.0</li>
 <li>定位：第2步 跳步推导，步骤2给出充要条件：总逆序对奇或存在分割点k使前缀1奇且后缀0奇则Alice赢，否则Bob必胜。前置推理仅证明了充分性（存在k可删对应子序列…</li>
 </ul>
-<p>题面全文（取自 data/questions/ 里的原始题面）：</p>
-<pre><code class="language-text">F. A Bit Odd
+<p>题面全文（原始题面，取自 <code>data/questions/</code>）：</p>
+<div class="prompt md-bound" data-prompt="1">F. A Bit Odd
 time limit per test2 seconds
 memory limit per test256 megabytes
 
 Alice and Bob have got a binary
 ∗
 ∗
- string
+ string 
 s
 𝑠
- of length
+ of length 
 n
 𝑛
 . They have decided to play a game on it, taking turns alternately, with Alice moving first.
@@ -899,48 +1301,48 @@ Determine who wins the game, assuming both players play optimally.
 
 ∗
 ∗
-A binary string is a string that consists only of the characters
+A binary string is a string that consists only of the characters 
 0
 0
- and
+ and 
 1
 1
 .
 
 †
 †
-A sequence
+A sequence 
 a
 𝑎
- is a subsequence of a string
+ is a subsequence of a string 
 b
 𝑏
- if
+ if 
 a
 𝑎
- can be obtained from
+ can be obtained from 
 b
 𝑏
  by the deletion of several (possibly zero or all) characters.
 
 ‡
 ‡
-An inversion in a binary string
+An inversion in a binary string 
 s
 𝑠
- is a pair of indices
+ is a pair of indices 
 (i,j)
 (
 𝑖
 ,
 𝑗
 )
- such that
+ such that 
 i&lt;j
 𝑖
 &lt;
 𝑗
- and
+ and 
 s
 i
 =1
@@ -948,7 +1350,7 @@ i
 𝑖
 =
 1
- and
+ and 
 s
 j
 =0
@@ -960,7 +1362,7 @@ j
 
 Input
 
-The first line contains a single integer
+The first line contains a single integer 
 t
 𝑡
  (
@@ -975,7 +1377,7 @@ t
 4
 ) — the number of test cases. Description of each test case follows.
 
-The first line of each test case contains a single integer
+The first line of each test case contains a single integer 
 n
 𝑛
  (
@@ -990,32 +1392,32 @@ n
 ⋅
 10
 5
-) — the length of the binary string
+) — the length of the binary string 
 s
 𝑠
 .
 
-The second line of each test case contains a binary string
+The second line of each test case contains a binary string 
 s
 𝑠
- of length
+ of length 
 n
 𝑛
-. It is guaranteed that each character of
+. It is guaranteed that each character of 
 s
 𝑠
- is either
+ is either 
 0
 0
- or
+ or 
 1
 1
 .
 
-It is guaranteed that the sum of
+It is guaranteed that the sum of 
 n
 𝑛
- over all the test cases does not exceed
+ over all the test cases does not exceed 
 2⋅
 10
 5
@@ -1027,10 +1429,10 @@ n
 
 Output
 
-For each test case, print
+For each test case, print 
 Alice
 Alice
- if Alice wins the game and
+ if Alice wins the game and 
 Bob
 Bob
  otherwise.
@@ -1054,31 +1456,31 @@ Note
 
 For the first test case, Alice can choose the entire string as it has an odd number of inversions. Now, Bob is left with an empty string, and he cannot make a move. Thus, Alice wins.
 
-For the second test case, Alice can choose the subsequence formed by the characters at indices
+For the second test case, Alice can choose the subsequence formed by the characters at indices 
 1
 1
-,
+, 
 2
 2
-, and
+, and 
 4
 4
-, i.e.,
+, i.e., 
 010
 010
-. Bob is then left with the character at index
+. Bob is then left with the character at index 
 3
 3
-, namely
+, namely 
 0
 0
-, which has
+, which has 
 0
 0
  inversions (an even number). Therefore, Bob cannot choose a subsequence with an odd number of inversions, so Alice wins.
 
-For the third test case, it can be shown that Bob can guarantee a win irrespective of Alice's first move.
-</code></pre>
+For the third test case, it can be shown that Bob can guarantee a win irrespective of Alice&#x27;s first move.
+</div>
 <h2 id="5">5. 修正闭环</h2>
 <h3 id="51-react">5.1 答案错样本的 ReAct 修正</h3>
 <p>测试对象是 temperature=0 正式评测里答案错误的全部 36 题。每轮反馈除了 verifier 的审查意见，还附上公开样例的沙盒执行结果，其中包含失败用例的输入、期望输出和实际输出，让模型看到客观事实；重验证时把执行反馈通过 <code>execution_feedback</code> 一并交给两个视角与 ARBITER，公开样例都没过的不得判 CORRECT。终局用含隐藏用例在内的全部用例复核答案真值。记录在 <code>data/outputs/refine_wrong_t0.jsonl</code>，脚本 <code>scripts/run_refine_wrong_t0.py</code>，方法见附录 C。</p>
@@ -1887,5 +2289,37 @@ For the third test case, it can be shown that Bob can guarantee a win irrespecti
 <h3 id="d7">D.7 输出</h3>
 <p>探测记录写在 <code>data/outputs/contamination_probe.jsonl</code>，每行含两 probe 的原始输出与判定；分层表、暴露样本清单与人工复核理由见 <code>reports/CONTAMINATION_METHOD.md</code>，读数与解读见正文 §1.1。执行日期 2026-09-09，30 题全量，先跑 6 题 pilot 验证协议再用同一流程跑全量。</p>
 </div>
+<script>
+(function(){
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function renderMath(text){
+    if(!text) return '';
+    var katexHtml = [], safe = text;
+    if (window.katex) {
+      safe = text.replace(/\$\$([\s\S]+?)\$\$/g, function(m, exp){
+        try { katexHtml.push(katex.renderToString(exp, {displayMode:true, throwOnError:false})); }
+        catch(e){ katexHtml.push(''); }
+        return '\u0000K' + (katexHtml.length - 1) + '\u0000';
+      }).replace(/\$([^$\n]+?)\$/g, function(m, exp){
+        try { katexHtml.push(katex.renderToString(exp, {displayMode:false, throwOnError:false})); }
+        catch(e){ katexHtml.push(''); }
+        return '\u0000K' + (katexHtml.length - 1) + '\u0000';
+      });
+    }
+    var out;
+    try { out = (window.marked ? marked.parse(safe) : escapeHtml(safe).replace(/\n/g,'<br>')); }
+    catch(e){ out = escapeHtml(safe).replace(/\n/g,'<br>'); }
+    return out.replace(/\u0000K(\d+)\u0000/g, function(m, i){ return katexHtml[+i] || ''; });
+  }
+  var nodes = document.querySelectorAll('.prompt[data-prompt]');
+  for (var i = 0; i < nodes.length; i++) {
+    nodes[i].innerHTML = renderMath(nodes[i].textContent);
+  }
+})();
+</script>
 </body>
 </html>

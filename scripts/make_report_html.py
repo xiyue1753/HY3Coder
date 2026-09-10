@@ -1,8 +1,9 @@
 """把 reports/REPORT.md 渲染成单文件 HTML（reports/REPORT.html）。
 
 内容以 REPORT.md 为唯一来源，本脚本只负责呈现：表格、代码块、配图与目录排版。
-Usage:
-    python scripts/make_report_html.py [--src reports/REPORT.md] [--out reports/REPORT.html]
+题面（````prompt 围栏）沿用应用侧同一套渲染方式：marked 解析 Markdown + KaTeX 渲染
+$…$ 与 $$…$$ 公式，先提公式再解析，避免公式里的 < > 被转义。CDN 不可达时退化为
+原始题面文本，不影响阅读。
 """
 from __future__ import annotations
 
@@ -80,6 +81,22 @@ nav.toc h2{margin:0 0 .6em; font-size:1em; border:none; padding:0; color:var(--m
 nav.toc ol{list-style:none; margin:0; padding:0; columns:2; column-gap:34px}
 nav.toc ol li{margin:.18em 0; break-inside:avoid}
 nav.toc .lvl3{padding-left:1.1em; color:var(--muted); font-size:.95em}
+/* 题面：与应用侧同一套容器样式（md-bound），数学块横向可滚 */
+.prompt{
+  margin:1.1em 0; padding:14px 20px 18px; background:#fbfcfe;
+  border:1px solid var(--line-soft); border-left:3px solid var(--accent); border-radius:6px;
+  font-size:.95em; line-height:1.72;
+}
+.md-bound{word-break:break-word}
+.md-bound p{margin:.55em 0}
+.md-bound h1,.md-bound h2,.md-bound h3,.md-bound h4{
+  font-size:1em; margin:1em 0 .3em; padding:0; border:none; color:#1f2937;
+}
+.md-bound pre{background:#f2f5f8; border:1px solid var(--line-soft); border-left:none;
+  margin:.7em 0; padding:10px 12px}
+.md-bound pre,.md-bound code{font-size:.88em; white-space:pre-wrap; word-break:break-word}
+.md-bound .katex-display{margin:.5em 0; overflow-x:auto; overflow-y:hidden}
+.md-bound ul,.md-bound ol{margin:.5em 0 .7em}
 @media print{
   body{background:#fff}
   .page{box-shadow:none; max-width:none; padding:0 8mm}
@@ -91,26 +108,66 @@ nav.toc .lvl3{padding-left:1.1em; color:var(--muted); font-size:.95em}
 }
 """
 
+# 题面渲染脚本：与应用侧 src/web/static/main.js 的 renderMath 保持一致
+PROMPT_JS = r"""
+(function(){
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function renderMath(text){
+    if(!text) return '';
+    var katexHtml = [], safe = text;
+    if (window.katex) {
+      safe = text.replace(/\$\$([\s\S]+?)\$\$/g, function(m, exp){
+        try { katexHtml.push(katex.renderToString(exp, {displayMode:true, throwOnError:false})); }
+        catch(e){ katexHtml.push(''); }
+        return '\u0000K' + (katexHtml.length - 1) + '\u0000';
+      }).replace(/\$([^$\n]+?)\$/g, function(m, exp){
+        try { katexHtml.push(katex.renderToString(exp, {displayMode:false, throwOnError:false})); }
+        catch(e){ katexHtml.push(''); }
+        return '\u0000K' + (katexHtml.length - 1) + '\u0000';
+      });
+    }
+    var out;
+    try { out = (window.marked ? marked.parse(safe) : escapeHtml(safe).replace(/\n/g,'<br>')); }
+    catch(e){ out = escapeHtml(safe).replace(/\n/g,'<br>'); }
+    return out.replace(/\u0000K(\d+)\u0000/g, function(m, i){ return katexHtml[+i] || ''; });
+  }
+  var nodes = document.querySelectorAll('.prompt[data-prompt]');
+  for (var i = 0; i < nodes.length; i++) {
+    nodes[i].innerHTML = renderMath(nodes[i].textContent);
+  }
+})();
+"""
+
+HEAD_EXTRA = """<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.2/marked.min.js"></script>
+"""
+
 TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
-<style>{css}</style>
+{head_extra}<style>{css}</style>
 </head>
 <body>
 <div class="page">
 {toc}
 {body}
 </div>
+<script>{prompt_js}</script>
 </body>
 </html>
 """
 
 
 def _build_toc(tokens: list[dict]) -> str:
-    """目录：收 h1/h2，以及形如 1.1 / A.2 的 h3；案例标题与附录细则不进目录。"""
+    """目录：收 h1/h2，以及形如 1.1 / A.2 / 案例标题的 h3。"""
     rows: list[str] = []
 
     def walk(items: list[dict]) -> None:
@@ -130,6 +187,16 @@ def _build_toc(tokens: list[dict]) -> str:
     return ('<nav class="toc">\n<h2>目录</h2>\n<ol>\n' + "\n".join(rows) + "\n</ol>\n</nav>")
 
 
+def _wrap_prompts(body: str) -> str:
+    """````prompt 围栏交给前端渲染：原始题面留在容器里，JS 不可用时退化为文本。"""
+    def repl(m: re.Match) -> str:
+        raw = html.unescape(m.group(1))
+        return ('<div class="prompt md-bound" data-prompt="1">'
+                + html.escape(raw) + "</div>")
+
+    return re.sub(r'<pre><code class="language-prompt">(.*?)</code></pre>', repl, body, flags=re.S)
+
+
 def render(src: Path, out: Path) -> None:
     text = src.read_text(encoding="utf-8")
     md = markdown.Markdown(
@@ -137,6 +204,7 @@ def render(src: Path, out: Path) -> None:
         extension_configs={"toc": {"toc_depth": "1-4"}},
     )
     body = md.convert(text)
+    body = _wrap_prompts(body)
     # 表格套一层可横向滚动的容器，窄屏下不挤压
     body = body.replace("<table>", '<div class="tw"><table>').replace("</table>", "</table></div>")
     # 附录大标题单独一个类，打印时另起一页
@@ -149,8 +217,9 @@ def render(src: Path, out: Path) -> None:
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
-        TEMPLATE.format(title=html.escape(title), css=CSS,
-                        toc=_build_toc(md.toc_tokens), body=body.strip()),
+        TEMPLATE.format(title=html.escape(title), head_extra=HEAD_EXTRA, css=CSS,
+                        toc=_build_toc(md.toc_tokens), body=body.strip(),
+                        prompt_js=PROMPT_JS),
         encoding="utf-8", newline="\n",
     )
     print(f"html written -> {out}")
