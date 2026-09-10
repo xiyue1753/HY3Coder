@@ -116,8 +116,8 @@ nav.toc .lvl3{padding-left:1.1em; color:var(--muted); font-size:.95em}
 <li class="lvl3"><a href="#a_1">A.附：执行与复现</a></li>
 <li><a href="#b">附录 B：过程评估方法</a></li>
 <li class="lvl3"><a href="#b1">B.1 要回答的问题</a></li>
-<li class="lvl3"><a href="#b2">B.2 为什么不沿用旧判定</a></li>
-<li class="lvl3"><a href="#b3">B.3 现在怎么做</a></li>
+<li class="lvl3"><a href="#b2">B.2 判定口径上的三个设计考量</a></li>
+<li class="lvl3"><a href="#b3">B.3 判定方法</a></li>
 <li class="lvl3"><a href="#b4">B.4 验证</a></li>
 <li class="lvl3"><a href="#b5">B.5 边界</a></li>
 <li class="lvl3"><a href="#b_1">B.附：执行与复现</a></li>
@@ -1625,20 +1625,20 @@ For the third test case, it can be shown that Bob can guarantee a win irrespecti
 <hr />
 <h1 class="appendix" id="b">附录 B：过程评估方法</h1>
 <p>以下为过程评估器的判定方法说明（severity 分层、重建测试、程序化一致性裁决、静态规则校验补盲），源自 <code>reports/PROCESS_EVAL_METHOD.md</code>（2026-09-09 更新定稿）。</p>
-<p>本文说明过程评估器怎么搭、为什么这样搭、怎么验证它可靠。数据日期 2026-09-08，判定版本为 severity 语义，即 fatal/minor 加重建测试，模型 Hy3，相关代码在 <code>src/rex/verifier/</code> 与 <code>src/rex/executor/static_check.py</code>。姊妹篇是 <code>reports/DIFFICULTY_SCORING_METHOD.md</code>，讲题集难度分层。</p>
+<p>本文说明过程评估器怎么搭、为什么这样搭、怎么验证它可靠。数据日期 2026-09-08，判定口径为 severity 语义，即 fatal/minor 加重建测试，模型 Hy3，相关代码在 <code>src/rex/verifier/</code> 与 <code>src/rex/executor/static_check.py</code>。姊妹篇是 <code>reports/DIFFICULTY_SCORING_METHOD.md</code>，讲题集难度分层。</p>
 <h3 id="b1">B.1 要回答的问题</h3>
 <p>对算法竞赛题的解题过程做评估，不能只看最终答案对不对，还要判断推理是否站得住、错在哪一步、属于哪一类错误，并识别一类隐蔽样本：答案正确、推理却支撑不了这个结论。</p>
 <p>难点在于过程是否成立本身就是开放判断。解题过程的自然形态是省略平凡推导、直接引用公式定理，要求逐步展开一切会误伤大量正确答案；反过来，答案全对、用例全过的过程也可能有致命缺陷，比如复杂度超限、数组越界、分支遗漏恰好没被用例覆盖，这类缺陷必须识别，否则评估器形同虚设。两条要求互相拉扯：判严了误报多，判松了漏检多。评估器搭建的核心，是在平凡省略可以豁免和实质缺陷必须检出之间，划一条可操作、可复现、可验证的线。</p>
-<h3 id="b2">B.2 为什么不沿用旧判定</h3>
-<p>旧版评估器定稿于 2026-09-03，做法是双视角 LLM 审查加仲裁，当时已经能判过程正确性、定位错误、归类错误类型、识别 SILENT_FAILURE，但在有效性验证里暴露出三个结构性问题。</p>
+<h3 id="b2">B.2 判定口径上的三个设计考量</h3>
+<p>过程是否成立是开放判断，判定口径最容易踩三个坑，它们分别对应 B.3 的三处设计。</p>
 <ul>
-<li>任何发现都驱动"过程有错"。旧版只要发现一条 finding，哪怕只是自测文字笔误或表述不精确，就判 PROCESS_INCORRECT 或 SILENT_FAILURE，误报被结构性推高；同时小错误没有归类位置，缺一个只记录、不判错的档。</li>
-<li>一致性靠模型自觉。旧版没有用沙盒答案正确性加 findings 严重度做程序化裁决，verdict 完全交给采样，可能出现报了实质缺陷却仍判 CORRECT 这类自相矛盾。</li>
-<li>规则校验有语言盲区。复杂度声明一致性与死循环检测原来基于 Python AST，而算法主场景的代码大部分是 C++，实测 CF 128/184、ABC 80/175，这些题目的检测全部失效。</li>
+<li>不能"发现即判错"。如果把每条 finding 都当成过程有错，哪怕只是自测的文字笔误或表述不精确，答案正确、推理也站得住的样本也会被判过程错，误报会被结构性推高；同时还要有一个只记录、不判错的档，否则表述瑕疵和误用定理会被同等对待。</li>
+<li>一致性不能只靠模型自洽。模型可能报了实质缺陷却仍判 CORRECT，也可能答案客观正确、只有 minor 瑕疵却判过程错，所以最终 verdict 需要有程序化的裁决依据，而不是完全交给采样。</li>
+<li>规则校验不能只覆盖一种语言。算法主场景的代码大部分是 C++，实测 CF 128/184、ABC 80/175，规则校验若只支持 Python，这些题目的复杂度一致性与死循环检测会全部失效。</li>
 </ul>
-<h3 id="b3">B.3 现在怎么做</h3>
+<h3 id="b3">B.3 判定方法</h3>
 <h4 id="b31">B.3.1 把"发现问题"和"是否判错"分开</h4>
-<p>重构的出发点是拆成两个正交维度。发现维度是 findings，记录一切可疑点，每条带错误类型和严重度，共 10 类错误类型与 fatal/minor 两档严重度，严重度是这次新加的字段。裁决维度是 verdict，只由 severity 为 fatal 的 finding 驱动，minor 只记录、不改变 verdict。任何瑕疵都当过程错的问题，从根上解决了。</p>
+<p>判定拆成两个正交维度。发现维度是 findings，记录一切可疑点，每条带错误类型与严重度，错误类型共 10 类，严重度分 fatal 与 minor 两档。裁决维度是 verdict，只由 severity 为 fatal 的 finding 驱动，minor 只记录、不改变 verdict。这样一句无害的表述瑕疵就不会把答案正确、推理成立的过程判成过程错。</p>
 <h4 id="b32">B.3.2 重建测试是缺陷判定的总闸</h4>
 <p>对每条疑似缺陷先做重建测试：去掉或修复这句话之后，用剩余推理链、题面条件和领域常识能否重新推出结论。能重建，说明缺的只是装饰性表述或平凡推导，归 minor；不能重建，说明结论依赖未给出的关键推理，或者该步断言本身有错，归 fatal。解题的关键引理只写显然、或写成等价于已知结论一带而过，判 fatal 跳步，这类引理指的是贪心最优性、组合计数、游戏必胜性。这条判据给出了可复现的操作标准，不依赖评审对某类错误的主观敏感度。</p>
 <h4 id="b33-severity">B.3.3 用沙盒信号和 severity 做程序化裁决</h4>
@@ -1814,7 +1814,7 @@ For the third test case, it can be shown that Bob can guarantee a win irrespecti
 <hr />
 <h1 class="appendix" id="creact">附录 C：ReAct 自我修正闭环方法</h1>
 <p>以下为过程评估结果回流求解端的闭环方法说明，覆盖 fatal 驱动的修订指令、逐轮全量重写与独立重验证、收敛与停止判据、评测与修正数据隔离，源自 <code>reports/REACT_METHOD.md</code>。</p>
-<p>本文说明过程评估器定位出的错误如何转成求解智能体可执行的修订指令、形成 ReAct 闭环，以及用什么指标判断闭环是否有效、何时收敛、何时停止。数据日期 2026-09-08，判定版本 severity v1，只有 fatal 驱动修正。相关代码 <code>src/rex/refine/{agent,prompts}.py</code>，指标 <code>src/rex/metrics/compute.py::refine_comparison</code>。姊妹篇是 <code>DIFFICULTY_SCORING_METHOD.md</code> 与 <code>PROCESS_EVAL_METHOD.md</code>。</p>
+<p>本文说明过程评估器定位出的错误如何转成求解智能体可执行的修订指令、形成 ReAct 闭环，以及用什么指标判断闭环是否有效、何时收敛、何时停止。数据日期 2026-09-08，判定口径为 severity 语义，只有 fatal 驱动修正。相关代码 <code>src/rex/refine/{agent,prompts}.py</code>，指标 <code>src/rex/metrics/compute.py::refine_comparison</code>。姊妹篇是 <code>DIFFICULTY_SCORING_METHOD.md</code> 与 <code>PROCESS_EVAL_METHOD.md</code>。</p>
 <h3 id="c1">C.1 为什么需要修正闭环</h3>
 <p>评估器把过程判为有错、定位到步骤、归好类，这只是完成了检测。检测结果若不回流，就只是一张体检报告。ReAct 的思路是把检测升级成治疗：评估器给出判定，也就是 verdict 加 findings，每条带 step_id、错误类型、说明和证据，求解智能体据此重写解题过程，再重新验证，直到收敛或达到轮数上限。</p>
 <p>闭环还有一层反证的作用：修正能不能收敛，本身就反映评估器定位得准不准。定位偏了，指令就偏，修正不会收敛；把 minor 当 fatal 报，修正会空转。所以收敛率是评估器定位质量的一个下游观察面。</p>

@@ -1,6 +1,6 @@
 # ReAct 自我修正闭环：验证反馈如何回流求解
 
-本文说明过程评估器定位出的错误如何转成求解智能体可执行的修订指令、形成 ReAct 闭环，以及用什么指标判断闭环是否有效、何时收敛、何时停止。数据日期 2026-09-08，判定版本 severity v1，只有 fatal 驱动修正。相关代码 `src/rex/refine/{agent,prompts}.py`，指标 `src/rex/metrics/compute.py::refine_comparison`。姊妹篇是 `DIFFICULTY_SCORING_METHOD.md` 与 `PROCESS_EVAL_METHOD.md`。
+本文说明过程评估器定位出的错误如何转成求解智能体可执行的修订指令、形成 ReAct 闭环，以及用什么指标判断闭环是否有效、何时收敛、何时停止。数据日期 2026-09-08，判定口径为 severity 语义，只有 fatal 驱动修正。相关代码 `src/rex/refine/{agent,prompts}.py`，指标 `src/rex/metrics/compute.py::refine_comparison`。姊妹篇是 `DIFFICULTY_SCORING_METHOD.md` 与 `PROCESS_EVAL_METHOD.md`。
 
 ## 1. 为什么需要修正闭环
 
