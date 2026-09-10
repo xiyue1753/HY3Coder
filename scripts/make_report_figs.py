@@ -69,7 +69,7 @@ def _load():
                 q = json.loads(line)
                 qmap[q["id"]] = q
     evs = []
-    for f in ("eval_selfbuilt_all_t0.jsonl", "eval_cf_all_t0.jsonl"):
+    for f in ("eval_abc_selfbuilt_t0.jsonl", "eval_cf_selfbuilt_t0.jsonl"):
         for line in (ROOT / "data" / "outputs" / f).open(encoding="utf-8"):
             if line.strip():
                 evs.append(json.loads(line))

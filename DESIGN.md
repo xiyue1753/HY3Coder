@@ -305,7 +305,7 @@ LLM 判定可能存在自相矛盾，以沙盒客观信号 + severity 做最终�
 - minor 出现在 SF 的常见形态是**人工核验纠正**：系统把实质 minor 误判为 fatal → 样本被误放入 SF/PI → 抽检判 `level_mismatch`（C2118/C2140）。因此 SF 中与 minor 相关的统计 = `level_mismatch` 计数，不是 minor finding 计数。
 
 **temperature=0 全量重做 checklist（不覆盖当前记录）**：
-1. 生成侧：`REX_TEMPERATURE=0` 跑 `python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --out eval_selfbuilt_all_t0.jsonl`（CF 同理 `--out eval_cf_all_t0.jsonl`）——写独立文件，当前 eval_*.jsonl 原样保留；
+1. 生成侧：`REX_TEMPERATURE=0` 跑 `python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full`（默认输出 `eval_abc_selfbuilt_t0.jsonl`；CF 同理 `eval_cf_selfbuilt_t0.jsonl`）——写独立文件，temperature=0.9 时代的 `eval_*_all.jsonl` 原样归档保留；
 2. 读取侧：`export REX_EVAL_SUFFIX=_t0` 后，`make_report.py`/审计/仪表盘统一读 t0 记录（`datasource.evals_path` 按后缀解析；不设该环境变量即读默认注册文件）；
 3. 每样本自动产出 answer_correct/verdict/findings(severity)/arbiter(=ARBITER 总仲裁)；
 4. 统计统一走 `make_report.py`（§1 主/副 + minor-only 行、§6 抽检区间）——主/副口径按 §9.1 路线自动一致；
@@ -343,12 +343,16 @@ python -m pytest tests/
 
 - 源码（src/rex/ 模块化，tests/ pytest）
 - 题集 data/questions/：
-  - 公开对照：algorithm.jsonl（TACO 350 活跃 + CF 350 deprecated + 自编）
-  - 自建：abc_selfbuilt.jsonl（AtCoder ABC 175 题，含参考解/用例/SPJ，按难度分层）
-  - 均含标准答案/参考解、分层依据（layer_basis）
-- SILENT_FAILURE 留档：真实评测检出的「答案对但过程根本缺陷」样本（本地留档，不含模型输出细节）
-- 评估结果 data/outputs/（eval/refine 严格分离，可断点续跑）
+  - `abc_selfbuilt.jsonl`（AtCoder ABC 175 题）/ `cf_selfbuilt.jsonl`（Codeforces 184 题）：含 AC 参考解、公开+隐藏用例、SPJ checker、分层依据（layer_basis）
+  - TACO 公开镜像（`algorithm.jsonl`，约 82MB）不入库，可由公开 HF 数据源重建（本地 dataset-full 分支保留完整数据）
+- SILENT_FAILURE 留档：真实评测检出的「答案对但过程根本缺陷」样本，作为 `verification.findings` 随评测结果一并交付
+- 评估结果 data/outputs/（eval/refine 严格分离，可断点续跑），随仓库交付的文件：
+  - `eval_abc_selfbuilt_t0.jsonl`（175 题）/ `eval_cf_selfbuilt_t0.jsonl`（184 题）：temperature=0 正式评测全量记录（含模型过程与代码、判定、findings、静态校验、沙盒通过率）
+  - `refine_wrong_t0.jsonl`（36 条）：答案错样本的 ReAct 修正逐轮记录
+  - `contamination_probe.jsonl`（30 题）+ `contamination_probe_pilot.jsonl`（6 题）：记忆暴露行为探测
+  - `diff_scores.jsonl`（359 条）：统一难度分与三专家盲打明细
+  - 不入库：`_archived/`（历史分片）、运行日志（`*.log`/`*.err`）、`audit_records*.jsonl` 与 `audit_rules.md`（以 `data/audit/` 为权威版）
 - 分析报告 reports/（分层退化、错误分布、case 归因、修正前后对比、能力画像）
 - 方法论文档 reports/：`DIFFICULTY_SCORING_METHOD.md`（题集统一难度分层）、
   `PROCESS_EVAL_METHOD.md`（过程评估器判定）、`REACT_METHOD.md`（ReAct 自我修正闭环）
-- 人工抽检记录 data/audit/audit_records.jsonl
+- 人工抽检记录 data/audit/audit_records.jsonl（48 条，含用户终审）+ 抽检规则 data/audit/audit_rules.md

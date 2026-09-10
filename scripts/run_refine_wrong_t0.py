@@ -56,7 +56,7 @@ def load_questions() -> dict[str, dict]:
 
 def load_wrong_evals() -> list[dict]:
     rows = []
-    for f in ("eval_selfbuilt_all_t0.jsonl", "eval_cf_all_t0.jsonl"):
+    for f in ("eval_abc_selfbuilt_t0.jsonl", "eval_cf_selfbuilt_t0.jsonl"):
         p = ROOT / "data" / "outputs" / f
         for line in p.open(encoding="utf-8"):
             if line.strip():

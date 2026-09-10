@@ -62,20 +62,20 @@ copy .env.example .env
 .\run.ps1 run-refine algorithm 5
 
 # 6. 答案校验 / 人工抽检 / 仪表盘
-.\run.ps1 exec -m src.cli check-answers --results data/outputs/eval_selfbuilt_all_t0.jsonl
-.\run.ps1 exec -m src.cli audit --results data/outputs/eval_selfbuilt_all_t0.jsonl --sample 30
+.\run.ps1 exec -m src.cli check-answers --results data/outputs/eval_abc_selfbuilt_t0.jsonl
+.\run.ps1 exec -m src.cli audit --results data/outputs/eval_abc_selfbuilt_t0.jsonl --sample 30
 .\run.ps1 serve        # 打开 http://127.0.0.1:8000
 
 # 7. 自建 AtCoder ABC 题集评测 / 抽检（真实 Hy3 调用）
 .\run.ps1 exec -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --resume --concurrency 4
-.\run.ps1 exec -m src.cli audit --results data/outputs/eval_selfbuilt_all_t0.jsonl --questions data/questions/abc_selfbuilt.jsonl --sample 30
+.\run.ps1 exec -m src.cli audit --results data/outputs/eval_abc_selfbuilt_t0.jsonl --questions data/questions/abc_selfbuilt.jsonl --sample 30
 
 # 8. 测试
 .\run.ps1 test
 ```
 
 `--sample` 支持 `5 / 10 / 50 / 100 / full`，抽样种子固定（默认 42）保证可复现；`--resume` 断点续跑。
-正式基线为 **temperature=0 全量重跑结果 `data/outputs/eval_selfbuilt_all_t0.jsonl`**（文件位置由数据源注册中心
+正式基线为 **temperature=0 全量重跑结果 `data/outputs/eval_abc_selfbuilt_t0.jsonl`**（文件位置由数据源注册中心
 `src/rex/datasource.py` 统一声明，`--out` 可覆盖）。
 
 ## 双模式与数据纯净性
@@ -102,7 +102,7 @@ copy .env.example .env
 - **自建集 `abc_selfbuilt.jsonl`（AtCoder ABC 175 题，主推）**：由独立产线抓题面 + AC 参考解 + 人工设计隐藏边界用例入库，难度按 ABC 分值映射三档（basic34/medium82/hard59），含 SPJ 多解构造题（checker 判题）；
 - **自建集 `cf_selfbuilt.jsonl`（Codeforces 184 题，与 ABC 大致同规模）**：同产线，参考解来自 CF 公开 AC 提交与 GitHub 公开题解仓库（绕开 CF 反爬的提交页限流，题目页抓取 + GitHub 解样例沙盒验证），分层 basic34/medium83/hard67；
 - TACO/CodeContests 公开镜像题集曾以 `algorithm.jsonl` 命名，2026-09 起废弃该命名（数据隔离，未来按独立数据集如 `taco` 注册），不再进入仪表盘/统计；
-- SILENT_FAILURE 由真实评测检出并留档核验（样本数据本地保留，不随公开仓库发布，模型输出细节不外泄）。
+- SILENT_FAILURE 由真实评测检出并留档核验：逐题判定、findings 与沙盒事实随评测结果 `data/outputs/eval_*_t0.jsonl` 一并交付，可复现报告中的检出与抽检结论。
 - **数据文件位置统一由注册中心 `src/rex/datasource.py` 声明。**
 
 ## 目录结构
@@ -125,8 +125,9 @@ Hy3_APP2/
 ├── src/web/  api.py  static/index.html      # FastAPI 仪表盘
 ├── src/cli.py                               # typer 入口
 ├── data/questions/  abc_selfbuilt.jsonl(175) cf_selfbuilt.jsonl(184)
-├── data/outputs/    eval_selfbuilt_all_t0.jsonl(175, ABC) + eval_cf_all_t0.jsonl(184, CF) + audit_records.jsonl
-│                    （.gitignore 排除，运行后生成；历史分片归档于 _archived/）
+├── data/outputs/    eval_abc_selfbuilt_t0.jsonl(175, ABC) + eval_cf_selfbuilt_t0.jsonl(184, CF)
+│                    + refine_wrong_t0.jsonl(36) + contamination_probe.jsonl(30) + diff_scores.jsonl(359)
+│                    （正式结果随仓库交付；运行日志与历史分片不入库，见 .gitignore）
 ├── scripts/         评测主流程与数据可再生脚本
 │                    evaluate.py check_answers.py refine_failed.py make_report.py
 │                    gen_hidden_cases.py gen_cf_hidden_cases.py normalize_tags.py 等

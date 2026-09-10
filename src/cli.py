@@ -73,7 +73,7 @@ def _default_eval_out(questions: str | None) -> str:
         if d.evals:
             return d.evals
     typer.secho("无启用数据集带评测输出，请用 --out 指定", fg=typer.colors.YELLOW)
-    return "eval_selfbuilt_all.jsonl"
+    return "eval_abc_selfbuilt_t0.jsonl"
 
 
 def _default_refine_out(questions: str | None) -> str:
@@ -98,7 +98,7 @@ def run_eval(
     retries: int = typer.Option(2, help="单题失败重试次数（0 禁用）"),
     concurrency: int = typer.Option(4, help="并发 worker 数（1=串行，2-4 建议）"),
     questions: str = typer.Option(None, help="直接指定题集文件（如 abc_selfbuilt.jsonl）"),
-    out: str = typer.Option(None, help="评测输出文件（默认正式主源 eval_selfbuilt_all.jsonl）"),
+    out: str = typer.Option(None, help="评测输出文件（默认取数据集注册中心里该数据集的 evals，如 eval_abc_selfbuilt_t0.jsonl）"),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """一次性评测（评估模式）：solve → execute → verify，反馈不回流。"""

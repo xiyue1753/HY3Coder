@@ -14,9 +14,16 @@ __pycache__/
 venv/
 .pytest_cache/
 
-# Runtime outputs (regenerable)
-data/outputs/*
-!data/outputs/.gitkeep
+# Runtime outputs：正式交付的结果（eval / refine / 探针 / 难度分）随仓库发布；
+# 运行日志与历史分片不入库
+data/outputs/_archived/
+data/outputs/*.log
+data/outputs/*.err
+data/outputs/http_panel.*
+data/outputs/serve_*
+# 人工抽检以 data/audit/ 为权威版；outputs 下为副本与终审前初稿
+data/outputs/audit_records*.jsonl
+data/outputs/audit_rules.md
 
 # HF 数据集缓存（中间数据，保留在项目内但不入库）
 data/cache/

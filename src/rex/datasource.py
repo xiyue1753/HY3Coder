@@ -12,7 +12,8 @@ make_report / 前端提示）一律通过本模块的访问器取路径，
     - 非数据集类 artifact 单独注册：golden（真实）、audit、交互评测输出。
 
 历史命名（无需再理解）：
-    - eval_selfbuilt_all.jsonl  = abc_selfbuilt 数据集的正式评测输出
+    - eval_selfbuilt_all.jsonl  = abc_selfbuilt 在 temperature=0.9 时代的评测输出
+      （已归档 data/outputs/_archived/；现正式文件为 eval_abc_selfbuilt_t0.jsonl）
     - refine_selfbuilt_all.jsonl = abc_selfbuilt 数据集的正式 refine 输出
     - eval_interactive.jsonl   = 交互演示记录（source=interactive）
     - golden_algorithm.jsonl   = 合成 golden（已删除，2026-09-08；常量注册保留兼容）
@@ -70,7 +71,7 @@ DATASETS: tuple[Dataset, ...] = (
         label="ABC 自建（公开集 175 题）",
         enabled=True,
         questions="abc_selfbuilt.jsonl",
-        evals="eval_selfbuilt_all_t0.jsonl",   # 正式评测主数据源（temperature=0 全量重跑）
+        evals="eval_abc_selfbuilt_t0.jsonl",   # 正式评测主数据源（temperature=0 全量重跑）
         refine="refine_selfbuilt_all.jsonl",
         note="AtCoder ABC 公开竞赛题自建转化，含题面/参考解/测试用例/分层依据。",
     ),
@@ -79,7 +80,7 @@ DATASETS: tuple[Dataset, ...] = (
         label="Codeforces 自建（184 题）",
         enabled=True,
         questions="cf_selfbuilt.jsonl",
-        evals="eval_cf_all_t0.jsonl",          # 正式评测输出（temperature=0 全量重跑）
+        evals="eval_cf_selfbuilt_t0.jsonl",    # 正式评测输出（temperature=0 全量重跑）
         refine=None,
         note="Codeforces 公开题自建转化，含题面/参考解/测试用例/分层依据与 SPJ checker。",
     ),
