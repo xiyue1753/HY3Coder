@@ -21,6 +21,32 @@ data/outputs/*
 # HF 数据集缓存（中间数据，保留在项目内但不入库）
 data/cache/
 
+# 抓题/入库中间产物（用例 json、抓题缓存、cookie 等，仅本地保留，不随公开仓库发布）
+/data/cases/
+
+# 一次性/历史脚本（抓题登录、一次性数据修正、demo 展示工作台；
+# 仅本地保留以便复核，不随公开仓库发布）
+scripts/ingest_abc.py
+scripts/ingest_cf.py
+scripts/ingest_cf_github.py
+scripts/ingest_abc161d.py
+scripts/batch_ingest_abc.py
+scripts/batch_ingest_cf.py
+scripts/cf_cookie_session.py
+scripts/build_questions.py
+scripts/fix_bad_cases.py
+scripts/fix_extreme_mislabel.py
+scripts/fix_question_format.py
+scripts/rewrite_reference.py
+scripts/verify_ref_rewrite.py
+scripts/checkers/_apply_checkers.py
+scripts/checkers/_batch_selftest.py
+scripts/checkers/_selftest_checker.py
+scripts/make_selfbuilt_report_html.py
+scripts/make_audit_workbook.py
+scripts/make_audit_review_md.py
+scripts/make_exec_evidence.py
+
 # 大体积公开镜像题集（TACO algorithm.jsonl ~82MB，可由公开 HF 数据源重建，
 # 不入公开仓库；完整数据保存在本地 dataset-full 分支）
 data/questions/algorithm.jsonl
