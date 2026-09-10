@@ -131,7 +131,7 @@
 
 ## 4. 典型案例归因
 
-下面取 5 例，逐题给出题面摘录与评估器的定位结果；难度按第 2 章的语义档标注，完整清单见第 7 节。
+下面取 5 例，逐题给出完整题面与评估器的定位结果；难度按第 2 章的语义档标注，完整清单见第 7 节。
 
 
 ### A1098 · abc228_d
@@ -140,7 +140,8 @@
 - 答案正确：True，用例通过率 1.0
 - 定位：第2步 逻辑缺陷，并查集设计未考虑线性探测的环形回绕：parent[pos] = find(pos+1) 在 pos = N-1 时指向哨兵 N，而非回绕到…；第4步 边界条件，代码在 pos=N 时访问 parent[N+1]（数组大小 N+1，合法下标 0..N），且写 A[N]（有效仅 0..N-1），属于未处…
 
-题面摘录：
+
+题面全文（取自 data/questions/ 里的原始题面）：
 
 ```text
 Score : $400$ points
@@ -154,8 +155,66 @@ If $t_i = 1$, do the following in order.
 
 Define an integer $h$ as $h = x_i$.
 
-While $A_{h \bm
-……（题面后续略）
+While $A_{h \bmod N} \neq -1$, keep adding $1$ to $h$. We can prove that this process ends after finite iterations under the Constraints of this problem.
+
+Replace the value of $A_{h \bmod N}$ with $x_i$.
+
+If $t_i = 2$, print the value of $A_{x_i \bmod N}$ at that time.
+
+Here, for integers $a$ and $b$, $a \bmod b$ denotes the remainder when $a$ is divided by $b$.
+
+Constraints
+
+$1 \leq Q \leq 2 \times 10^5$
+
+$t_i \in \{ 1, 2 \} \, (1 \leq i \leq Q)$
+
+$0 \leq x_i \leq 10^{18} \, (1 \leq i \leq Q)$
+
+There is at least one $i$ $(1 \leq i \leq Q)$ such that $t_i = 2$.
+
+All values in input are integers.
+
+Input
+Input is given from Standard Input in the following format:
+
+'''
+$Q$
+$t_1$ $x_1$
+$\vdots$
+$t_{Q}$ $x_{Q}$
+
+'''
+
+Output
+For each query with $t_i = 2$, print the response in one line. It is guaranteed that there is at least one such query.
+
+Sample Input 1
+'''
+4
+1 1048577
+1 1
+2 2097153
+2 3
+
+'''
+
+Sample Output 1
+'''
+1048577
+-1
+
+'''
+
+We have $x_1 \bmod N = 1$, so the first query sets $A_1 = 1048577$.
+
+In the second query, initially we have $h = x_2$, for which $A_{h \bmod N} = A_{1} \neq -1$, so we add $1$ to $h$. Now we have $A_{h \bmod N} = A_{2} = -1$, so this query sets $A_2 = 1$.
+
+In the third query, we print $A_{x_3 \bmod N} = A_{1} = 1048577$.
+
+In the fourth query, we print $A_{x_4 \bmod N} = A_{3} = -1$.
+
+Note that, in this problem, $N = 2^{20} = 1048576$ is a constant and not given in input.
 ```
 
 ### A1148 · abc368_d
@@ -164,7 +223,8 @@ While $A_{h \bm
 - 答案正确：True，用例通过率 1.0
 - 定位：第2步 概念理解错误，错误断言节点必须保留当且仅当本身是关键点或子树（以1为根）含关键点。反例：链1-2-3, K={3}，代码输出3，正确最小为1，因根1非关键…；第2步 逻辑缺陷，算法等价条件逻辑错误：仅依子树含关键点计数会保留非必要桥接祖先。正确需节点是关键点，或≥2子树枝含关键点，或子树含且父侧含。反例同上。
 
-题面摘录：
+
+题面全文（取自 data/questions/ 里的原始题面）：
 
 ```text
 Score : $425$ points
@@ -177,7 +237,83 @@ Consider a tree that can be obtained by removing some (possibly zero) edges and 
 Constraints
 
 $1 \leq K \leq N \leq 2\times 10^5$
-……（题面后续略）
+
+$1 \leq A_i,B_i \leq N$
+
+$1 \leq V_1 < V_2 < \ldots < V_K \leq N$
+
+The given graph is a tree.
+
+All input values are integers.
+
+Input
+The input is given from Standard Input in the following format:
+
+'''
+$N$ $K$
+$A_1$ $B_1$
+$\vdots$
+$A_{N-1}$ $B_{N-1}$
+$V_1$ $\ldots$ $V_K$
+
+'''
+
+Output
+Print the answer.
+
+Sample Input 1
+'''
+7 3
+1 2
+1 3
+2 4
+2 5
+3 6
+3 7
+1 3 5
+
+'''
+
+Sample Output 1
+'''
+4
+
+'''
+
+The given tree is shown on the left in the figure below. The tree with the minimum number of vertices that includes all of vertices $1,3,5$ is shown on the right.
+
+Sample Input 2
+'''
+4 4
+3 1
+1 4
+2 1
+1 2 3 4
+
+'''
+
+Sample Output 2
+'''
+4
+
+'''
+
+Sample Input 3
+'''
+5 1
+1 4
+2 3
+5 2
+1 2
+1
+
+'''
+
+Sample Output 3
+'''
+1
+
+'''
 ```
 
 ### A1164 · abc386_d
@@ -186,7 +322,8 @@ $1 \leq K \leq N \leq 2\times 10^5$
 - 答案正确：True，用例通过率 1.0
 - 定位：第3步 复杂度不达标，步骤3断言算法总复杂度为O(M log M)时间、O(M)空间，但实际步骤4代码中对每个约束列c遍历所有压缩段segs（cols最多M个，s…
 
-题面摘录：
+
+题面全文（取自 data/questions/ 里的原始题面）：
 
 ```text
 Score : $425$ points
@@ -200,8 +337,107 @@ There exists an integer $i\ (0\leq i\leq N)$ such that the leftmost $i$ cells ar
 
 For every column, the following condition holds:
 
-There exists an
-……（题面后续略）
+There exists an integer $i\ (0\leq i\leq N)$ such that the topmost $i$ cells are colored black, and the rest are colored white.
+
+Out of these $N^2$ cells, $M$ of them have already been colored. Among them, the $i$-th one is at the $X_i$-th row from the top and the $Y_i$-th column from the left, and it is colored black if $C_i$ is B and white if $C_i$ is W.
+
+Determine whether he can color the remaining uncolored $N^2 - M$ cells so that all the conditions are satisfied.
+
+Constraints
+
+$1\leq N\leq 10^9$
+
+$1\leq M\leq \min(N^2,2\times 10^5)$
+
+$1\leq X_i,Y_i\leq N$
+
+$(X_i,Y_i)\neq (X_j,Y_j)\ (i\neq j)$
+
+$C_i$ is B or W.
+
+All input numbers are integers.
+
+Input
+The input is given from Standard Input in the following format:
+
+'''
+$N$ $M$
+$X_1$ $Y_1$ $C_1$
+$\vdots$
+$X_M$ $Y_M$ $C_M$
+
+'''
+
+Output
+If it is possible to satisfy the conditions, print Yes; otherwise, print No.
+
+Sample Input 1
+'''
+4 3
+4 1 B
+3 2 W
+1 3 B
+
+'''
+
+Sample Output 1
+'''
+Yes
+
+'''
+
+For example, one can color the grid as in the following figure to satisfy the conditions. The cells already colored are surrounded by red borders.
+
+Sample Input 2
+'''
+2 2
+1 2 W
+2 2 B
+
+'''
+
+Sample Output 2
+'''
+No
+
+'''
+
+No matter how the remaining two cells are colored, the conditions cannot be satisfied.
+
+Sample Input 3
+'''
+1 1
+1 1 W
+
+'''
+
+Sample Output 3
+'''
+Yes
+
+'''
+
+Sample Input 4
+'''
+2289 10
+1700 1083 W
+528 967 B
+1789 211 W
+518 1708 W
+1036 779 B
+136 657 B
+759 1497 B
+902 1309 B
+1814 712 B
+936 763 B
+
+'''
+
+Sample Output 4
+'''
+No
+
+'''
 ```
 
 ### A1174 · abc392_e
@@ -210,7 +446,8 @@ There exists an
 - 答案正确：True，用例通过率 1.0
 - 定位：第4步 逻辑缺陷，构造实现中盲目顺序消耗spare边，且用 fu == y（y为弹出的未连通分量代表整数，未做dsu.find）决定是否将边连到已连通分量co…
 
-题面摘录：
+
+题面全文（取自 data/questions/ 里的原始题面）：
 
 ```text
 Score : $450$ points
@@ -223,8 +460,97 @@ By performing the following operation some number of times (possibly zero), make
 
 Operation: Choose one cable and reconnect one of its ends to a different server.
 
-Find the minimum number of operat
-……（题面后续略）
+Find the minimum number of operations required and output an operation sequence achieving this minimum.
+
+Constraints
+
+$2 \leq N \leq 2\times 10^5$
+
+$N-1 \leq M \leq 2\times 10^5$
+
+$1 \leq A_i, B_i \leq N$
+
+All input values are integers.
+
+Input
+The input is given from Standard Input in the following format:
+
+'''
+$N$ $M$
+$A_1$ $B_1$
+$A_2$ $B_2$
+$\vdots$
+$A_M$ $B_M$
+
+'''
+
+Output
+Let the minimum number of operations be $K$. Print $K+1$ lines.
+
+The first line should contain $K$.
+
+The $(i+1)$-th line should contain three space-separated integers: the number of the cable chosen in the $i$-th operation, the server number that was originally connected at that end, and the server number to which it is connected after the operation, in this order.
+
+If there are multiple valid solutions, any one of them will be accepted.
+
+Sample Input 1
+'''
+4 5
+1 1
+1 2
+2 1
+3 4
+4 4
+
+'''
+
+Sample Output 1
+'''
+1
+1 1 3
+
+'''
+
+By reconnecting the end of cable $1$ that is connected to server $1$ to server $3$, the servers can be connected via cables.
+
+Operations such as reconnecting the end of cable $5$ that is connected to server $4$ to server $1$, or reconnecting the end of cable $2$ that is connected to server $2$ to server $3$, will also result in all servers being connected and are considered correct.
+
+Sample Input 2
+'''
+4 3
+3 4
+4 1
+1 2
+
+'''
+
+Sample Output 2
+'''
+0
+
+'''
+
+No operation may be necessary.
+
+Sample Input 3
+'''
+5 4
+3 3
+3 3
+3 3
+3 3
+
+'''
+
+Sample Output 3
+'''
+4
+1 3 5
+2 3 4
+3 3 2
+4 3 1
+
+'''
 ```
 
 ### C2029 · cf2241f
@@ -233,7 +559,8 @@ Find the minimum number of operat
 - 答案正确：True，用例通过率 1.0
 - 定位：第2步 跳步推导，步骤2给出充要条件：总逆序对奇或存在分割点k使前缀1奇且后缀0奇则Alice赢，否则Bob必胜。前置推理仅证明了充分性（存在k可删对应子序列…
 
-题面摘录：
+
+题面全文（取自 data/questions/ 里的原始题面）：
 
 ```text
 F. A Bit Odd
@@ -259,8 +586,189 @@ In each move, the player must select a subsequence
 ‡
  and delete it. The player who cannot make a move loses.
 
-Determine who wins the game,
-……（题面后续略）
+Determine who wins the game, assuming both players play optimally.
+
+∗
+∗
+A binary string is a string that consists only of the characters
+0
+0
+ and
+1
+1
+.
+
+†
+†
+A sequence
+a
+𝑎
+ is a subsequence of a string
+b
+𝑏
+ if
+a
+𝑎
+ can be obtained from
+b
+𝑏
+ by the deletion of several (possibly zero or all) characters.
+
+‡
+‡
+An inversion in a binary string
+s
+𝑠
+ is a pair of indices
+(i,j)
+(
+𝑖
+,
+𝑗
+)
+ such that
+i<j
+𝑖
+<
+𝑗
+ and
+s
+i
+=1
+𝑠
+𝑖
+=
+1
+ and
+s
+j
+=0
+𝑠
+𝑗
+=
+0
+.
+
+Input
+
+The first line contains a single integer
+t
+𝑡
+ (
+1≤t≤
+10
+4
+1
+≤
+𝑡
+≤
+10
+4
+) — the number of test cases. Description of each test case follows.
+
+The first line of each test case contains a single integer
+n
+𝑛
+ (
+1≤n≤2⋅
+10
+5
+1
+≤
+𝑛
+≤
+2
+⋅
+10
+5
+) — the length of the binary string
+s
+𝑠
+.
+
+The second line of each test case contains a binary string
+s
+𝑠
+ of length
+n
+𝑛
+. It is guaranteed that each character of
+s
+𝑠
+ is either
+0
+0
+ or
+1
+1
+.
+
+It is guaranteed that the sum of
+n
+𝑛
+ over all the test cases does not exceed
+2⋅
+10
+5
+2
+⋅
+10
+5
+.
+
+Output
+
+For each test case, print
+Alice
+Alice
+ if Alice wins the game and
+Bob
+Bob
+ otherwise.
+
+Example
+input
+Copy
+3
+5
+10101
+4
+0100
+6
+011001
+output
+Copy
+Alice
+Alice
+Bob
+Note
+
+For the first test case, Alice can choose the entire string as it has an odd number of inversions. Now, Bob is left with an empty string, and he cannot make a move. Thus, Alice wins.
+
+For the second test case, Alice can choose the subsequence formed by the characters at indices
+1
+1
+,
+2
+2
+, and
+4
+4
+, i.e.,
+010
+010
+. Bob is then left with the character at index
+3
+3
+, namely
+0
+0
+, which has
+0
+0
+ inversions (an even number). Therefore, Bob cannot choose a subsequence with an odd number of inversions, so Alice wins.
+
+For the third test case, it can be shown that Bob can guarantee a win irrespective of Alice's first move.
 ```
 
 ## 5. 修正闭环
@@ -445,21 +953,11 @@ _以上指标全部来自正式评测结果；修正数据只用于第 5 节的�
 
 ### A.2 为什么不直接用题面自动特征分层
 
-#### A.2.1 数据规模不能当难度用
+数据规模不能当难度用，因为值域不等于规模，规模也不等于难度：题面里出现的大数值几乎都是元素值域或答案上界，比如 A_i ≤ 1e9；n ≤ 1e18 的数位题可以是 O(log n) 的简单题，n ≤ 300 的搜索题也可能状态爆炸。按规模分档后各档过程率并不单调，ABC 为 85/89/80/89%，CF 为 83/77/50/70%。
 
-起初想到用约束里的数据规模上限做分档，验证后走不通，原因有两个。
+复杂度和知识点也不合适。参考解复杂度需要逐题静态分析 C++ 代码，换了新题不成立，而且 O(n log n) 未必比 O(n²) 难，后者可能是巧妙剪枝；知识点是算法类别，类别内部难度跨度很大，同为 DP，入门背包和树形 DP 差一个量级。
 
-一是值域不等于规模。题面里出现的大数值几乎都是元素值域或答案上界，比如 A_i ≤ 1e9，不是输入规模。想用解析规则区分二者，碰到构造题、数位题、博弈题就失效，因为这类题里规模和难度本来就脱钩。
-
-二是规模不等于难度。n ≤ 1e18 的数位题可以是 O(log n) 的简单题，n ≤ 300 的搜索题也可能状态爆炸。即便人工校正语义错误，按规模分档后各档过程率仍然不单调：ABC 各档 85/89/80/89%，CF 83/77/50/70%。数据规模描述的是约束形态，不是难度。
-
-#### A.2.2 复杂度和知识点也不合适
-
-参考解复杂度需要逐题静态分析 C++ 代码，工程量大，换了新题也不成立；而且 O(n log n) 未必比 O(n²) 难，后者可能是巧妙剪枝。知识点是算法类别，类别内部难度跨度很大，同为 DP，入门背包和树形 DP 差一个量级，没法当排序轴。这两类更适合作为正交的覆盖维度，用来说明题集覆盖了哪些算法类别，回答不了这题有多难。
-
-#### A.2.3 官方评分可信，但不能直接跨平台合并
-
-两套题都有平台官方的难度信号：Codeforces 有 ELO 型的题目 rating，跨场可比；AtCoder ABC 有官方分值加社区 ELO 难度。官方 ELO 是对选手能力比较可信的度量，问题在于两个平台的评分准则不同，用户群体、ELO 起点、色带划分都不一样，CF rating 1800 和 ABC difficulty 1800 并不是同一个难度。把两平台的题按各自 rating 切进同一套 basic/medium/hard 桶，ABC 的 medium 和 CF 的 medium 语义就不一致，分层退化分析会失去意义。
+官方评分可信，但不能直接跨平台合并。两个平台的评分准则不同，用户群体、ELO 起点、色带划分都不一样，CF rating 1800 和 ABC difficulty 1800 并不是同一个难度；按各自 rating 切进同一套 basic/medium/hard 桶，ABC 的 medium 和 CF 的 medium 语义就不一致。
 
 ### A.3 采用的做法：模型多专家评审
 
@@ -525,19 +1023,7 @@ _以上指标全部来自正式评测结果；修正数据只用于第 5 节的�
 
 ### A.附：执行与复现
 
-```bash
-python scripts/score_difficulty.py --quiz abc_selfbuilt.jsonl --resume
-python scripts/score_difficulty.py --quiz cf_selfbuilt.jsonl --resume
-
-python scripts/analyze_diff_scores.py
-
-python scripts/apply_diff_score.py
-
-data/outputs/diff_scores.jsonl   # 每题 final + 三专家 + 仲裁理由
-data/questions/*.jsonl           # metadata.diff_score
-```
-
-简要回顾：正则和硬编码不可泛化，平台 rating 又无法直接合并，所以改用模型多专家盲打 0-100 加仲裁的统一尺；相关性 0.71 与 0.82、人工盲打 0.85 两层验证通过后，分层退化分析就在这把尺上展开。
+全量打分用 `scripts/score_difficulty.py`，每题 4 次模型调用，支持 `--resume` 断点续跑；`analyze_diff_scores.py` 出相关性与切档统计；`apply_diff_score.py` 回填 `metadata.diff_score`。产物是 `data/outputs/diff_scores.jsonl` 与题集里的 `metadata.diff_score`。完整命令清单见 `reports/DIFFICULTY_SCORING_METHOD.md`。
 
 
 
@@ -548,11 +1034,7 @@ data/questions/*.jsonl           # metadata.diff_score
 
 以下为过程评估器的判定方法说明（severity 分层、重建测试、程序化一致性裁决、静态规则校验补盲），源自 `reports/PROCESS_EVAL_METHOD.md`（2026-09-09 更新定稿）。
 
-与旧版评估器的对比：
-
-- 旧版定稿于 2026-09-03，做法是双视角 LLM 审查加仲裁，没有 severity：任何 finding 都驱动“过程有错”，误报率被结构性推高；verdict 没有程序化兜底，出现过“答案错却判 CORRECT”的漏检；规则校验只支持 Python，CF/ABC 主场景是 C++，规则全部失效。旧版抽检产物为 `data/outputs/audit_review.md`的 27 题模板与 `data/outputs/audit_records_full.jsonl` 的 40 条回填，口径为双视角。
-- 本版是 2026-09-07 的 severity v1：在相同判定标准下对难题区间 28 条 re-verify，10 条判定变化，误报剥离 2 条、漏检补抓 3 条即 C2084/C2102/C2119，人工核验全为真 fatal、语义细化 5 条；小样本误报率 0/4。severity 版不是靠放宽判定压误报，而是在同一标准下更精确。
-- **全量人工抽检**：本报告第 6 节，温度 0 全量复跑版，2026-09-09 定稿，48 条全部回填。答案错的 29 条定位准确率 96.6%，唯一 miss 是 C2077，根因步骤与系统定位不一致；误报率 5.3% 到 10.5%，三层复核 match 17、level_mismatch 1 即 C2104、fp 1 即 A1124。A1124 的 overflow 指控在合法输入域不可达，沙盒 20% 失败源于违反 `N≠M` 约束的非法 hidden 用例，题库已修并留档，详见下方 B.4.3 与 B.4.4。此前 6 条 fatal/minor 争议中，C2029/C2062/C2094/C2095 维持 fatal，C2118/C2140 判 minor，裁决结果已并入本版分层。
+与旧版评估器的对比：旧版定稿于 2026-09-03，做法是双视角 LLM 审查加仲裁，没有 severity，误报率被结构性推高、verdict 没有程序化兜底、规则校验只支持 Python；本版是 2026-09-07 的 severity v1，在同一套判定标准下更精确。差异与验证见 B.2 与 B.4。
 
 
 本文说明过程评估器怎么搭、为什么这样搭、怎么验证它可靠。数据日期 2026-09-08，判定版本为 severity 语义，即 fatal/minor 加重建测试，模型 Hy3，相关代码在 `src/rex/verifier/` 与 `src/rex/executor/static_check.py`。姊妹篇是 `reports/DIFFICULTY_SCORING_METHOD.md`，讲题集难度分层。
@@ -567,17 +1049,9 @@ data/questions/*.jsonl           # metadata.diff_score
 
 旧版评估器定稿于 2026-09-03，做法是双视角 LLM 审查加仲裁，当时已经能判过程正确性、定位错误、归类错误类型、识别 SILENT_FAILURE，但在有效性验证里暴露出三个结构性问题。
 
-#### B.2.1 任何发现都驱动"过程有错"
-
-旧版只要发现一条 finding，哪怕只是自测文字笔误或表述不精确，就判 PROCESS_INCORRECT 或 SILENT_FAILURE。误报因此被结构性推高：答案正确、推理成立的样本，只因为一句无害的表述瑕疵就被判过程错，进了误报率分母，人工核验后大量推翻。同时小错误没有归类位置，表述瑕疵和误用定理被同等对待，缺一个只记录、不判错的档。
-
-#### B.2.2 一致性靠模型自觉，没有程序化兜底
-
-模型可能自相矛盾：报了实质缺陷却仍判 CORRECT，或者答案客观正确、只有 minor 瑕疵却判过程错。旧版没有用沙盒答案正确性加 findings 严重度做程序化的最终裁决，verdict 完全交给采样决定。
-
-#### B.2.3 规则校验有语言盲区
-
-复杂度声明一致性、死循环检测这类规则校验原来基于 Python AST，但算法主场景的代码大部分是 C++，实测 CF 128/184、ABC 80/175，这些题目的复杂度比对、死循环与递归检测全部失效，规则校验在算法主场景基本形同虚设。
+- 任何发现都驱动"过程有错"。旧版只要发现一条 finding，哪怕只是自测文字笔误或表述不精确，就判 PROCESS_INCORRECT 或 SILENT_FAILURE，误报被结构性推高；同时小错误没有归类位置，缺一个只记录、不判错的档。
+- 一致性靠模型自觉。旧版没有用沙盒答案正确性加 findings 严重度做程序化裁决，verdict 完全交给采样，可能出现报了实质缺陷却仍判 CORRECT 这类自相矛盾。
+- 规则校验有语言盲区。复杂度声明一致性与死循环检测原来基于 Python AST，而算法主场景的代码大部分是 C++，实测 CF 128/184、ABC 80/175，这些题目的检测全部失效。
 
 ### B.3 现在怎么做
 
@@ -653,7 +1127,7 @@ severity 驱动 verdict 的每条规则都有单测覆盖：fatal 加 CORRECT �
   - C2104 → **minor**：步骤 2 分段公式漏 `x>n` 前提，但步骤 5 用反例当场验证并修正，代码用的是修正式且用例全过，属于推导中间缺陷被自身验证纠正，系统按 fatal 判过严，记为 level_mismatch，主口径算误报。
   - C2077 → **fatal**：题意操作误读，直接导致建模错误，不是人名之类无关的误读。
   - A1174 → **fatal**，match：构造缺陷真实，该边缘情况评测用例没有覆盖到。
-  - A1124 → **误报**，fp：系统指控 `f(mid)=mid/N+mid/M-2·mid/L` 在 `N=1`、二分中点逼近 `hi=9e18` 时会 long long 溢出。数学推演表明该边界不可达：二分首轮 `mid=(1+9e18)/2=4.5e18` 就已经使 `cnt ≥ K_max`，合法最小密度约 `2/10^8`，`cnt(4.5e18)≈9e10` 大于 `K_max=10^10`；此后 `hi` 只降不升，`mid` 恒不超过 4.5e18，求和最大约 `4.5e18+2.25e18=6.75e18`，小于 9.22e18，永不溢出。沙盒 20% 失败的唯一来源是一条非法 hidden 用例 `1 1 1`，其中 `N=M` 违反题设 `N≠M`，此时题目无解，期望输出 4e18 只是参考解二分上界初值在 `check` 恒假时不收缩的偶然行为。本地用 3000 组合法随机输入对拍参考解，0 不一致；修复用例后 4/4 通过。**评测集用例质量问题已修复**：该非法用例替换为合法压力用例 `1 100000000 10000000000`，并据修复后的沙盒事实修正 eval 答案判定。A1124 暴露的是一条复合链路，坏用例污染答案判定，过程评估再基于错误的沙盒事实给出误报，误报率相应加 1。
+  - A1124 → **误报**，fp：系统指控 `f(mid)=mid/N+mid/M-2·mid/L` 在 `N=1`、二分中点逼近 `hi=9e18` 时会 long long 溢出，但推演表明该边界不可达——首轮 `mid=4.5e18` 就已使 `cnt ≥ K_max`，之后 `mid` 只降不升，求和最大约 6.75e18，小于 9.22e18，永不溢出。沙盒 20% 失败的唯一来源是一条非法 hidden 用例 `1 1 1`，其中 `N=M` 违反题设 `N≠M`，题目无解，期望输出只是参考解的偶然行为；换用 3000 组合法随机输入对拍，0 不一致，修复用例后 4/4 通过。该非法用例已替换为 `1 100000000 10000000000`，并据修复后的沙盒事实修正答案判定。A1124 暴露的是一条复合链路，坏用例污染答案判定，过程评估再基于错误的沙盒事实给出误报，误报率相应加 1。
 
 severity v1 定稿阶段还用过旧版抽检的 40 条，其中 22 条答案错、18 条答案对，误报率 5.6% 到 16.7%，结论与上述温度 0 版一致：误报集中在缺证明算 fatal 还是平凡省略这个尺度问题上。其中 6 条争议 C2029、C2062、C2094、C2095 维持 fatal，C2118、C2140 判 minor，裁决后归入对应分层，也反映在本版 48 条抽检里，C2029、C2062 等在 t0 全量下重新出现并判 match。
 
@@ -694,17 +1168,7 @@ severity 判定仍由模型给出，重建测试只是引导，程序层只做�
 
 ### B.附：执行与复现
 
-```bash
-python -m pytest tests/
-
-python -m src.cli re-verify --results data/outputs/eval_cf_all.jsonl \
-    --diff-min 60 --out data/outputs/reverify_cf_hard.jsonl
-
-python -m src.cli run-eval --questions abc_selfbuilt.jsonl --sample full --out eval_abc_t0.jsonl
-python -m src.cli run-eval --questions cf_selfbuilt.jsonl --sample full --out eval_cf_t0.jsonl
-```
-
-总结一下：不把任何瑕疵当过程错，否则误报会膨胀；也不完全信任模型自洽，因为自相矛盾没有兜底。用 severity 加重建测试把发现和判错解耦，平凡省略可以豁免，实质缺陷必须检出；沙盒加 severity 做程序化裁决，规则校验只作参考信号、不阻断；主副双口径透明呈现，再通过判定层单测、难题区间小样本、全量人工抽检逐层验证。
+单元测试 `python -m pytest tests/`；难题区间的小样本判定对比用 `python -m src.cli re-verify --results data/outputs/eval_cf_all.jsonl --diff-min 60`；全量复跑用 `python -m src.cli run-eval --questions <题集> --sample full --out eval_<子集>_t0.jsonl`。完整命令见 `reports/PROCESS_EVAL_METHOD.md`。
 
 
 
@@ -776,14 +1240,7 @@ refine 的收敛判据依赖评估器的文本判定，不含执行事实。评�
 
 ### C.附：执行
 
-```bash
-python -m src.cli run-refine --questions abc_selfbuilt.jsonl --sample full \
-    --max-rounds 3 --resume
-
-python scripts/make_report.py --out reports/REPORT.md
-```
-
-小结：评估器定位出 step_id、错误类型与证据后，直接映射为修订指令回流求解端，只处理 fatal、同一步去重、没有定位时给整体指令；每轮全量重写并独立重验证，CORRECT 即停，最多三轮。修正前后的过程正确率对比用于判断检测是否被求解侧利用；评测与修正数据严格隔离，成本按调用次数记录。
+修正模式用 `python -m src.cli run-refine --questions <题集> --sample full --max-rounds 3 --resume`；写入 `data/outputs/refine_wrong_t0.jsonl` 后，报告第 5 节会自动读取并给出修正前后对比。完整命令见 `reports/REACT_METHOD.md`。
 
 
 
@@ -792,7 +1249,7 @@ python scripts/make_report.py --out reports/REPORT.md
 # 附录 D：数据集记忆暴露检测方法
 
 
-以下为记忆暴露行为探测的方法与结果全文，覆盖分层抽样、两个 probe 的协议、两级暴露判定与正式评测的交叉读数，源自 `reports/CONTAMINATION_METHOD.md`。
+以下为记忆暴露行为探测的方法与判定规则，覆盖分层抽样、两个 probe 的协议与两级暴露判定；探测读数与解读见正文 §1.1，完整方法与结果见 `reports/CONTAMINATION_METHOD.md`。
 
 
 本文说明如何估计官方原题镜像在求解模型训练语料中的暴露程度。数据日期 2026-09-09，相关代码 `scripts/run_contamination_probe.py`，方法定稿前先做小批量 pilot 验证探测协议，再对全量样本执行。姊妹篇是 `DIFFICULTY_SCORING_METHOD.md` 与 `PROCESS_EVAL_METHOD.md`。
@@ -848,45 +1305,7 @@ pilot 阶段先跑 6 题，每层 1 题，验证探测协议、成本与判定�
 
 把 30 个样本按高暴露与非高暴露分组，取其在 t0 正式评测中的 `answer_correct` 与 `verification.verdict`，算两组正确率差 Δ。记忆红利上界近似为高暴露比例乘以 Δ，并保留相关性声明。若 Δ 接近 0，说明即使存在记忆也没有表现为成绩红利，可以解读为记忆未显著抬高成绩。
 
-### D.7 输出与报告接入
+### D.7 输出
 
-- 方法本文加探测结果，含分层表、暴露样本清单、判定与人工复核记录，数据在 `data/outputs/contamination_probe.jsonl`，每行含两 probe 的原始输出与判定；
-- 在 REPORT 的防污染声明章节补充读数与解读。
-
-### D.8 执行顺序
-
-1. 本文定稿，确定探测协议、判定标准与抽样；
-2. 小批量 pilot 6 题验证：probe 输出可解析、判定可执行、成本可接受；
-3. pilot 通过后对全量 30 题探测；
-4. 自动判定加人工复核暴露样本，再做分层统计与 eval 交叉；
-5. 结果写入本文与 REPORT。
-
-### D.9 探测结果
-
-数据在 `data/outputs/contamination_probe.jsonl`，每行含两 probe 的原始输出与判定。执行日期 2026-09-09，30 题全量。
-
-#### D.9.1 总体读数
-
-| 指标 | 数值 |
-|---|---|
-| 探测样本 | ABC/CF × basic/medium/hard 每层 5，共 30 |
-| 自称见过（P1 = seen） | 29/30，96.7%，迎合偏差明显，不作为暴露证据 |
-| 出处精确命中（强证据） | **6/30，20.0%**，95% CI [10%, 37%]，Wilson |
-| 命中样本 | A1023 abc300_c、C2001 cf1a、C2002 cf71a、C2008 cf1730a、C2072 cf719a、C2149 cf568a |
-| 命中难度分布 | basic 4 / medium 2 / hard 0 |
-
-#### D.9.2 与正式评测交叉
-
-| 组 | 样本 | t0 答案正确 |
-|---|---|---|
-| 出处命中组 | 6 | 5，83.3% |
-| 未命中组 | 24 | 22，91.7% |
-
-#### D.9.3 判读与记录
-
-1. 模型对官方原题普遍自称熟悉，但精确出处记忆只出现在入门到基础的超经典题上，比如 Theatre Square 1A、71A、719A、1730A、ABC300C。这类题全网海量，暴露的危险度低；中等以上难度没有观察到背题式的出处记忆。
-2. 命中组与未命中组的答案正确率没有显著差异，83% 对 92%，样本量小，**没有观察到记忆显著抬高成绩的迹象**。
-3. 反例 C2149：模型记得出处是 CF 568A，正式评测仍然答错，它的 refine 也因扫描上界不足没修好。这说明记忆存在不等于解题能力，暴露不必被过度上纲。
-4. pilot 阶段还观察到邻近记串，同一题一次答 569C、一次答 568A，提示行为探测有随机性；最终以 30 题全量的单次口径为准。
-5. 局限，引用本读数时必须保留：行为探测不是语料实证；自称见过与解法正确都不能单独判定暴露；30 题样本量小，交叉差异的置信度有限。
+探测记录写在 `data/outputs/contamination_probe.jsonl`，每行含两 probe 的原始输出与判定；分层表、暴露样本清单与人工复核理由见 `reports/CONTAMINATION_METHOD.md`，读数与解读见正文 §1.1。执行日期 2026-09-09，30 题全量，先跑 6 题 pilot 验证协议再用同一流程跑全量。
 

@@ -116,7 +116,8 @@ def _build_toc(tokens: list[dict]) -> str:
     def walk(items: list[dict]) -> None:
         for it in items:
             lvl, name = it["level"], it["name"]
-            keep = lvl <= 2 or (lvl == 3 and re.match(r"^(\d+\.\d+|[A-D]\.)", name) is not None)
+            keep = lvl <= 2 or (lvl == 3 and re.match(
+                r"^(\d+\.\d+|[A-D]\.|[AC]\d{4} · )", name) is not None)
             if keep:
                 cls = "" if lvl <= 2 else ' class="lvl3"'
                 rows.append(f'<li{cls}><a href="#{it["id"]}">{html.escape(name)}</a></li>')
