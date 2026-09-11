@@ -276,6 +276,10 @@ TEMPLATE = """<!DOCTYPE html>
 """
 
 CASE_SECS = ("题目", "HY3 求解过程", "过程评估判定")
+
+# md 端的 <details> 折叠只服务于 Markdown 阅读；HTML 侧由 _collapsible 统一折叠，
+# 这里把标记行去掉，避免出现嵌套折叠。
+MD_DETAILS_RE = re.compile(r"(?m)^\s*(?:<details>|</details>|<summary>[^<]*</summary>)\s*$\n?")
 CODE_RE = re.compile(r'<pre><code( class="language-(\w+)")?>(.*?)</code></pre>', re.S)
 # 题面在 md 里用引用块承载（`> ` 行），这样 md 端 $...$ 能被渲染器的数学支持解析；
 # HTML 侧再把它还原成滑动窗口，交给 marked + KaTeX 渲染。
@@ -375,6 +379,7 @@ def _case_headers(body: str) -> str:
 
 def render(src: Path, out: Path) -> None:
     text = src.read_text(encoding="utf-8")
+    text = MD_DETAILS_RE.sub("", text)
     prompts: list[str] = []
     text = PROMPT_RE.sub(lambda m: _stash_prompt(m, prompts), text)
     md = markdown.Markdown(

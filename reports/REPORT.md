@@ -207,6 +207,9 @@
 - 过程评估：SILENT_FAILURE，置信度 0.95
 - 答案正确：True，用例通过率 1.0
 
+<details>
+<summary>展开原题全文（含样例）</summary>
+
 #### 题目
 
 > Score : $400$ points
@@ -281,6 +284,11 @@
 >
 > Note that, in this problem, $N = 2^{20} = 1048576$ is a constant and not given in input.
 
+</details>
+
+<details>
+<summary>展开完整求解过程与代码</summary>
+
 #### HY3 求解过程
 
 最终答案：使用路径压缩并查集维护下一个空位，按查询类型更新或输出，可在 O(Q α(N)) 时间内解决问题。
@@ -330,6 +338,8 @@ int main() {
 }
 ```
 
+</details>
+
 #### 过程评估判定
 
 1. **逻辑缺陷** · 第2步 · **fatal**：并查集设计未考虑线性探测的环形回绕：parent[pos] = find(pos+1) 在 pos = N-1 时指向哨兵 N，而非回绕到 0，导致当探测需要从末尾绕回开头时 find 返回 N（越界下标），错误写入 A[N] 且未正确占用应占的 0..N-1 空位，未能正确模拟题目要求的 h mod N 环形语义。
@@ -342,6 +352,9 @@ int main() {
 - 难度：语义档 基础~套路，diff_score 22
 - 过程评估：SILENT_FAILURE，置信度 0.93
 - 答案正确：True，用例通过率 1.0
+
+<details>
+<summary>展开原题全文（含样例）</summary>
 
 #### 题目
 
@@ -433,6 +446,11 @@ int main() {
 >
 > ```
 
+</details>
+
+<details>
+<summary>展开完整求解过程与代码</summary>
+
 #### HY3 求解过程
 
 最终答案：答案等于原树中自身为关键点或其子树含关键点的节点总数，即通过一次DFS统计得到的必须保留节点数，代码直接输出该数。
@@ -477,6 +495,8 @@ def main():
 if __name__=='__main__': main()
 ```
 
+</details>
+
 #### 过程评估判定
 
 1. **概念理解错误** · 第2步 · **fatal**：错误断言节点必须保留当且仅当本身是关键点或子树（以1为根）含关键点。反例：链1-2-3, K={3}，代码输出3，正确最小为1，因根1非关键点且关键点仅在某子树时多余计数祖先。
@@ -489,6 +509,9 @@ if __name__=='__main__': main()
 - 难度：语义档 中等，diff_score 50
 - 过程评估：SILENT_FAILURE，置信度 0.90
 - 答案正确：True，用例通过率 1.0
+
+<details>
+<summary>展开原题全文（含样例）</summary>
 
 #### 题目
 
@@ -605,6 +628,11 @@ if __name__=='__main__': main()
 >
 > ```
 
+</details>
+
+<details>
+<summary>展开完整求解过程与代码</summary>
+
 #### HY3 求解过程
 
 最终答案：通过维护每行黑格数L_r的上下界并构造非增最大/最小序列，检查各列在最小/最大序列下的黑格计数是否落在列上下界区间内，从而判定并输出 Yes 或 No。
@@ -685,6 +713,8 @@ if __name__ == "__main__":
     solve()
 ```
 
+</details>
+
 #### 过程评估判定
 
 1. **复杂度不达标** · 第3步 · **fatal**：步骤3断言算法总复杂度为O(M log M)时间、O(M)空间，但实际步骤4代码中对每个约束列c遍历所有压缩段segs（cols最多M个，segs最多O(M)个），形成O(M^2)双重循环，对M≤2e5的极端数据会超时，超出题目数据范围允许的上限。
@@ -695,6 +725,9 @@ if __name__ == "__main__":
 - 难度：语义档 中等，diff_score 50
 - 过程评估：SILENT_FAILURE，置信度 0.90
 - 答案正确：True，用例通过率 1.0
+
+<details>
+<summary>展开原题全文（含样例）</summary>
 
 #### 题目
 
@@ -800,6 +833,11 @@ if __name__ == "__main__":
 >
 > ```
 
+</details>
+
+<details>
+<summary>展开完整求解过程与代码</summary>
+
 #### HY3 求解过程
 
 最终答案：最小操作次数为初始连通分量数减一，构造方法为利用多余边（自环或非树边）逐一连接未连通分量，输出对应电缆改接方案。
@@ -858,6 +896,8 @@ int main(){
 }
 ```
 
+</details>
+
 #### 过程评估判定
 
 1. **逻辑缺陷** · 第4步 · **fatal**：构造实现中盲目顺序消耗spare边，且用 fu == y（y为弹出的未连通分量代表整数，未做dsu.find）决定是否将边连到已连通分量connected。当spare边均来自同一非connected分量（如全为某节点自环）时，可能导致最后一步 orig == newserv（自连，违反操作必须连到不同服务器的要求）且connected分量始终未参与合并，最终全图不连通。示例：N=4, M=3, 边全为(2,2)自环，comps=[1,2,3,4]，代码依次将2连4、2连3，最后y=2时 fu≠2 而 newserv=2，输出“* 2 2”自连，节点1孤立，未达成连通。
@@ -868,6 +908,9 @@ int main(){
 - 难度：语义档 基础~套路，diff_score 35
 - 过程评估：SILENT_FAILURE，置信度 0.95
 - 答案正确：True，用例通过率 1.0
+
+<details>
+<summary>展开原题全文（含样例）</summary>
 
 #### 题目
 
@@ -919,6 +962,12 @@ int main(){
 > **Note**
 >
 > 第一个用例：Alice 直接取整串即可（逆序对数为奇数），Bob 面对空串无路可走，Alice 胜。第二个用例：Alice 取下标 $1, 2, 4$ 组成的子序列 `010`，Bob 只剩下标 $3$ 的 `0`，其逆序对数为 $0$（偶数），无法行动，Alice 胜。第三个用例：无论 Alice 先手如何取，Bob 都能保证取胜。
+
+</details>
+
+<details>
+<summary>展开完整求解过程与代码</summary>
+
 #### HY3 求解过程
 
 最终答案：Alice wins iff the total number of inversions is odd or there exists a split point with an odd number of '1's in the prefix and an odd number of '0's in the suffix; otherwise Bob wins.
@@ -978,6 +1027,8 @@ int main() {
     return 0;
 }
 ```
+
+</details>
 
 #### 过程评估判定
 
