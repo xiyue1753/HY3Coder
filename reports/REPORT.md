@@ -1299,6 +1299,18 @@ solve → 沙盒（答案正确性）+ static_check（规则校验，不阻断�
 
 主口径是默认：verdict 由 fatal 驱动，minor 剥离。副口径把 minor 瑕疵也计为过程错误，用环境变量一键切换。报告和仪表盘并列展示两口径的数值，把算上微小瑕疵后结果差多少摆到明面上，避免选口径的质疑。
 
+#### B.3.7 约束分两层：程序强制与 prompt 引导
+
+判定口径里的硬约束分两层落地，避免"全靠模型自觉"。
+
+**程序强制层**——模型即使判错也会被改正，不依赖 prompt 是否被遵守。verifier 层 `_enforce_fatal_consistency`：存在 fatal finding 却判 CORRECT 时，强制改判 PROCESS_INCORRECT。pipeline 层 `_reconcile_verdict`（此时已有沙盒客观信号）：答案正确且有 fatal → 一律 SILENT_FAILURE；答案正确且无 fatal → 一律 CORRECT，把"minor 被提升为过程错"的误报剥掉；答案错误 → 绝不判 CORRECT 或 SILENT_FAILURE，按有无 fatal 归为 PROCESS_INCORRECT 或 ANSWER_INCORRECT；无沙盒信号时不动模型判定。解析层：finding 缺 severity 字段时保守按 fatal 处理。refine 层 `_strip_minor_only`：全 minor 视同过程正确，避免空转修正。以上规则各有单测，判定一致性共 11 项（`tests/test_severity_consistency.py`）。
+
+**prompt 引导层**——由模型判断，程序不介入：①是否检出缺陷本身；②severity 定级（fatal 还是 minor，判据是重建测试）；③`step_id` 与错误类型的定位归类；④confidence。prompt 里写明"最终答案正确 ≠ 过程正确，发现 fatal 过程缺陷时判 PROCESS_INCORRECT 或 SILENT_FAILURE，不得因答案正确而放行"，并要求每条 fatal 必须落到真实步骤 id 上。
+
+两层的关系是：**程序层保证"模型自相矛盾"不污染结果，prompt 层决定"模型能否发现问题"**。前一类失效（发现了却放行、答案与判定打架）由程序改正；后一类失效（漏检、定级系统性偏差）程序发现不了，靠四件事兜住：一是双视角冗余，V1 自含性与 V2 全局回溯独立读同一条推理链、ARBITER 仲裁，降低单次采样漏检的概率；二是沙盒与 `static_check` 的客观信号独立于模型意见，编译失败、运行时错误、用例通过率都是事实而非判断；三是全量留档加人工抽检把失效规模测出来，48 条抽样下定位准确率 96.6%、误报率 5.3%–10.5%；四是把边界写进 B.5 与第 9 章，不声称程序层能覆盖一切。
+
+实测侧有一个直接证据：若模型普遍"因答案正确而放行"，15 条 SILENT_FAILURE 应当全部漏检。实际是全部检出，且致命分级经人工抽检核实属实（第 6 节），说明该约束在真实数据上生效，而不是只写在 prompt 里。
+
 ### B.4 验证
 
 评估器是测量工具，需要证明它可靠。我们从判定层、小样本有效性、全量抽检三个层面验证。
